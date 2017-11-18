@@ -106,10 +106,10 @@ private:
 	void run();
 };
 
-class ScreenshotWidget : public QWidget 
-{
+class ScreenshotWidget : public QWidget {
+	
 	Q_OBJECT
-
+	
 public:
 	
 	explicit ScreenshotWidget(QWidget * parent = 0);
@@ -129,7 +129,8 @@ class ErrorReportFileListModel : public QAbstractListModel
 	Q_OBJECT
 
 public:
-	ErrorReportFileListModel(ErrorReport& errorReport, QObject* parent = 0) 
+	
+	ErrorReportFileListModel(ErrorReport& errorReport, QObject* parent = 0)
 		: QAbstractListModel(parent)
 		, m_errorReport(errorReport)
 	{
@@ -162,7 +163,7 @@ public:
 	{
 		if (index.row() < 0 || index.row() >= rowCount() || !index.isValid())
 			return false;
-	 
+		
 		if(role == Qt::CheckStateRole)
 			m_errorReport.GetAttachedFiles()[index.row()].attachToReport = static_cast<Qt::CheckState>(value.toUInt()) == Qt::Checked;
 

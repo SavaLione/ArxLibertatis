@@ -166,11 +166,11 @@ TextureContainer::~TextureContainer() {
 bool TextureContainer::LoadFile(const res::path & strPathname) {
 	
 	res::path tempPath = strPathname;
-	bool foundPath = resources->getFile(tempPath.append(".png")) != NULL;
-	foundPath = foundPath || resources->getFile(tempPath.set_ext("jpg"));
-	foundPath = foundPath || resources->getFile(tempPath.set_ext("jpeg"));
-	foundPath = foundPath || resources->getFile(tempPath.set_ext("bmp"));
-	foundPath = foundPath || resources->getFile(tempPath.set_ext("tga"));
+	bool foundPath = g_resources->getFile(tempPath.append(".png")) != NULL;
+	foundPath = foundPath || g_resources->getFile(tempPath.set_ext("jpg"));
+	foundPath = foundPath || g_resources->getFile(tempPath.set_ext("jpeg"));
+	foundPath = foundPath || g_resources->getFile(tempPath.set_ext("bmp"));
+	foundPath = foundPath || g_resources->getFile(tempPath.set_ext("tga"));
 
 	if(!foundPath) {
 		LogError << strPathname << " not found";
@@ -178,7 +178,7 @@ bool TextureContainer::LoadFile(const res::path & strPathname) {
 	}
 	
 	delete m_pTexture, m_pTexture = NULL;
-	m_pTexture = GRenderer->CreateTexture2D();
+	m_pTexture = GRenderer->createTexture();
 	if(!m_pTexture) {
 		return false;
 	}
@@ -186,7 +186,7 @@ bool TextureContainer::LoadFile(const res::path & strPathname) {
 	Texture::TextureFlags flags = 0;
 	
 	if(!(m_dwFlags & NoColorKey) && tempPath.ext() == ".bmp") {
-		flags |= Texture::HasColorKey;
+		flags |= Texture::ApplyColorKey;
 	}
 	
 	if(!(m_dwFlags & NoMipmap)) {
@@ -197,7 +197,7 @@ bool TextureContainer::LoadFile(const res::path & strPathname) {
 		flags |= Texture::Intensity;
 	}
 	
-	if(!m_pTexture->Init(tempPath, flags)) {
+	if(!m_pTexture->create(tempPath, flags)) {
 		LogError << "Error creating texture " << tempPath;
 		return false;
 	}
@@ -209,10 +209,6 @@ bool TextureContainer::LoadFile(const res::path & strPathname) {
 	hd = Vec2f(.5f, .5f) / storedSize;
 	
 	return true;
-}
-
-bool TextureContainer::hasColorKey() {
-	return m_pTexture != NULL && m_pTexture->hasColorKey();
 }
 
 TextureContainer * TextureContainer::Load(const res::path & name, TCFlags flags) {
@@ -254,7 +250,7 @@ TextureContainer * TextureContainer::LoadUI(const res::path & strName, TCFlags f
 bool TextureContainer::CreateHalo() {
 	
 	Image srcImage;
-	if(!srcImage.LoadFromFile(m_pTexture->getFileName())) {
+	if(!srcImage.load(m_pTexture->getFileName())) {
 		return false;
 	}
 	
@@ -262,46 +258,32 @@ bool TextureContainer::CreateHalo() {
 	res::path haloName = m_texName.string();
 	haloName.append("_halo");
 	TextureHalo = new TextureContainer(haloName, NoMipmap | NoColorKey);
-	if(!TextureHalo) {
-		return false;
-	}
 	
-	TextureHalo->m_pTexture = GRenderer->CreateTexture2D();
-	if(!TextureHalo->m_pTexture) {
-		return true;
-	}
+	TextureHalo->m_pTexture = GRenderer->createTexture();
 	
 	Image im;
 	
-	int width = m_size.x + HALO_RADIUS * 2;
-	int height = m_size.y + HALO_RADIUS * 2;
-	im.Create(width, height, srcImage.GetFormat());
+	size_t width = size_t(m_size.x) + HALO_RADIUS * 2;
+	size_t height = size_t(m_size.y) + HALO_RADIUS * 2;
+	im.create(width, height, srcImage.getFormat());
 	
 	// Center the image, offset by radius to contain the edges of the blur
-	im.Clear();
-	im.Copy(srcImage, HALO_RADIUS, HALO_RADIUS);
-	
-	// Keep a copy of the image at this stage, in order to apply proper alpha masking later
-	Image copy = im;
+	im.clear();
+	im.copy(srcImage, HALO_RADIUS, HALO_RADIUS);
 	
 	// Convert image to grayscale, and turn it to black & white
-	im.ToGrayscale(Image::Format_L8A8);
-	im.ApplyThreshold(0, ~0);
+	im.toGrayscale(Image::Format_L8);
+	im.applyThreshold(0, ~0);
 
 	// Blur the image
-	im.Blur(HALO_RADIUS);
+	im.blur(HALO_RADIUS);
 
 	// Increase the gamma of the blur outline
-	im.QuakeGamma(10.0f);
-
-	// Set alpha to inverse of original image alpha
-	copy.ApplyColorKeyToAlpha();
-	im.SetAlpha(copy, true);
+	im.applyGamma(10.0f);
 	
-	TextureHalo->m_pTexture->Init(im, 0);
+	TextureHalo->m_pTexture->create(im, 0);
 	
-	TextureHalo->m_size.x = TextureHalo->m_pTexture->getSize().x;
-	TextureHalo->m_size.y = TextureHalo->m_pTexture->getSize().y;
+	TextureHalo->m_size = TextureHalo->m_pTexture->getSize();
 	
 	Vec2i storedSize = TextureHalo->m_pTexture->getStoredSize();
 	TextureHalo->uv = Vec2f(

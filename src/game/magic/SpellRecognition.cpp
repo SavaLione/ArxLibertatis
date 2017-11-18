@@ -48,27 +48,27 @@ typedef struct RunePattern{
 } RunePattern;
 
 const RunePattern patternData[] = {
-	{RUNE_AAM,         CheatRune_AAM,        "6"},
-	{RUNE_CETRIUS,     CheatRune_None,       "386"},
-	{RUNE_COMUNICATUM, CheatRune_COMUNICATUM,"62426"},
-	{RUNE_COSUM,       CheatRune_None,       "6248"},
-	{RUNE_FOLGORA,     CheatRune_None,       "93"},
-	{RUNE_FRIDD,       CheatRune_None,       "862"},
-	{RUNE_KAOM,        CheatRune_KAOM,       "41236"},
+	{RUNE_AAM,         CheatRune_AAM,         "6"},
+	{RUNE_CETRIUS,     CheatRune_None,        "386"},
+	{RUNE_COMUNICATUM, CheatRune_COMUNICATUM, "62426"},
+	{RUNE_COSUM,       CheatRune_None,        "6248"},
+	{RUNE_FOLGORA,     CheatRune_None,        "93"},
+	{RUNE_FRIDD,       CheatRune_None,        "862"},
+	{RUNE_KAOM,        CheatRune_KAOM,        "41236"},
 	{RUNE_KAOM,        CheatRune_KAOM,       "1236"},
-	{RUNE_MEGA,        CheatRune_MEGA,       "8"},
-	{RUNE_MORTE,       CheatRune_None,       "62"},
-	{RUNE_MOVIS,       CheatRune_None,       "616"},
-	{RUNE_NHI,         CheatRune_None,       "4"},
-	{RUNE_RHAA,        CheatRune_None,       "2"},
-	{RUNE_SPACIUM,     CheatRune_SPACIUM,    "4268"},
-	{RUNE_STREGUM,     CheatRune_STREGUM,    "838"},
-	{RUNE_TAAR,        CheatRune_None,       "626"},
-	{RUNE_TEMPUS,      CheatRune_None,       "862686"},
-	{RUNE_TERA,        CheatRune_None,       "926"},
-	{RUNE_VISTA,       CheatRune_None,       "31"},
-	{RUNE_VITAE,       CheatRune_None,       "68"},
-	{RUNE_YOK,         CheatRune_None,       "268"},
+	{RUNE_MEGA,        CheatRune_MEGA,        "8"},
+	{RUNE_MORTE,       CheatRune_None,        "62"},
+	{RUNE_MOVIS,       CheatRune_None,        "616"},
+	{RUNE_NHI,         CheatRune_None,        "4"},
+	{RUNE_RHAA,        CheatRune_None,        "2"},
+	{RUNE_SPACIUM,     CheatRune_SPACIUM,     "4268"},
+	{RUNE_STREGUM,     CheatRune_STREGUM,     "838"},
+	{RUNE_TAAR,        CheatRune_None,        "626"},
+	{RUNE_TEMPUS,      CheatRune_None,        "862686"},
+	{RUNE_TERA,        CheatRune_None,        "926"},
+	{RUNE_VISTA,       CheatRune_None,        "31"},
+	{RUNE_VITAE,       CheatRune_None,        "68"},
+	{RUNE_YOK,         CheatRune_None,        "268"},
 	//cheat runes
 	{RUNE_NONE,        CheatRune_O,          "9317"},
 	{RUNE_NONE,        CheatRune_M,          "8392"},
@@ -94,7 +94,7 @@ class RuneRecognitionAlt {
 
 	int m_dirs[s_directionCount];
 	std::vector<Vec2f> m_points;
-	std::vector<int> m_indices;
+	std::vector<size_t> m_indices;
 
 	int findMatchingPattern();
 	void resampleInput(const std::vector<Vec2f> &in);
@@ -126,7 +126,7 @@ int RuneRecognitionAlt::angleDiff(int angle1, int angle2) {
 void RuneRecognitionAlt::callRuneHandlers(int index) {
 	if(patternData[index].runeId != RUNE_NONE) {
 		handleRuneDetection(patternData[index].runeId);
-	} 
+	}
 	if(patternData[index].cheatId != CheatRune_None) {
 		handleCheatRuneDetection(patternData[index].cheatId);
 	}
@@ -146,15 +146,15 @@ void RuneRecognitionAlt::resampleInput(const std::vector<Vec2f> &in) {
 
 	m_points.push_back(in[0]);
 	
-	int segmentCount = m_indices.size() - 1;
+	size_t segmentCount = m_indices.size() - 1;
 	int pointsAdded = 0;
 	float segRemains = 0.0;
 	
-	for(int segment = 0; segment < segmentCount; segment++) {
+	for(size_t segment = 0; segment < segmentCount; segment++) {
 		
 		//distance along curve from key point 1 to key point 2
 		float segLen = 0.0;
-		for(int index = m_indices[segment]; index < m_indices[segment + 1]; index++) {
+		for(size_t index = m_indices[segment]; index < m_indices[segment + 1]; index++) {
 			segLen += glm::distance(in[index], in[index + 1]);
 		}
 		
@@ -180,9 +180,9 @@ void RuneRecognitionAlt::resampleInput(const std::vector<Vec2f> &in) {
 		bool newPointAdded = false; //was a new point added?
 		bool endOfSegment = false; //at the end of segment
 		
-		int index = m_indices[segment] + 1;
+		size_t index = m_indices[segment] + 1;
 		int reallyAdded = 0;
-		int endIndex = m_indices[segment + 1];
+		size_t endIndex = m_indices[segment + 1];
 		
 		Vec2f prevPoint = in[m_indices[segment]];
 		Vec2f thisPoint;
@@ -263,12 +263,12 @@ void RuneRecognitionAlt::inputToDirs() {
  */
 void RuneRecognitionAlt::findKeyPoints(std::vector<Vec2f> &in) {
 	const float TOLERANCE = 0.30f;
-	int inputSize = in.size();
+	size_t inputSize = in.size();
 	
 	//calculate tolerance based on the overall size of the drawing
 	Vec2f max = in[0];
 	Vec2f min = in[0];
-	for(int i = 1; i < inputSize; i++) {
+	for(size_t i = 1; i < inputSize; i++) {
 		max = glm::max(max, in[i]);
 		min = glm::min(min, in[i]);
 	}
@@ -279,7 +279,7 @@ void RuneRecognitionAlt::findKeyPoints(std::vector<Vec2f> &in) {
 	
 	float minAngle = (2.0f / 3.0f) * glm::pi<float>();
 	
-	for(int i = 2; i < inputSize; i++) {
+	for(size_t i = 2; i < inputSize; i++) {
 		Vec2f thisPoint = in[i - 1];
 		Vec2f nextPoint = in[i];
 		
@@ -445,7 +445,7 @@ void RuneRecognitionAlt::analyze() {
 	}
 	
 	bPrecastSpell = false;
-	 
+	
 	// wanna precast?
 	if(GInput->actionPressed(CONTROLS_CUST_STEALTHMODE)) {
 		bPrecastSpell = true;
@@ -674,7 +674,7 @@ void ARX_SPELLS_Analyse() {
 
 	for(size_t i = 1; i < plist.size() ; i++) {
 		
-		Vec2f d = Vec2f(plist[i-1] - plist[i]);
+		Vec2f d = plist[i - 1] - plist[i];
 		
 		if(arx::length2(d) > 100) {
 			
@@ -893,7 +893,7 @@ void ARX_SPELLS_AnalyseSYMBOL() {
 		// TEMPUS
 		case 962686  :
 		case 862686  :
-		case 8626862 : 
+		case 8626862 :
 			handleRuneDetection(RUNE_TEMPUS);
 			break;
 		// MOVIS
@@ -907,7 +907,7 @@ void ARX_SPELLS_AnalyseSYMBOL() {
 		case 61264:
 		case 6126:
 		case 6136:
-		case 616: 
+		case 616:
 			handleRuneDetection(RUNE_MOVIS);
 			break;
 		// NHI
@@ -970,7 +970,7 @@ void ARX_SPELLS_AnalyseSYMBOL() {
 		case 236987:
 		case 23698:
 			handleCheatRuneDetection(CheatRune_U);
-			goto failed; 
+			goto failed;
 		case 2382398:
 		case 2829:
 		case 23982398:
@@ -1029,7 +1029,7 @@ void ARX_SPELLS_AnalyseSYMBOL() {
 		case 238298:
 		case 3939:
 			handleCheatRuneDetection(CheatRune_W);
-			goto failed; 
+			goto failed;
 		case 161:
 		case 1621:
 		case 1261:
@@ -1110,7 +1110,6 @@ void ARX_SPELLS_AnalyseSYMBOL() {
 			goto failed;
 		default: {
 		failed:
-			;
 			std::string tex;
 
 			if(SpellMoves.length()>=127)
@@ -1167,6 +1166,6 @@ bool ARX_SPELLS_AnalyseSPELL() {
 	                         flags,
 	                         -1,
 	                         EntityHandle(),
-	                         ArxDuration::ofRaw(-1));
+	                         GameDuration::ofRaw(-1));
 	
 }

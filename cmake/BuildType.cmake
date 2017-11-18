@@ -9,15 +9,15 @@ option(SET_OPTIMIZATION_FLAGS "Adjust compiler optimization flags" ON)
 
 if(MSVC)
 	
-	if(SET_WARNING_FLAGS)
+	if(SET_WARNING_FLAGS AND NOT SET_NOISY_WARNING_FLAGS)
 		
 		# Disable deprecation warnings
 		add_definitions(-D_CRT_SECURE_NO_WARNINGS)
 		add_definitions(-D_CRT_NONSTDC_NO_DEPRECATE)
 		add_definitions(-D_SCL_SECURE_NO_WARNINGS)
 		
-		# TODO TEMP - disable warning caused by the F2L removal
-		# Conversion from 'float' to 'long', possible loss of data
+		# TODO TEMP - disable very noisy warning
+		# Conversion from 'A' to 'B', possible loss of data
 		add_definitions(/wd4244)
 		
 		# TODO TEMP - disable warning caused by conversion from a 64-bit type to a 32-bit one...
@@ -33,7 +33,7 @@ if(MSVC)
 		# warning C4503: 'xxx' : decorated name length exceeded, name was truncated
 		add_definitions(/wd4503)
 		
-	endif(SET_WARNING_FLAGS)
+	endif()
 	
 	if(NOT DEBUG_EXTRA)
 		add_definitions(-D_HAS_ITERATOR_DEBUGGING=0)
@@ -53,7 +53,7 @@ if(MSVC)
 		# Enable multiprocess build
 		add_definitions(/MP)
 		
-	endif(SET_OPTIMIZATION_FLAGS)
+	endif()
 	
 	foreach(flag_var CMAKE_CXX_FLAGS CMAKE_CXX_FLAGS_DEBUG CMAKE_CXX_FLAGS_RELEASE)
 		
@@ -108,36 +108,57 @@ else(MSVC)
 	
 	if(SET_WARNING_FLAGS)
 		
-		# GCC (and compatible)
+		# GCC or Clang (and compatible)
+		
 		add_cxxflag("-Wall")
 		add_cxxflag("-Wextra")
-		add_cxxflag("-Wformat=2")
-		add_cxxflag("-Wundef")
-		add_cxxflag("-Wpointer-arith")
+		
+		add_cxxflag("-Warray-bounds=2")
 		add_cxxflag("-Wcast-qual")
-		add_cxxflag("-Woverloaded-virtual")
-		add_cxxflag("-Wlogical-op")
-		add_cxxflag("-Woverflow")
-		add_cxxflag("-Wmissing-declarations")
-		add_cxxflag("-Wredundant-decls")
+		add_cxxflag("-Wcatch-value=3")
+		add_cxxflag("-Wdocumentation")
 		add_cxxflag("-Wdouble-promotion")
+		add_cxxflag("-Wduplicated-cond")
+		add_cxxflag("-Wextra-semi")
+		add_cxxflag("-Wformat=2")
+		add_cxxflag("-Wheader-guard")
+		add_cxxflag("-Wlogical-op")
+		add_cxxflag("-Wmissing-declarations")
+		add_cxxflag("-Woverflow")
+		add_cxxflag("-Woverloaded-virtual")
+		add_cxxflag("-Wpessimizing-move")
+		add_cxxflag("-Wpointer-arith")
+		add_cxxflag("-Wredundant-decls")
+		add_cxxflag("-Wshift-overflow")
+		add_cxxflag("-Wstringop-overflow=4")
+		add_cxxflag("-Wundef")
+		add_cxxflag("-Wunused-const-variable=1")
+		add_cxxflag("-Wunused-macros")
 		add_cxxflag("-Wvla")
 		
-		if(SET_NOISY_WARNING_FLAGS)
-			# TODO enable by default as soon as most are silenced
-			add_cxxflag("-Wconversion") # very noisy
-			# add_cxxflag("-Wsign-conversion") # very noisy
+		add_cxxflag("-Wliteral-conversion") # part of -Wconversion
+		add_cxxflag("-Wbool-conversion") # part of -Wconversion
+		add_cxxflag("-Wfloat-conversion") # part of -Wconversion
+		add_cxxflag("-Wstring-conversion") # part of -Wconversion
+		
+		if(SET_NOISY_WARNING_FLAGS OR NOT CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR NOT CMAKE_SIZEOF_VOID_P EQUAL 4)
+			# TODO for some reason this warns in /usr/include/boost/type_traits/alignment_of.hpp for -m32 builds
+			add_cxxflag("-Wduplicated-branches")
 		endif()
 		
-		# clang
-		add_cxxflag("-Wliteral-conversion")
-		add_cxxflag("-Wshift-overflow")
-		add_cxxflag("-Wbool-conversions")
-		add_cxxflag("-Wheader-guard")
-		add_cxxflag("-Wpessimizing-move")
-		add_cxxflag("-Wextra-semi")
-		
-		if(NOT DEBUG_EXTRA)
+		if(SET_NOISY_WARNING_FLAGS)
+			
+			# These are too noisy to enable right now but we still want to track new warnings.
+			# TODO enable by default as soon as most are silenced
+			add_cxxflag("-Wconversion") # very noisy
+			# add_cxxflag("-Wsign-conversion") # part of -Wconversion
+			# add_cxxflag("-Wshorten-64-to-32") # part of -Wconversion
+			add_cxxflag("-Wshadow") # very noisy
+			add_cxxflag("-Wstrict-aliasing=1") # has false positives
+			add_cxxflag("-Wuseless-cast") # has false positives
+			# add_cxxflag("-Wnull-dereference") not that useful without deduction path
+			
+		else()
 			
 			# icc
 			if(CMAKE_CXX_COMPILER_ID STREQUAL "Intel")
@@ -171,7 +192,7 @@ else(MSVC)
 				add_cxxflag("-Wno-undef")
 			endif()
 			
-		endif(NOT DEBUG_EXTRA)
+		endif()
 		
 	endif(SET_WARNING_FLAGS)
 	
@@ -179,28 +200,11 @@ else(MSVC)
 		add_cxxflag("-ftrapv") # to add checks for (undefined) signed integer overflow
 		add_cxxflag("-fbounds-checking")
 		add_cxxflag("-fcatch-undefined-behavior")
-		add_cxxflag("-Wstrict-aliasing=1")
 		add_cxxflag("-fstack-protector-all")
-		
-		check_compiler_flag(FLAG_FOUND "-fsanitize=address")
-		if(FLAG_FOUND)
-			add_cxxflag("-fsanitize=address")
-		endif()
-		
-		check_compiler_flag(FLAG_FOUND "-fsanitize=thread")
-		if(FLAG_FOUND)
-			add_cxxflag("-fsanitize=thread")
-		endif()
-
-		check_compiler_flag(FLAG_FOUND "-fsanitize=leak")
-		if(FLAG_FOUND)
-			add_cxxflag("-fsanitize=leak")
-		endif()
-		
-		check_compiler_flag(FLAG_FOUND "-fsanitize=undefined")
-		if(FLAG_FOUND)
-			add_cxxflag("-fsanitize=undefined")
-		endif()
+		add_cxxflag("-fsanitize=address")
+		add_cxxflag("-fsanitize=thread")
+		add_cxxflag("-fsanitize=leak")
+		add_cxxflag("-fsanitize=undefined")
 	endif(DEBUG_EXTRA)
 	
 	if(CMAKE_BUILD_TYPE STREQUAL "")

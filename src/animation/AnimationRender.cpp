@@ -63,14 +63,16 @@ ZeniMax Media Inc., Suite 120, Rockville, Maryland 20850 USA.
 #include "game/spell/Cheat.h"
 
 #include "graphics/BaseGraphicsTypes.h"
-#include "graphics/GraphicsTypes.h"
 #include "graphics/Draw.h"
+#include "graphics/GlobalFog.h"
+#include "graphics/GraphicsTypes.h"
 #include "graphics/Math.h"
 #include "graphics/Renderer.h"
 #include "graphics/Vertex.h"
 #include "graphics/data/Mesh.h"
 #include "graphics/data/MeshManipulation.h"
 #include "graphics/data/TextureContainer.h"
+#include "graphics/texture/Texture.h"
 #include "graphics/texture/TextureStage.h"
 #include "graphics/particle/ParticleEffects.h"
 #include "graphics/effects/PolyBoom.h"
@@ -89,8 +91,6 @@ ZeniMax Media Inc., Suite 120, Rockville, Maryland 20850 USA.
 #include "scene/GameSound.h"
 #include "scene/Scene.h"
 #include "scene/Interactive.h"
-
-extern Color ulBKGColor;
 
 // List of TO-TREAT vertex for MIPMESHING
 
@@ -114,16 +114,19 @@ static TexturedVertex * PushVertexInTable(ModelBatch * pTex, BatchBucket type) {
 	return &pTex->list[type][pTex->count[type] - 3];
 }
 
-static void PopOneTriangleList(TextureContainer * _pTex, bool clear) {
+static void PopOneTriangleList(RenderState baseState, TextureContainer * _pTex, bool clear) {
 	
 	ModelBatch & batch = _pTex->m_modelBatch;
 	
 	if(!batch.count[BatchBucket_Opaque]) {
 		return;
 	}
-
+	
 	GRenderer->SetTexture(0, _pTex);
-
+	baseState.setAlphaCutout(_pTex->m_pTexture && _pTex->m_pTexture->hasAlpha());
+	
+	UseRenderState state(baseState);
+	
 	if(_pTex->userflags & POLY_LATE_MIP) {
 		const float GLOBAL_NPC_MIPMAP_BIAS = -2.2f;
 		GRenderer->GetTextureStage(0)->setMipMapLODBias(GLOBAL_NPC_MIPMAP_BIAS);
@@ -155,9 +158,10 @@ static void PopOneTriangleListTransparency(TextureContainer *_pTex) {
 	}
 	
 	RenderState baseState = render3D().depthWrite(false);
-
+	
 	GRenderer->SetTexture(0, _pTex);
-
+	baseState.setAlphaCutout(_pTex->m_pTexture && _pTex->m_pTexture->hasAlpha());
+	
 	if(batch.count[BatchBucket_Blended]) {
 		UseRenderState state(baseState.blend(BlendDstColor, BlendSrcColor));
 		if(batch.count[BatchBucket_Blended]) {
@@ -195,18 +199,17 @@ static void PopOneTriangleListTransparency(TextureContainer *_pTex) {
 	}
 }
 
-void PopAllTriangleListOpaque(bool clear) {
+void PopAllTriangleListOpaque(RenderState baseState, bool clear) {
 	
 	ARX_PROFILE_FUNC();
 	
-	GRenderer->SetAlphaFunc(Renderer::CmpGreater, .5f);
-
+	// TODO sort texture list according to material properties to reduce state changes
 	TextureContainer * pTex = GetTextureList();
 	while(pTex) {
-		PopOneTriangleList(pTex, clear);
+		PopOneTriangleList(baseState, pTex, clear);
 		pTex = pTex->m_pNext;
 	}
-	GRenderer->SetAlphaFunc(Renderer::CmpNotEqual, 0.f);
+	
 }
 
 void PopAllTriangleListTransparency() {
@@ -214,21 +217,17 @@ void PopAllTriangleListTransparency() {
 	ARX_PROFILE_FUNC();
 	
 	GRenderer->SetFogColor(Color::none);
-	GRenderer->SetAlphaFunc(Renderer::CmpGreater, .5f);
 	
-	{
-		UseRenderState state(render3D().depthWrite(false).blend(BlendDstColor, BlendOne));
-		PopOneTriangleList(&TexSpecialColor, true);
-	}
-
+	PopOneTriangleList(render3D().depthWrite(false).blend(BlendDstColor, BlendOne), &TexSpecialColor, true);
+	
 	TextureContainer * pTex = GetTextureList();
 	while(pTex) {
 		PopOneTriangleListTransparency(pTex);
 		pTex = pTex->m_pNext;
 	}
-
-	GRenderer->SetFogColor(ulBKGColor);
-	GRenderer->SetAlphaFunc(Renderer::CmpNotEqual, 0.f);
+	
+	GRenderer->SetFogColor(g_fogColor);
+	
 }
 
 
@@ -317,26 +316,26 @@ void Cedric_ApplyLightingFirstPartRefactor(Entity *io) {
 
 	if(io->sfx_flag & SFX_TYPE_YLSIDE_DEATH) {
 		if(io->show == SHOW_FLAG_TELEPORTING) {
-			io->sfx_time = io->sfx_time + ArxDurationMs(g_framedelay);
+			io->sfx_time = io->sfx_time + g_gameTime.lastFrameDuration();
 
-			if (io->sfx_time >= arxtime.now())
-				io->sfx_time = arxtime.now();
+			if (io->sfx_time >= g_gameTime.now())
+				io->sfx_time = g_gameTime.now();
 		} else {
-			const ArxDuration elapsed = arxtime.now() - io->sfx_time;
+			const GameDuration elapsed = g_gameTime.now() - io->sfx_time;
 
-			if(elapsed > ArxDuration_ZERO) {
-				if(elapsed < ArxDurationMs(3000)) { // 5 seconds to red
-					float ratio = toMs(elapsed) * (1.0f / 3000);
+			if(elapsed > 0) {
+				if(elapsed < GameDurationMs(3000)) { // 5 seconds to red
+					float ratio = elapsed / GameDurationMs(3000);
 					io->special_color = Color3f(1.f, 1.f - ratio, 1.f - ratio);
 					io->highlightColor += Color3f(std::max(ratio - 0.5f, 0.f), 0.f, 0.f) * 255;
 					AddRandomSmoke(io, 1);
-				} else if(elapsed < ArxDurationMs(6000)) { // 5 seconds to White
-					float ratio = toMs(elapsed) * (1.0f / 3000);
+				} else if(elapsed < GameDurationMs(6000)) { // 5 seconds to White
+					float ratio = elapsed / GameDurationMs(3000);
 					io->special_color = Color3f::red;
 					io->highlightColor += Color3f(std::max(ratio - 0.5f, 0.f), 0.f, 0.f) * 255;
 					AddRandomSmoke(io, 2);
 				} else { // SFX finish
-					io->sfx_time = ArxInstant_ZERO;
+					io->sfx_time = 0;
 
 					if(io->ioflags & IO_NPC) {
 						MakePlayerAppearsFX(io);
@@ -349,10 +348,8 @@ void Cedric_ApplyLightingFirstPartRefactor(Entity *io) {
 							Sphere splatSphere = Sphere(sp.origin, Random::getf(30.f, 60.f));
 							PolyBoomAddSplat(splatSphere, rgb, 1);
 							sp.origin.y -= Random::getf(0.f, 150.f);
-
 							ARX_PARTICLES_Spawn_Splat(sp.origin, 200.f, io->_npcdata->blood_color);
-
-							sp.origin = io->pos + arx::randomVec3f() * Vec3f(200.f, 20.f,200.f) - Vec3f(100.f, 10.f, 100.f);
+							sp.origin = io->pos + arx::randomVec3f() * Vec3f(200.f, 20.f, 200.f) - Vec3f(100.f, 10.f, 100.f);
 							sp.radius = Random::getf(100.f, 200.f);
 						}
 						
@@ -363,7 +360,7 @@ void Cedric_ApplyLightingFirstPartRefactor(Entity *io) {
 							light->fallstart = 400.f;
 							light->rgb = Color3f(1.0f, 0.8f, 0.f);
 							light->pos = io->pos + Vec3f(0.f, -80.f, 0.f);
-							light->duration = ArxDurationMs(600);
+							light->duration = GameDurationMs(600);
 						}
 
 						if(io->sfx_flag & SFX_TYPE_INCINERATE) {
@@ -458,7 +455,7 @@ void drawQuadRTP(const RenderMaterial & mat, TexturedQuad quat) {
 	worldToClipSpace(quat.v[2].p, quat.v[2]);
 	worldToClipSpace(quat.v[3].p, quat.v[3]);
 	
-	RenderBatcher::getInstance().add(mat, quat);
+	g_renderBatcher.add(mat, quat);
 }
 
 void drawTriangle(const RenderMaterial & mat, const TexturedVertexUntransformed * vertices) {
@@ -474,7 +471,7 @@ void drawTriangle(const RenderMaterial & mat, const TexturedVertexUntransformed 
 	projected[2].color = vertices[2].color;
 	projected[2].uv = vertices[2].uv;
 	
-	RenderBatcher::getInstance().add(mat, projected);
+	g_renderBatcher.add(mat, projected);
 }
 
 static bool Cedric_IO_Visible(const Vec3f & pos) {
@@ -486,8 +483,8 @@ static bool Cedric_IO_Visible(const Vec3f & pos) {
 		//if(fartherThan(io->pos, ACTIVECAM->orgTrans.pos, ACTIVECAM->cdepth * 0.6f))
 		//	return false;
 
-		long xx = pos.x * ACTIVEBKG->m_mul.x;
-		long yy = pos.z * ACTIVEBKG->m_mul.y;
+		long xx = long(pos.x * ACTIVEBKG->m_mul.x);
+		long yy = long(pos.z * ACTIVEBKG->m_mul.y);
 
 		if(xx >= 1 && yy >= 1 && xx < ACTIVEBKG->m_size.x-1 && yy < ACTIVEBKG->m_size.y-1) {
 			for(short z = yy - 1; z <= yy + 1; z++)
@@ -505,7 +502,7 @@ static bool Cedric_IO_Visible(const Vec3f & pos) {
 }
 
 /* Object dynamic lighting */
-static void Cedric_ApplyLighting(ShaderLight lights[], int lightsCount, EERIE_3DOBJ * eobj, Skeleton * obj, const ColorMod & colorMod) {
+static void Cedric_ApplyLighting(ShaderLight lights[], size_t lightsCount, EERIE_3DOBJ * eobj, Skeleton * obj, const ColorMod & colorMod) {
 	
 	ARX_PROFILE_FUNC();
 	
@@ -630,9 +627,9 @@ static void AddFixedObjectHalo(const EERIE_FACE & face, const TransformInfo & t,
 		tot += power;
 		_ffr[o] = power;
 
-		u8 lfr = halo.color.r * power;
-		u8 lfg = halo.color.g * power;
-		u8 lfb = halo.color.b * power;
+		u8 lfr = u8(halo.color.r * power);
+		u8 lfg = u8(halo.color.g * power);
+		u8 lfb = u8(halo.color.b * power);
 		tvList[o].color = Color(lfr, lfg, lfb, 255).toRGBA();
 	}
 
@@ -668,8 +665,8 @@ static void AddFixedObjectHalo(const EERIE_FACE & face, const TransformInfo & t,
 		}
 
 		if(_ffr[first] > 70.f && _ffr[second] > 60.f) {
-			
-			float siz = ddist * (halo.radius * 1.5f * (std::sin(arxtime.get_frame_time() * .01f) * .1f + .7f)) * .6f;
+			float wave = timeWaveSin(g_gameTime.now(), GameDurationMsf(628.319f));
+			float siz = ddist * (halo.radius * 1.5f * (wave * .1f + .7f)) * .6f;
 			
 			TexturedVertex vert[4];
 			vert[0] = tvList[first];
@@ -725,7 +722,7 @@ void DrawEERIEInter_Render(EERIE_3DOBJ *eobj, const TransformInfo &t, Entity *io
 	bool useFaceNormal = io && (io->ioflags & IO_ANGULAR);
 	
 	ShaderLight lights[llightsSize];
-	int lightsCount;
+	size_t lightsCount;
 	UpdateLlights(lights, lightsCount, tv, false);
 	
 	arx_assert(eobj->vertexColors.size() == eobj->vertexWorldPositions.size());
@@ -796,12 +793,11 @@ void DrawEERIEInter_Render(EERIE_3DOBJ *eobj, const TransformInfo &t, Entity *io
 					fr = 0.f;
 				else
 					fr = std::max(ffr, fr * 255.f);
-
-				fr=std::min(fr,255.f);
-				fb*=255.f;
-				fb=std::min(fb,255.f);
-				u8 lfr = fr;
-				u8 lfb = fb;
+				
+				fr = std::min(fr, 255.f);
+				fb = std::min(fb * 255.f, 255.f);
+				u8 lfr = u8(fr);
+				u8 lfb = u8(fb);
 				u8 lfg = 0x1E;
 				tvList[n].color = Color(lfr, lfg, lfb, 255).toRGBA();
 			}
@@ -966,9 +962,9 @@ static void AddAnimatedObjectHalo(HaloInfo & haloInfo, const unsigned short * pa
 		tot += power;
 		_ffr[o] = power;
 
-		u8 lfr = curhalo->color.r * power;
-		u8 lfg = curhalo->color.g * power;
-		u8 lfb = curhalo->color.b * power;
+		u8 lfr = u8(curhalo->color.r * power);
+		u8 lfg = u8(curhalo->color.g * power);
+		u8 lfb = u8(curhalo->color.b * power);
 		colors[o] = Color(lfr, lfg, lfb, 255).toRGBA();
 	}
 
@@ -1004,8 +1000,8 @@ static void AddAnimatedObjectHalo(HaloInfo & haloInfo, const unsigned short * pa
 		}
 
 		if(_ffr[first] > 150.f && _ffr[second] > 110.f) {
-			
-			float siz = haloInfo.ddist * (curhalo->radius * (std::sin(arxtime.get_frame_time() * .01f) * .1f + 1.f)) * .6f;
+			float wave = timeWaveSin(g_gameTime.now(), GameDurationMsf(628.319f));
+			float siz = haloInfo.ddist * (curhalo->radius * (wave * .1f + 1.f)) * .6f;
 			if(io == entities.player() && haloInfo.ddist > 0.8f && !EXTERNALVIEW) {
 				siz *= 1.5f;
 			}
@@ -1090,9 +1086,9 @@ static void Cedric_RenderObject(EERIE_3DOBJ * eobj, Skeleton * obj, Entity * io,
 	bool glow = false;
 	ColorRGBA glowColor;
 	if(io && (io->sfx_flag & SFX_TYPE_YLSIDE_DEATH) && io->show != SHOW_FLAG_TELEPORTING) {
-		const ArxDuration elapsed = arxtime.now() - io->sfx_time;
-		if(elapsed >= ArxDurationMs(3000) && elapsed < ArxDurationMs(6000)) {
-			float ratio = toMs(elapsed - ArxDurationMs(3000)) * (1.0f / 3000);
+		const GameDuration elapsed = g_gameTime.now() - io->sfx_time;
+		if(elapsed >= GameDurationMs(3000) && elapsed < GameDurationMs(6000)) {
+			float ratio = (elapsed - GameDurationMs(3000)) / GameDurationMs(3000);
 			glowColor = Color::gray(ratio).toRGB();
 			glow = true;
 		}
@@ -1162,7 +1158,7 @@ static void Cedric_AnimateDrawEntityRender(EERIE_3DOBJ * eobj, const Vec3f & pos
 	}
 	
 	ShaderLight lights[llightsSize];
-	int lightsCount;
+	size_t lightsCount;
 	UpdateLlights(lights, lightsCount, tv, false);
 	
 	Cedric_ApplyLighting(lights, lightsCount, eobj, obj, colorMod);
@@ -1297,7 +1293,7 @@ static void Cedric_AnimateObject(Skeleton * obj, AnimLayer * animlayer)
 		
 		// FIXME animation indices are sometimes negative
 		//arx_assert(animuse->fr >= 0 && animuse->fr < eanim->nb_key_frames);
-		layer.currentFrame = glm::clamp(layer.currentFrame, 0l, long(eanim->nb_key_frames - 1));
+		layer.currentFrame = glm::clamp(layer.currentFrame, 0l, eanim->nb_key_frames - 1l);
 		
 		// Now go for groups rotation/translation/scaling, And transform Linked objects by the way
 		int l = std::min(long(obj->bones.size() - 1), eanim->nb_groups - 1);
@@ -1335,7 +1331,7 @@ static void Cedric_BlendAnimation(Skeleton & rig, AnimationBlendStatus * animBle
 		return;
 	}
 
-	float timm = (arxtime.get_frame_time() - toMs(animBlend->lastanimtime)) + 0.0001f;
+	float timm = toMsf(g_gameTime.now() - animBlend->lastanimtime) + 0.0001f;
 
 	if(timm >= 300.f) {
 		animBlend->m_active = false;
@@ -1457,13 +1453,13 @@ void EERIEDrawAnimQuatUpdate(EERIE_3DOBJ * eobj,
 
 		AnimationDuration tim = time * speedfactor;
 
-		if(tim <= AnimationDuration_ZERO)
-			time = AnimationDuration_ZERO;
+		if(tim <= 0)
+			time = 0;
 		else
 			time = tim;
 	}
 
-	if(time > AnimationDuration_ZERO) {
+	if(time > 0) {
 		for(size_t count = 0; count < MAX_ANIM_LAYERS; count++) {
 			AnimLayer & layer = animlayer[count];
 			if(layer.cur_anim)

@@ -56,9 +56,8 @@ public:
 	Vec3f p3Velocity;
 	
 	// time
-	float fOneOnTTL;
-	ArxDuration m_age;
-	ArxDuration m_timeToLive;
+	GameDuration m_age;
+	GameDuration m_timeToLive;
 	
 	// size
 	float fSize;
@@ -84,7 +83,7 @@ public:
 	~Particle();
 	
 	void Regen();
-	void Update(ArxDuration delta);
+	void Update(GameDuration delta);
 	
 	bool isAlive() {
 		return (m_age < m_timeToLive);

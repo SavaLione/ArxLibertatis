@@ -29,8 +29,6 @@
 
 class TextureContainer;
 
-namespace gui {
-
 struct Note {
 	
 	enum Type {
@@ -56,6 +54,7 @@ struct Note {
 	void clear();
 	
 	void render();
+	bool manageActions();
 	
 	const Type & type() { return _type; }
 	const std::string & text() { return _text; }
@@ -93,7 +92,4 @@ private:
 	TextureContainer * nextPage;
 	
 };
-
-} // namespace gui
-
 #endif // ARX_GUI_NOTE_H

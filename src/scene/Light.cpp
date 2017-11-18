@@ -239,7 +239,7 @@ void TreatBackgroundDynlights() {
 					dynamicLight->intensity    = light->intensity;
 					dynamicLight->ex_flaresize = light->ex_flaresize;
 					dynamicLight->extras       = light->extras;
-					dynamicLight->duration     = ArxDurationMs(std::numeric_limits<long>::max());
+					dynamicLight->duration     = GameDurationMs(std::numeric_limits<long>::max());
 					
 					dynamicLight->rgb = light->rgb - light->rgb * light->ex_flicker * randomColor3f() * 0.5f;
 					
@@ -253,12 +253,12 @@ void TreatBackgroundDynlights() {
 	for(size_t i = 0; i < g_dynamicLightsMax; i++) {
 		EERIE_LIGHT * el = &g_dynamicLights[i];
 
-		if(el->exist && el->duration != ArxDuration_ZERO) {
-			const ArxDuration elapsed = arxtime.now() - el->creationTime;
-			const ArxDuration duration = el->duration;
+		if(el->exist && el->duration != 0) {
+			const GameDuration elapsed = g_gameTime.now() - el->creationTime;
+			const GameDuration duration = el->duration;
 
 			if(elapsed >= duration) {
-				float sub = g_framedelay * 0.001f;
+				float sub = g_gameTime.lastFrameDuration() / GameDurationMs(1000);
 
 				el->rgb.r -= sub;
 				el->rgb.g -= sub;
@@ -275,7 +275,7 @@ void TreatBackgroundDynlights() {
 
 				if(el->rgb.r + el->rgb.g + el->rgb.b == 0) {
 					el->exist = 0;
-					el->duration = ArxDuration_ZERO;
+					el->duration = 0;
 				}
 			}
 		}
@@ -367,12 +367,12 @@ void lightHandleDestroy(LightHandle & handle) {
 	handle = LightHandle();
 }
 
-void endLightDelayed(LightHandle & handle, ArxDuration delay) {
+void endLightDelayed(LightHandle & handle, GameDuration delay) {
 	
 	EERIE_LIGHT * light = lightHandleGet(handle);
 	if(light) {
 		light->duration = delay;
-		light->creationTime = arxtime.now();
+		light->creationTime = g_gameTime.now();
 	}
 }
 
@@ -392,8 +392,8 @@ LightHandle GetFreeDynLight() {
 			light.m_isIgnitionLight = false;
 			light.intensity = 1.3f;
 			light.treat = 1;
-			light.creationTime = arxtime.now();
-			light.duration = ArxDuration_ZERO;
+			light.creationTime = g_gameTime.now();
+			light.duration = 0;
 			light.extras = 0;
 			light.m_storedFlameTime.reset();
 			return LightHandle(i);
@@ -437,7 +437,7 @@ void ClearDynLights() {
 
 
 
-static int MAX_LLIGHTS = llightsSize;
+static size_t MAX_LLIGHTS = llightsSize;
 
 // Inserts Light in the List of Nearest Lights
 static void Insertllight(boost::array<EERIE_LIGHT *, llightsSize> & llights,
@@ -468,16 +468,16 @@ static void Insertllight(boost::array<EERIE_LIGHT *, llightsSize> & llights,
 	if(val < 0)
 		val=0;
 
-	for(int i = 0; i < MAX_LLIGHTS; i++) {
+	for(size_t i = 0; i < MAX_LLIGHTS; i++) {
 		if(!llights[i]) {
 			llights[i]=el;
 			values[i]=val;
 			return;
 		} else if (val <= values[i]) { // Inserts light at the right place
-			for(int j = MAX_LLIGHTS - 2; j >= i; j--) {
-				if(llights[j]) {
-					llights[j+1]=llights[j];
-					values[j+1]=values[j];
+			for(size_t j = MAX_LLIGHTS - 1; j > i; j--) {
+				if(llights[j - 1]) {
+					llights[j] = llights[j - 1];
+					values[j] = values[j - 1];
 				}
 			}
 
@@ -488,11 +488,11 @@ static void Insertllight(boost::array<EERIE_LIGHT *, llightsSize> & llights,
 	}
 }
 
-void setMaxLLights(int count) {
-	MAX_LLIGHTS = glm::clamp(count, 6, llightsSize);
+void setMaxLLights(size_t count) {
+	MAX_LLIGHTS = glm::clamp(count, size_t(6), llightsSize);
 }
 
-void UpdateLlights(ShaderLight lights[], int & lightsCount, const Vec3f pos, bool forPlayerColor) {
+void UpdateLlights(ShaderLight lights[], size_t & lightsCount, const Vec3f pos, bool forPlayerColor) {
 	
 	ARX_PROFILE_FUNC();
 	
@@ -510,7 +510,7 @@ void UpdateLlights(ShaderLight lights[], int & lightsCount, const Vec3f pos, boo
 	}
 	
 	lightsCount = 0;
-	for(int i = 0; i < MAX_LLIGHTS; i++) {
+	for(size_t i = 0; i < MAX_LLIGHTS; i++) {
 		if(llights[i]) {
 			EERIE_LIGHT * el = llights[i];
 			ShaderLight & sl = lights[i];
@@ -555,8 +555,8 @@ void ResetTileLights() {
 	}
 }
 
-void ComputeTileLights(short x,short z)
-{
+void ComputeTileLights(short x, short z) {
+	
 	tilelights[x][z].el.clear();
 	
 	Vec2f tileCenter = (Vec2f(x, z) + 0.5f) * Vec2f(ACTIVEBKG->m_tileSize);
@@ -582,12 +582,12 @@ void ClearTileLights() {
 float GetColorz(const Vec3f &pos) {
 
 	ShaderLight lights[llightsSize];
-	int lightsCount;
+	size_t lightsCount;
 	UpdateLlights(lights, lightsCount, pos, true);
 	
 	Color3f ff = Color3f(0.f, 0.f, 0.f);
 	
-	for(long k = 0; k < lightsCount; k++) {
+	for(size_t k = 0; k < lightsCount; k++) {
 		const ShaderLight & light = lights[k];
 		
 		float dd = fdist(light.pos, pos);
@@ -649,20 +649,15 @@ float GetColorz(const Vec3f &pos) {
 	return (std::min(ff.r, 255.f) + std::min(ff.g, 255.f) + std::min(ff.b, 255.f)) * (1.f/3);
 }
 
-ColorRGBA ApplyLight(const ShaderLight lights[],
-                     const int lightsCount,
-                     const glm::quat & quat,
-                     const Vec3f & position,
-                     const Vec3f & normal,
-                     const ColorMod & colorMod,
-                     float materialDiffuse
-) {
+ColorRGBA ApplyLight(ShaderLight lights[], size_t lightsCount, const glm::quat & quat, const Vec3f & position,
+                     const Vec3f & normal, const ColorMod & colorMod, float materialDiffuse) {
+	
 	Color3f tempColor = colorMod.ambientColor;
 	
 	glm::quat inv = glm::inverse(quat);
 	
 	// Dynamic lights
-	for(int l = 0; l != lightsCount; l++) {
+	for(size_t l = 0; l != lightsCount; l++) {
 		const ShaderLight & light = lights[l];
 		
 		Vec3f vLight = glm::normalize(light.pos - position);
@@ -696,9 +691,9 @@ ColorRGBA ApplyLight(const ShaderLight lights[],
 	tempColor *= colorMod.factor;
 	tempColor += colorMod.term;
 
-	u8 ir = clipByte255(tempColor.r);
-	u8 ig = clipByte255(tempColor.g);
-	u8 ib = clipByte255(tempColor.b);
+	u8 ir = clipByte255(int(tempColor.r));
+	u8 ig = clipByte255(int(tempColor.g));
+	u8 ib = clipByte255(int(tempColor.b));
 
 	return Color(ir, ig, ib, 255).toRGBA();
 }
@@ -756,9 +751,9 @@ void ApplyTileLights(EERIEPOLY * ep, const Vec2s & pos)
 			}
 		}
 
-		u8 ir = clipByte255(tempColor.r);
-		u8 ig = clipByte255(tempColor.g);
-		u8 ib = clipByte255(tempColor.b);
+		u8 ir = clipByte255(int(tempColor.r));
+		u8 ig = clipByte255(int(tempColor.g));
+		u8 ib = clipByte255(int(tempColor.b));
 		ep->color[j] = Color(ir, ig, ib, 255).toRGBA();
 	}
 }

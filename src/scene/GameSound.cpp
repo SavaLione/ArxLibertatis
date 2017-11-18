@@ -94,12 +94,6 @@ using audio::FLAG_AUTOFREE;
 
 extern bool EXTERNALVIEW;
 
-enum PlayingAmbianceType {
-	PLAYING_AMBIANCE_MENU,
-	PLAYING_AMBIANCE_SCRIPT,
-	PLAYING_AMBIANCE_ZONE
-};
-
 // TODO used for saving
 struct PlayingAmbiance {
 	char name[256];
@@ -108,10 +102,10 @@ struct PlayingAmbiance {
 	s32 type;
 };
 
-static const unsigned long ARX_SOUND_UPDATE_INTERVAL(100);  
-static const unsigned long ARX_SOUND_STREAMING_LIMIT(176400); 
+static const PlatformDuration ARX_SOUND_UPDATE_INTERVAL = PlatformDurationMs(100);
+static const unsigned long ARX_SOUND_STREAMING_LIMIT(176400);
 static const unsigned long MAX_VARIANTS(5);
-static const unsigned long AMBIANCE_FADE_TIME(2000);
+static const PlatformDuration AMBIANCE_FADE_TIME = PlatformDurationMs(2000);
 static const float ARX_SOUND_UNIT_FACTOR(0.01F);
 static const float ARX_SOUND_ROLLOFF_FACTOR(1.3F);
 static const float ARX_SOUND_DEFAULT_FALLSTART(200.0F);
@@ -812,7 +806,7 @@ long ARX_SOUND_PlayCinematic(const res::path & name, bool isSpeech) {
 		ARX_SOUND_SetListener(ACTIVECAM->orgTrans.pos, frontUp.first, frontUp.second);
 	}
 	
-	ARX_SOUND_IOFrontPos(NULL, channel.position); 
+	ARX_SOUND_IOFrontPos(NULL, channel.position);
 	
 	audio::samplePlay(sample_id, channel);
 	
@@ -824,15 +818,15 @@ long ARX_SOUND_IsPlaying(SourceId & sample_id) {
 }
 
 
-ArxDuration ARX_SOUND_GetDuration(SampleId & sample_id) {
+GameDuration ARX_SOUND_GetDuration(SampleId & sample_id) {
 	
 	if(bIsActive && sample_id != INVALID_ID) {
 		size_t length;
 		audio::getSampleLength(sample_id, length);
-		return ArxDurationMs(length);
+		return GameDurationMs(length);
 	}
 
-	return ArxDuration_ZERO;
+	return 0;
 }
 
 void ARX_SOUND_RefreshVolume(SourceId & sample_id, float volume) {
@@ -910,7 +904,7 @@ bool ARX_SOUND_PlayScriptAmbiance(const res::path & name, SoundLoopMode loop, fl
 			return false;
 		}
 		
-		audio::setAmbianceUserData(ambiance_id, reinterpret_cast<void *>(PLAYING_AMBIANCE_SCRIPT));
+		audio::setAmbianceType(ambiance_id, audio::PLAYING_AMBIANCE_SCRIPT);
 
 		audio::Channel channel;
 
@@ -954,7 +948,7 @@ bool ARX_SOUND_PlayZoneAmbiance(const res::path & name, SoundLoopMode loop, floa
 		if(ambiance_id == AmbianceId()) {
 			return false;
 		}
-		audio::setAmbianceUserData(ambiance_id, reinterpret_cast<void *>(PLAYING_AMBIANCE_ZONE));
+		audio::setAmbianceType(ambiance_id, audio::PLAYING_AMBIANCE_ZONE);
 	}
 	else if (ambiance_id == ambiance_zone)
 		return true;
@@ -997,7 +991,7 @@ AmbianceId ARX_SOUND_PlayMenuAmbiance(const res::path & ambiance_name) {
 	audio::deleteAmbiance(ambiance_menu);
 	ambiance_menu = audio::createAmbiance(ambiance_name);
 	
-	audio::setAmbianceUserData(ambiance_menu, reinterpret_cast<void *>(PLAYING_AMBIANCE_MENU));
+	audio::setAmbianceType(ambiance_menu, audio::PLAYING_AMBIANCE_MENU);
 	
 	audio::Channel channel;
 	
@@ -1018,11 +1012,10 @@ char * ARX_SOUND_AmbianceSavePlayList(size_t & size) {
 
 	while (ambiance_id != AmbianceId())
 	{
-		void * storedType;
-		audio::getAmbianceUserData(ambiance_id, &storedType);
-		long type = reinterpret_cast<long>(storedType);
+		audio::PlayingAmbianceType type;
+		audio::getAmbianceType(ambiance_id, &type);
 
-		if (type == PLAYING_AMBIANCE_SCRIPT || type == PLAYING_AMBIANCE_ZONE)
+		if (type == audio::PLAYING_AMBIANCE_SCRIPT || type == audio::PLAYING_AMBIANCE_ZONE)
 		{
 			void * ptr;
 			PlayingAmbiance * playing;
@@ -1042,7 +1035,7 @@ char * ARX_SOUND_AmbianceSavePlayList(size_t & size) {
 			util::storeString(playing->name, name.string().c_str());
 			audio::getAmbianceVolume(ambiance_id, playing->volume);
 			playing->loop = audio::isAmbianceLooped(ambiance_id) ? ARX_SOUND_PLAY_LOOPED : ARX_SOUND_PLAY_ONCE;
-			playing->type = type;
+			playing->type = (type == audio::PLAYING_AMBIANCE_SCRIPT ? 1 : 2);
 
 			count++;
 		}
@@ -1065,23 +1058,26 @@ void ARX_SOUND_AmbianceRestorePlayList(const char * _play_list, size_t size) {
 		
 		res::path name = res::path::load(util::loadString(playing->name));
 		
-		// TODO save/load enum
 		switch (playing->type) {
 			
-			case PLAYING_AMBIANCE_SCRIPT :
+			case 1 :
 				ARX_SOUND_PlayScriptAmbiance(name, (SoundLoopMode)playing->loop, playing->volume);
 				break;
 			
-			case PLAYING_AMBIANCE_ZONE :
+			case 2 :
 				ARX_SOUND_PlayZoneAmbiance(name, (SoundLoopMode)playing->loop, playing->volume);
 				break;
+			
+			default:
+				LogWarning << "Unknown ambiance type " << playing->type << " for " << name;
+			
 		}
 	}
 }
 
 static void ARX_SOUND_CreateEnvironments() {
 	
-	PakDirectory * dir = resources->getDirectory(ARX_SOUND_PATH_ENVIRONMENT);
+	PakDirectory * dir = g_resources->getDirectory(ARX_SOUND_PATH_ENVIRONMENT);
 	if(!dir) {
 		return;
 	}
@@ -1441,7 +1437,7 @@ static void ARX_SOUND_CreateCollisionMaps() {
 		file.set_ext(ARX_SOUND_FILE_EXTENSION_INI);
 		
 		size_t fileSize;
-		char * data = resources->readAlloc(file, fileSize);
+		char * data = g_resources->readAlloc(file, fileSize);
 		if(!data) {
 			LogWarning << "Could not find collision map " << file;
 			return;
@@ -1590,7 +1586,7 @@ static void ARX_SOUND_CreatePresenceMap() {
 	res::path file = (ARX_SOUND_PATH_INI / ARX_SOUND_PRESENCE_NAME).set_ext(ARX_SOUND_FILE_EXTENSION_INI);
 	
 	size_t fileSize;
-	char * data = resources->readAlloc(file, fileSize);
+	char * data = g_resources->readAlloc(file, fileSize);
 	if(!data) {
 		LogWarning << "Could not find presence map " << file;
 		return;

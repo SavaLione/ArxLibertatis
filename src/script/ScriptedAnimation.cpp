@@ -89,7 +89,7 @@ public:
 		io->angle.setYaw(io->angle.getYaw() + yaw);
 		io->angle.setRoll(io->angle.getRoll() + roll);
 		
-		io->animBlend.lastanimtime = ArxInstant_ZERO;
+		io->animBlend.lastanimtime = 0;
 		
 		return Success;
 	}
@@ -278,22 +278,22 @@ public:
 			timer.es = context.getScript();
 			timer.exist = 1;
 			timer.io = context.getEntity();
-			timer.interval = ArxDurationMs(1000);
+			timer.interval = GameDurationMs(1000);
 			// Don't assume that we successfully set the animation - use the current animation
 			if(layer.cur_anim) {
 				arx_assert(layer.altidx_cur >= 0 && layer.altidx_cur < layer.cur_anim->alt_nb);
 				if(layer.cur_anim->anims[layer.altidx_cur]->anim_time > toAnimationDuration(timer.interval)) {
-					timer.interval = toArxDuration(layer.cur_anim->anims[layer.altidx_cur]->anim_time);
+					timer.interval = toGameDuration(layer.cur_anim->anims[layer.altidx_cur]->anim_time);
 				}
 			}
 			timer.name = timername;
 			timer.pos = pos;
-			timer.start = arxtime.now();
+			timer.start = g_gameTime.now();
 			timer.count = 1;
 			timer.longinfo = 0;
 			
 			DebugScript(": scheduled timer #" << num2 << ' ' << timername << " in "
-			            << toMs(timer.interval) << "ms");
+			            << toMsi(timer.interval) << "ms");
 			
 		}
 		
@@ -485,7 +485,7 @@ public:
 			io->usepath = NULL;
 			
 			ARX_USE_PATH * aup = (ARX_USE_PATH *)malloc(sizeof(ARX_USE_PATH));
-			aup->_starttime = aup->_curtime = arxtime.now_f();
+			aup->_starttime = aup->_curtime = g_gameTime.now();
 			aup->aupflags = ARX_USEPATH_FORWARD;
 			if(wormspecific) {
 				aup->aupflags |= ARX_USEPATH_WORM_SPECIFIC | ARX_USEPATH_FLAG_ADDSTARTPOS;

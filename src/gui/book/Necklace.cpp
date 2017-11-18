@@ -40,7 +40,7 @@ ARX_NECKLACE necklace;
 
 void NecklaceInit() {
 	
-	memset(&necklace,0,sizeof(ARX_NECKLACE));
+	memset(&necklace, 0, sizeof(ARX_NECKLACE));
 	necklace.lacet = loadObject("graph/interface/book/runes/lacet.teo");
 	
 	necklace.runes[RUNE_AAM] =         loadObject("graph/interface/book/runes/runes_aam.teo");
@@ -105,7 +105,7 @@ void ReleaseNecklace() {
 
 static void PlayerBookDrawRune(Rune rune) {
 	
-	ARX_SPELLS_RequestSymbolDraw2(entities.player(), rune, toMs(ARX_SOUND_GetDuration(SND_SYMB[rune])));
+	ARX_SPELLS_RequestSymbolDraw2(entities.player(), rune, toMsf(ARX_SOUND_GetDuration(SND_SYMB[rune])));
 	ARX_SOUND_PlayInterface(SND_SYMB[rune]);
 }
 
@@ -114,10 +114,9 @@ static void PlayerBookDrawRune(Rune rune) {
 void ARX_INTERFACE_ManageOpenedBook_Finish(const Vec2f & mousePos)
 {
 	
-	UseRenderState state(render3D().depthTest(false).fog(false));
+	RenderState baseState = render3D().depthTest(false).fog(false);
 	
 	Vec3f pos = Vec3f(0.f, 0.f, 2100.f);
-	Anglef angle = Anglef::ZERO;
 	
 	EERIE_LIGHT * light = lightHandleGet(torchLightHandle);
 	
@@ -140,28 +139,32 @@ void ARX_INTERFACE_ManageOpenedBook_Finish(const Vec2f & mousePos)
 	
 	GRenderer->SetAntialiasing(true);
 	
+	float wave = timeWaveSin(g_platformTime.frameStart(), PlatformDurationMsf(1256.6370614f));
+	float ptDelta = toMs(g_platformTime.lastFrameDuration());
+	
 	for(size_t i = 0; i < RUNE_COUNT; i++) {
 		if(!gui::necklace.runes[i])
 			continue;
 		
 		EERIE_3DOBJ * rune = gui::necklace.runes[i];
 		
-		bookcam.center.x = (382 + tmpPos.x * 45 + BOOKDEC.x) * g_sizeRatio.x;
-		bookcam.center.y = (100 + tmpPos.y * 64 + BOOKDEC.y) * g_sizeRatio.y;
+		bookcam.center.x = s32((382 + tmpPos.x * 45 + BOOKDEC.x) * g_sizeRatio.x);
+		bookcam.center.y = s32((100 + tmpPos.y * 64 + BOOKDEC.y) * g_sizeRatio.y);
 		
 		SetActiveCamera(&bookcam);
 		PrepareCamera(&bookcam, g_size);
 		
 		if(player.hasRune((Rune)i)) {
+			Anglef angle = Anglef::ZERO;
 			
 			if(rune->angle.getYaw() != 0.f) {
 				if(rune->angle.getYaw() > 300.f)
 					rune->angle.setYaw(300.f);
 				
-				angle.setYaw(std::sin(arxtime.now_f() * (1.0f / 200)) * rune->angle.getYaw() * (1.0f / 40));
+				angle.setYaw(wave * rune->angle.getYaw() * (1.0f / 40));
 			}
 			
-			rune->angle.setYaw(rune->angle.getYaw() - g_framedelay * 0.2f);
+			rune->angle.setYaw(rune->angle.getYaw() - ptDelta * 0.2f);
 			
 			if(rune->angle.getYaw() < 0.f)
 				rune->angle.setYaw(0.f);
@@ -172,7 +175,7 @@ void ARX_INTERFACE_ManageOpenedBook_Finish(const Vec2f & mousePos)
 			
 			Rectf runeBox = UpdateBbox2d(*rune).toRect();
 			
-			PopAllTriangleListOpaque();
+			PopAllTriangleListOpaque(baseState);
 			
 			tmpPos.x++;
 			
@@ -183,27 +186,25 @@ void ARX_INTERFACE_ManageOpenedBook_Finish(const Vec2f & mousePos)
 			
 			// Checks for Mouse floating over a rune...
 			if(runeBox.contains(mousePos)) {
-				long r=0;
+				bool r = false;
 				
 				for(size_t j = 0; j < rune->facelist.size(); j++) {
 					float n = PtIn2DPolyProj(rune->vertexClipPositions, &rune->facelist[j], mousePos.x, mousePos.y);
 					
 					if(n!=0.f) {
-						r=1;
+						r = true;
 						break;
 					}
 				}
 				
 				if(r) {
 					
-					UseRenderState state(render3D().depthTest(false).fog(false).blendAdditive());
-					
 					TransformInfo t(pos, glm::quat_cast(toRotationMatrix(angle)));
 					DrawEERIEInter(rune, t, NULL, false, 0.f);
 					
-					rune->angle.setYaw(rune->angle.getYaw() + g_framedelay*2.f);
+					rune->angle.setYaw(rune->angle.getYaw() + ptDelta * 2.f);
 					
-					PopAllTriangleListOpaque();
+					PopAllTriangleListOpaque(baseState.blendAdditive());
 					
 					SpecialCursor=CURSOR_INTERACTION_ON;
 					
@@ -213,14 +214,10 @@ void ARX_INTERFACE_ManageOpenedBook_Finish(const Vec2f & mousePos)
 				}
 			}
 			
-			// First draw the lace
-			angle.setYaw(0.f);
-			
-			TransformInfo t1(pos, glm::quat_cast(toRotationMatrix(angle)));
+			TransformInfo t1(pos, glm::quat());
 			DrawEERIEInter(gui::necklace.lacet, t1, NULL, false, 0.f);
 			
-			PopAllTriangleListOpaque();
-			
+			PopAllTriangleListOpaque(baseState);
 		}
 	}
 	

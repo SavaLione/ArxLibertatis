@@ -116,8 +116,8 @@ void ARXMenu_Private_Options_Video_SetResolution(bool fullscreen, int _iWidth, i
 	}
 }
 
-void ARXMenu_Options_Video_SetFogDistance(int _iFog) {
-	config.video.fogDistance = glm::clamp(_iFog, 0, 10);
+void ARXMenu_Options_Video_SetFogDistance(float distance) {
+	config.video.fogDistance = glm::clamp(distance, 0.f, 10.f);
 }
 
 void ARXMenu_Options_Video_SetDetailsQuality(int _iQuality) {
@@ -139,39 +139,45 @@ void ARXMenu_Options_Video_SetDetailsQuality(int _iQuality) {
 	}
 }
 
-void ARXMenu_Options_Audio_SetMasterVolume(int _iVolume) {
-	_iVolume = glm::clamp(_iVolume, 0, 10);
+void ARXMenu_Options_Video_SetGamma(float gamma) {
+	config.video.gamma = glm::clamp(gamma, 0.f, 10.f);
+	mainApp->getWindow()->setGamma(1.f + (gamma / 5.f - 1.f) * 0.5f);
+}
+
+void ARXMenu_Options_Audio_SetMasterVolume(float volume) {
 	
-	float fVolume = _iVolume * 0.1f;
+	config.audio.volume = glm::clamp(volume, 0.f, 10.f);
+	
+	float fVolume = config.audio.volume * 0.1f;
 	if(config.audio.muteOnFocusLost && !mainApp->getWindow()->hasFocus()) {
 		fVolume = 0.f;
 	}
+	
 	ARX_SOUND_MixerSetVolume(ARX_SOUND_MixerMenu, fVolume);
-	config.audio.volume = _iVolume;
 }
 
-void ARXMenu_Options_Audio_SetSfxVolume(int _iVolume) {
-	_iVolume = glm::clamp(_iVolume, 0, 10);
+void ARXMenu_Options_Audio_SetSfxVolume(float volume) {
 	
-	float fVolume = _iVolume * 0.1f;
+	config.audio.sfxVolume = glm::clamp(volume, 0.f, 10.f);
+	
+	float fVolume = config.audio.sfxVolume * 0.1f;
 	ARX_SOUND_MixerSetVolume(ARX_SOUND_MixerMenuSample, fVolume);
-	config.audio.sfxVolume = _iVolume;
 }
 
-void ARXMenu_Options_Audio_SetSpeechVolume(int _iVolume) {
-	_iVolume = glm::clamp(_iVolume, 0, 10);
+void ARXMenu_Options_Audio_SetSpeechVolume(float volume) {
 	
-	float fVolume = _iVolume * 0.1f;
+	config.audio.speechVolume = glm::clamp(volume, 0.f, 10.f);
+	
+	float fVolume = config.audio.speechVolume * 0.1f;
 	ARX_SOUND_MixerSetVolume(ARX_SOUND_MixerMenuSpeech, fVolume);
-	config.audio.speechVolume = _iVolume;
 }
 
-void ARXMenu_Options_Audio_SetAmbianceVolume(int _iVolume) {
-	_iVolume = glm::clamp(_iVolume, 0, 10);
+void ARXMenu_Options_Audio_SetAmbianceVolume(float volume) {
 	
-	float fVolume = _iVolume * 0.1f;
+	config.audio.ambianceVolume = glm::clamp(volume, 0.f, 10.f);
+	
+	float fVolume = config.audio.ambianceVolume * 0.1f;
 	ARX_SOUND_MixerSetVolume(ARX_SOUND_MixerMenuAmbiance, fVolume);
-	config.audio.ambianceVolume = _iVolume;
 }
 
 void ARXMenu_Options_Audio_ApplyGameVolumes() {
@@ -227,12 +233,12 @@ void ARXMenu_Options_Audio_SetDevice(const std::string & device) {
 
 void ARXMenu_ResumeGame() {
 	ARX_Menu_Resources_Release();
-	arxtime.resume();
+	g_gameTime.resume(GameTime::PauseMenu);
 	EERIEMouseButton = 0;
 }
 
 void ARXMenu_NewQuest() {
-	MenuFader_start(true, true, AMCM_NEWQUEST);
+	MenuFader_start(Fade_In, Mode_CharacterCreation);
 	bQuickGenFirstClick = true;
 	player.gold = 0;
 	ARX_PLAYER_MakeFreshHero();

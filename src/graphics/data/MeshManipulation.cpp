@@ -91,7 +91,7 @@ void EERIE_MESH_TWEAK_Skin(EERIE_3DOBJ * obj, const res::path & s1, const res::p
 	TextureContainer * tex = TextureContainer::Load(skinname);
 
 	if(obj->originaltextures == NULL) {
-		obj->originaltextures = (char *)malloc(256 * obj->texturecontainer.size()); 
+		obj->originaltextures = (char *)malloc(256 * obj->texturecontainer.size());
 		memset(obj->originaltextures, 0, 256 * obj->texturecontainer.size());
 
 		for(size_t i = 0; i < obj->texturecontainer.size(); i++) {
@@ -205,8 +205,8 @@ static long ObjectAddFace(EERIE_3DOBJ * obj, const EERIE_FACE * face, const EERI
 	obj->facelist.back().vid[0] = (unsigned short)f0;
 	obj->facelist.back().vid[1] = (unsigned short)f1;
 	obj->facelist.back().vid[2] = (unsigned short)f2;
-	obj->facelist.back().texid = 0; 
-
+	obj->facelist.back().texid = 0;
+	
 	for(size_t i = 0; i < obj->texturecontainer.size(); i++) {
 		if(0 <= face->texid
 		   && (size_t)face->texid < srcobj->texturecontainer.size()
@@ -408,10 +408,10 @@ static EERIE_3DOBJ * CreateIntermediaryMesh(const EERIE_3DOBJ * obj1, const EERI
 	// Is the origin of object in obj1 or obj2 ? Retreives it for work object
 	if(IsInSelection(obj1, obj1->origin, tw1)) {
 		work->point0 = obj2->point0;
-		work->origin = ObjectAddVertex(work, &obj2vertexlist2[obj2->origin]); 
+		work->origin = ObjectAddVertex(work, &obj2vertexlist2[obj2->origin]);
 	} else {
 		work->point0 = obj1->point0;
-		work->origin = ObjectAddVertex(work, &obj1vertexlist2[obj1->origin]); 
+		work->origin = ObjectAddVertex(work, &obj1vertexlist2[obj1->origin]);
 	}
 
 	// Recreate Action Points included in work object.for Obj1
@@ -697,7 +697,7 @@ void EERIE_MESH_TWEAK_Do(Entity * io, TweakType tw, const res::path & path) {
 	
 	res::path ftl_file = ("game" / path).set_ext("ftl");
 
-	if ((!resources->getFile(ftl_file)) && (!resources->getFile(path))) return;
+	if ((!g_resources->getFile(ftl_file)) && (!g_resources->getFile(path))) return;
 
 	if (!tw) return;
 
@@ -772,7 +772,7 @@ void EERIE_MESH_TWEAK_Do(Entity * io, TweakType tw, const res::path & path) {
 
 	EERIE_CreateCedricData(io->obj);
 	
-	io->animBlend.lastanimtime = ArxInstant_ZERO;
+	io->animBlend.lastanimtime = 0;
 	io->animBlend.m_active = false;
 	
 	delete tobj;

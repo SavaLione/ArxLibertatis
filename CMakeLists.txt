@@ -918,7 +918,7 @@ set(GRAPHICS_SOURCES
 	src/graphics/Draw.cpp
 	src/graphics/DrawLine.cpp
 	src/graphics/DrawDebug.cpp
-	src/graphics/GraphicsModes.cpp
+	src/graphics/GlobalFog.cpp
 	src/graphics/Math.cpp
 	src/graphics/Raycast.cpp
 	src/graphics/Renderer.cpp
@@ -962,7 +962,7 @@ set(GRAPHICS_SOURCES
 
 set(GRAPHICS_OPENGL_SOURCES
 	src/graphics/opengl/GLDebug.cpp
-	src/graphics/opengl/GLTexture2D.cpp
+	src/graphics/opengl/GLTexture.cpp
 	src/graphics/opengl/GLTextureStage.cpp
 	src/graphics/opengl/GLVertexBuffer.cpp
 	src/graphics/opengl/OpenGLRenderer.cpp

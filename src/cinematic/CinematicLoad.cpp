@@ -129,7 +129,7 @@ bool loadCinematic(Cinematic * c, const res::path & file) {
 	LogInfo << "Loading cinematic " << file;
 	
 	size_t size;
-	char * data = resources->readAlloc(file, size);
+	char * data = g_resources->readAlloc(file, size);
 	if(!data) {
 		LogError << "Cinematic " << file << " not found";
 		return false;
@@ -371,7 +371,7 @@ bool parseCinematic(Cinematic * c, const char * data, size_t size) {
 	
 	SetCurrFrame(0);
 	
-	GereTrack(c, PlatformDuration_ZERO, false, false);
+	GereTrack(c, 0, false, false);
 	c->projectload = true;
 	
 	LogDebug("loaded cinematic");

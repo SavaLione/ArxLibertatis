@@ -65,18 +65,26 @@ struct MENU_DYNAMIC_DATA {
 	MENU_DYNAMIC_DATA();
 };
 
-// Possible values for ARXmenu.currentmode
 enum MenuMode {
-	AMCM_OFF,
-	AMCM_MAIN,
-	AMCM_CREDITS,
-	AMCM_NEWQUEST
+	Mode_InGame,
+	Mode_MainMenu,
+	Mode_Credits,
+	Mode_CharacterCreation
 };
 
-// ARX_MENU_DATA contains all Menu-datas
 struct ARX_MENU_DATA {
-	MenuMode currentmode;
+	
 	MENU_DYNAMIC_DATA * mda;
+	
+	MenuMode mode() {
+		return m_currentMode;
+	}
+	void requestMode(MenuMode mode) {
+		m_currentMode = mode;
+	}
+	
+private:
+	MenuMode m_currentMode;
 };
 
 extern ARX_MENU_DATA ARXmenu;

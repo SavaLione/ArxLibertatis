@@ -32,11 +32,11 @@
 
 
 FissureFx::FissureFx()
-	: m_elapsed(ArxDuration_ZERO)
-	, m_duration(ArxDuration_ZERO)
-	, m_durationIntro(ArxDurationMs(1000))
-	, m_durationRender(ArxDurationMs(1000))
-	, m_durationOuttro(ArxDurationMs(1000))
+	: m_elapsed(0)
+	, m_duration(0)
+	, m_durationIntro(GameDurationMs(1000))
+	, m_durationRender(GameDurationMs(1000))
+	, m_durationOuttro(GameDurationMs(1000))
 	, m_colorBorder(Color3f::white)
 	, m_colorRays1(Color3f::white)
 	, m_colorRays2(Color3f::black)
@@ -44,13 +44,13 @@ FissureFx::FissureFx()
 	m_duration = m_durationIntro + m_durationRender + m_durationOuttro;
 }
 
-void FissureFx::SetDuration(ArxDuration alDurationIntro, ArxDuration alDurationRender, ArxDuration alDurationOuttro)
+void FissureFx::SetDuration(GameDuration alDurationIntro, GameDuration alDurationRender, GameDuration alDurationOuttro)
 {
-	m_durationIntro  = arx::clamp(alDurationIntro,  ArxDurationMs(100), ArxDurationMs(100000));
-	m_durationRender = arx::clamp(alDurationRender, ArxDurationMs(100), ArxDurationMs(100000));
-	m_durationOuttro = arx::clamp(alDurationOuttro, ArxDurationMs(100), ArxDurationMs(100000));
+	m_durationIntro  = arx::clamp(alDurationIntro,  GameDurationMs(100), GameDurationMs(100000));
+	m_durationRender = arx::clamp(alDurationRender, GameDurationMs(100), GameDurationMs(100000));
+	m_durationOuttro = arx::clamp(alDurationOuttro, GameDurationMs(100), GameDurationMs(100000));
 	
-	m_elapsed = ArxDuration_ZERO;
+	m_elapsed = 0;
 	m_duration = m_durationIntro + m_durationRender + m_durationOuttro;
 }
 
@@ -87,7 +87,7 @@ CRiseDead::CRiseDead()
 	, sizeF(0)
 	, fSizeIntro(0.f)
 {
-	m_elapsed = m_duration + ArxDurationMs(1);
+	m_elapsed = m_duration + GameDurationMs(1);
 	
 	tex_light = TextureContainer::Load("graph/obj3d/textures/(fx)_tsu4");
 }
@@ -141,7 +141,7 @@ void CRiseDead::Create(Vec3f aeSrc, float afBeta)
 	m_stones.Init(80.f);
 }
 
-ArxDuration CRiseDead::GetDuration()
+GameDuration CRiseDead::GetDuration()
 {
 	return m_duration;
 }
@@ -265,11 +265,11 @@ void CRiseDead::RenderFissure() {
 	// texture sympa avec glow au milieu ou uv wrap
 	mat.setWrapMode(TextureStage::WrapMirror);
 	mat.setTexture(tex_light);
-
-	target.x = m_eSrc.x ;
-	target.y = m_eSrc.y + 1.5f * sizeF; 
-	target.z = m_eSrc.z ;
-
+	
+	target.x = m_eSrc.x;
+	target.y = m_eSrc.y + 1.5f * sizeF;
+	target.z = m_eSrc.z;
+	
 	vr[0].color = vr[1].color = m_colorRays1.toRGB();
 	vr[2].color = vr[3].color = m_colorRays2.toRGB();
 
@@ -342,12 +342,12 @@ void CRiseDead::RenderFissure() {
 		if(i < fSizeIntro) {
 			vt[0] = va[i];
 			vt[1] = va[i + 1];
-			vt[2].x = va[i].x ;
+			vt[2].x = va[i].x;
 			vt[2].y = va[i].y + (va[i].y - target.y) * 2;
-			vt[2].z = va[i].z ;
-			vt[3].x = va[i+1].x ;
+			vt[2].z = va[i].z;
+			vt[3].x = va[i+1].x;
 			vt[3].y = va[i+1].y + (va[i+1].y - target.y) * 2;
-			vt[3].z = va[i+1].z ;
+			vt[3].z = va[i+1].z;
 
 			vr[0].color = (m_colorRays1 * tfRaysa[i]).toRGB();
 			vr[1].color = (m_colorRays1* tfRaysa[i + 1]).toRGB();
@@ -365,12 +365,12 @@ void CRiseDead::RenderFissure() {
 		if(i < fSizeIntro) {
 			vt[0] = vb[i + 1];
 			vt[1] = vb[i];
-			vt[2].x = vb[i+1].x ;
+			vt[2].x = vb[i+1].x;
 			vt[2].y = vb[i+1].y + (vb[i+1].y - target.y) * 2;
-			vt[2].z = vb[i+1].z ;
-			vt[3].x = vb[i].x ;
+			vt[2].z = vb[i+1].z;
+			vt[3].x = vb[i].x;
 			vt[3].y = vb[i].y + (vb[i].y - target.y) * 2;
-			vt[3].z = vb[i].z ;
+			vt[3].z = vb[i].z;
 
 			vr[0].color = (m_colorRays1 * tfRaysb[i]).toRGB();
 			vr[1].color = (m_colorRays1 * tfRaysb[i + 1]).toRGB();
@@ -387,9 +387,9 @@ void CRiseDead::RenderFissure() {
 	}
 }
 
-void CRiseDead::Update(float timeDelta)
+void CRiseDead::Update(GameDuration timeDelta)
 {
-	m_elapsed += ArxDurationMs(timeDelta);
+	m_elapsed += timeDelta;
 	
 	m_stones.Update(timeDelta, m_eSrc);
 }
@@ -404,16 +404,16 @@ void CRiseDead::Render()
 	//-------------------------------------------------------------------------
 	// render intro (opening + rays)
 	if(m_elapsed < m_durationIntro) {
-		float fOneOnDurationIntro = 1.f / toMs(m_durationIntro);
+		float fOneOnDurationIntro = 1.f / toMsf(m_durationIntro);
 		
-		if(m_elapsed < ArxDurationMs(toMs(m_durationIntro) * 0.666f)) {
-			fSizeIntro = (end + 2) * fOneOnDurationIntro * (1.5f) * toMs(m_elapsed);
+		if(m_elapsed < GameDurationMsf(toMsf(m_durationIntro) * 0.666f)) {
+			fSizeIntro = (end + 2) * fOneOnDurationIntro * (1.5f) * toMsf(m_elapsed);
 			sizeF = 1;
 		} else {
 			if(bIntro != false)
 				bIntro = false;
 
-			sizeF = (iSize) * (fOneOnDurationIntro * 3) * (toMs(m_elapsed) - toMs(m_durationIntro) * 0.666f);
+			sizeF = (iSize) * (fOneOnDurationIntro * 3) * (toMsf(m_elapsed) - toMsf(m_durationIntro) * 0.666f);
 		}
 	}
 	// do nothing just render
@@ -423,9 +423,7 @@ void CRiseDead::Render()
 	// close it all
 	else if (m_elapsed < m_duration)
 	{
-		float fOneOnDurationOuttro = 1.f / toMs(m_durationOuttro);
-		
-		sizeF = iSize - (iSize) * fOneOnDurationOuttro * toMs(m_elapsed - (m_durationIntro + m_durationRender));
+		sizeF = iSize - (iSize) * ((m_elapsed - (m_durationIntro + m_durationRender)) / m_durationOuttro);
 	}
 	
 	RenderFissure();
@@ -447,7 +445,7 @@ CSummonCreature::CSummonCreature()
 	
 	m_eSrc = Vec3f_ZERO;
 	
-	m_elapsed = m_duration + ArxDurationMs(1);
+	m_elapsed = m_duration + GameDurationMs(1);
 	
 	iSize = 100;
 	fOneOniSize = 1.0f / ((float) iSize);
@@ -643,11 +641,11 @@ void CSummonCreature::RenderFissure() {
 	// texture sympa avec glow au milieu ou uv wrap
 	mat.setWrapMode(TextureStage::WrapMirror);
 	mat.setTexture(tex_light);
-
-	target.x = m_eSrc.x + -fBetaRadSin * (1.5f * sizeF); 
+	
+	target.x = m_eSrc.x + -fBetaRadSin * (1.5f * sizeF);
 	target.y = m_eSrc.y;
-	target.z = m_eSrc.z + fBetaRadCos * (1.5f * sizeF); 
-
+	target.z = m_eSrc.z + fBetaRadCos * (1.5f * sizeF);
+	
 	vr[0].color = vr[1].color = m_colorRays1.toRGB();
 	vr[2].color = vr[3].color = m_colorRays2.toRGB();
 
@@ -702,9 +700,9 @@ void CSummonCreature::RenderFissure() {
 	}
 }
 
-void CSummonCreature::Update(float timeDelta)
+void CSummonCreature::Update(GameDuration timeDelta)
 {
-	m_elapsed += ArxDurationMs(timeDelta);
+	m_elapsed += timeDelta;
 }
 
 //-----------------------------------------------------------------------------
@@ -717,16 +715,16 @@ void CSummonCreature::Render()
 	//-------------------------------------------------------------------------
 	// render intro (opening + rays)
 	if(m_elapsed < m_durationIntro) {
-		float fOneOnDurationIntro = 1.f / toMs(m_durationIntro);
+		float fOneOnDurationIntro = 1.f / toMsf(m_durationIntro);
 		
-		if(m_elapsed < ArxDurationMs(toMs(m_durationIntro) * 0.666f)) {
-			fSizeIntro = (end + 2) * fOneOnDurationIntro * (1.5f) * toMs(m_elapsed);
+		if(m_elapsed < GameDurationMsf(toMsf(m_durationIntro) * 0.666f)) {
+			fSizeIntro = (end + 2) * fOneOnDurationIntro * (1.5f) * toMsf(m_elapsed);
 			sizeF = 1;
 		} else {
 			if(bIntro != false)
 				bIntro = false;
 
-			sizeF = (iSize) * (fOneOnDurationIntro * 3) * (toMs(m_elapsed) - toMs(m_durationIntro) * 0.666f);
+			sizeF = (iSize) * (fOneOnDurationIntro * 3) * (toMsf(m_elapsed) - toMsf(m_durationIntro) * 0.666f);
 		}
 	}
 	// do nothing just render
@@ -736,9 +734,7 @@ void CSummonCreature::Render()
 	// close it all
 	else if (m_elapsed < m_duration)
 	{
-		float fOneOnDurationOuttro = 1.f / toMs(m_durationOuttro);
-		
-		sizeF = iSize - (iSize) * fOneOnDurationOuttro * toMs(m_elapsed - (m_durationIntro + m_durationRender));
+		sizeF = iSize - (iSize) * ((m_elapsed - (m_durationIntro + m_durationRender)) / m_durationOuttro);
 	}
 	
 	RenderFissure();

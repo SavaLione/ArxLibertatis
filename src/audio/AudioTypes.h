@@ -68,8 +68,6 @@ const float DEFAULT_VOLUME = 1.f; // Original gain
 
 // Flags
 enum ChannelFlag {
-	FLAG_RESTART       = 0x00000001, // Force restart sample if already playing
-	FLAG_ENQUEUE       = 0x00000002, // Enqueue sample if already playing
 	FLAG_VOLUME        = 0x00000004, // Enable volume control
 	FLAG_PITCH         = 0x00000008, // Enable pitch control
 	FLAG_PAN           = 0x00000010, // Enable pan control
@@ -84,13 +82,6 @@ enum ChannelFlag {
 };
 DECLARE_FLAGS(ChannelFlag, ChannelFlags)
 DECLARE_FLAGS_OPERATORS(ChannelFlags)
-
-// Length units
-enum TimeUnit {
-	UNIT_MS,
-	UNIT_SAMPLES,
-	UNIT_BYTES
-};
 
 // Errors
 enum aalError {
@@ -116,6 +107,12 @@ enum HRTFStatus {
 	HRTFRequired,
 	HRTFForbidden,
 	HRTFUnavailable
+};
+
+enum PlayingAmbianceType {
+	PLAYING_AMBIANCE_MENU,
+	PLAYING_AMBIANCE_SCRIPT,
+	PLAYING_AMBIANCE_ZONE
 };
 
 // Output format

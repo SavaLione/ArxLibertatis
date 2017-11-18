@@ -106,7 +106,7 @@ Cinematic::Cinematic(Vec2i size)
 	, m_nextPosgrille()
 	, m_nextAngzgrille()
 	, speedtrack()
-	, flTime(PlatformDuration_ZERO)
+	, flTime(0)
 	, cinRenderSize(size)
 { }
 
@@ -122,7 +122,6 @@ void Cinematic::OneTimeSceneReInit() {
 	m_camera.clip = Rect(cinRenderSize.x, cinRenderSize.y);
 	m_camera.center = m_camera.clip.center();
 	m_camera.focal = 350.f;
-	m_camera.bkgcolor = Color::none;
 	m_camera.cdepth = 2500.f;
 	
 	numbitmap = -1;
@@ -261,7 +260,7 @@ void DrawGrille(CinematicBitmap * bitmap, Color col, int fx, CinematicLight * li
                 const Vec3f & pos, float angle, const CinematicFadeOut & fade) {
 	
 	CinematicGrid * grille = &bitmap->grid;
-	int nb = grille->m_nbvertexs;
+	size_t nb = grille->m_nbvertexs;
 	Vec2f * v = grille->m_vertexs.data();
 	TexturedVertex * d3dv = AllTLVertex;
 
@@ -347,7 +346,7 @@ void DrawGrille(CinematicBitmap * bitmap, Color col, int fx, CinematicLight * li
 				}
 				
 				if(interp != 1.f) {
-					u8 iinterp = interp * (Color::Limits::max() / ColorLimits<float>::max());
+					u8 iinterp = u8(interp * (Color::Limits::max() / ColorLimits<float>::max()));
 					Color color = Color::fromRGBA(AllTLVertex[uvs->indvertex].color);
 					color.a = std::min(color.a, iinterp);
 					AllTLVertex[uvs->indvertex].color = color.toRGBA();
@@ -380,10 +379,10 @@ void Cinematic::Render(PlatformDuration frameDuration) {
 	
 	//sound
 	if(changekey && idsound >= 0)
-		PlaySoundKeyFramer(idsound);
+		PlaySoundKeyFramer(size_t(idsound));
 	
 	if(config.interface.cinematicWidescreenMode == CinematicLetterbox) {
-		float w = 640 * g_sizeRatio.y;
+		s32 w = s32(640 * g_sizeRatio.y);
 		GRenderer->SetScissor(Rect(Vec2i((g_size.width() - w) / 2, 0), w, g_size.height()));
 	}
 	
@@ -445,7 +444,7 @@ void Cinematic::Render(PlatformDuration frameDuration) {
 	
 	
 	static const float SPEEDINTENSITYRND = 60.f / 1000.f;
-	float FDIFF = float(toMs(frameDuration));
+	float FDIFF = toMs(frameDuration);
 	
 	{
 	CinematicLight *l = NULL;
@@ -563,7 +562,7 @@ void Cinematic::Render(PlatformDuration frameDuration) {
 	if(g_debugInfo == InfoPanelGuiDebug) {
 		GRenderer->SetFillMode(Renderer::FillWireframe);
 		float x = 640.f / 2 * g_sizeRatio.y;
-		float c = g_size.center().x;
+		float c = float(g_size.center().x);
 		drawLine(Vec2f(c - x, 0.f), Vec2f(c - x, g_size.height()), 1.f, Color::red);
 		drawLine(Vec2f(c + x, 0.f), Vec2f(c + x, g_size.height()), 1.f, Color::red);
 		GRenderer->SetFillMode(Renderer::FillSolid);

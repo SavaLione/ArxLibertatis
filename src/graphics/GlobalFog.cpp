@@ -41,7 +41,7 @@ ZeniMax Media Inc., Suite 120, Rockville, Maryland 20850 USA.
 ===========================================================================
 */
 
-#include "graphics/GraphicsModes.h"
+#include "graphics/GlobalFog.h"
 
 #include <cstring>
 #include <algorithm>
@@ -54,22 +54,25 @@ ZeniMax Media Inc., Suite 120, Rockville, Maryland 20850 USA.
 #include "graphics/data/Mesh.h"
 #include "platform/profiler/Profiler.h"
 
-GLOBAL_MODS current;
-GLOBAL_MODS desired;
+GLOBAL_MODS g_currentFogParameters;
+GLOBAL_MODS g_desiredFogParameters;
 
 // change the clipping Z max & min
 static const float DEFAULT_ZCLIP = 6400.f;
 static const float DEFAULT_MINZCLIP = 1200.f;
 
-Color ulBKGColor = Color::none;
+Color g_fogColor = Color::none;
 
 void ARX_GLOBALMODS_Reset() {
-
-	desired = GLOBAL_MODS();
-	current = GLOBAL_MODS();
-	current.zclip = DEFAULT_ZCLIP;
-	desired.zclip = DEFAULT_ZCLIP;
-	desired.depthcolor = Color3f::black;
+	
+	g_desiredFogParameters = GLOBAL_MODS();
+	g_currentFogParameters = GLOBAL_MODS();
+	g_currentFogParameters.zclip = DEFAULT_ZCLIP;
+	g_desiredFogParameters.zclip = DEFAULT_ZCLIP;
+	g_currentFogParameters.depthcolor = Color3f::black;
+	g_desiredFogParameters.depthcolor = Color3f::black;
+	g_fogColor = Color::none;
+	
 }
 
 static float Approach(float current, float desired, float increment) {
@@ -95,7 +98,10 @@ void ARX_GLOBALMODS_Apply() {
 	
 	float baseinc = g_framedelay;
 	float incdiv1000 = g_framedelay * ( 1.0f / 1000 );
-
+	
+	GLOBAL_MODS & current = g_currentFogParameters;
+	GLOBAL_MODS & desired = g_desiredFogParameters;
+	
 	if (desired.flags & GMOD_ZCLIP) {
 		current.zclip = Approach(current.zclip, desired.zclip, baseinc * 2);
 	} else { // return to default...
@@ -113,9 +119,9 @@ void ARX_GLOBALMODS_Apply() {
 		current.depthcolor.b = Approach(current.depthcolor.b, 0, incdiv1000);
 	}
 	
-	float fZclipp = ((((float)config.video.fogDistance) * 1.2f) * (DEFAULT_ZCLIP - DEFAULT_MINZCLIP) / 10.f) + DEFAULT_MINZCLIP;
+	float fZclipp = config.video.fogDistance * 1.2f * (DEFAULT_ZCLIP - DEFAULT_MINZCLIP) / 10.f + DEFAULT_MINZCLIP;
 	fZclipp += (ACTIVECAM->focal - 310.f) * 5.f;
 	ACTIVECAM->cdepth = std::min(current.zclip, fZclipp);
 
-	ulBKGColor = current.depthcolor.to<u8>();
+	g_fogColor = current.depthcolor.to<u8>();
 }

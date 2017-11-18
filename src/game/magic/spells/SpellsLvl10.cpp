@@ -59,7 +59,8 @@ MassLightningStrikeSpell::~MassLightningStrikeSpell() {
 void MassLightningStrikeSpell::Launch() {
 	spells.endByType(SPELL_MASS_LIGHTNING_STRIKE);
 	
-	m_duration = ArxDurationMs(5000); // TODO probably never read
+	m_hasDuration = true;
+	m_duration = GameDurationMs(5000);
 	m_soundEffectPlayed = false;
 	
 	float beta;
@@ -73,15 +74,15 @@ void MassLightningStrikeSpell::Launch() {
 	}
 	m_pos += angleToVectorXZ(beta) * 500.f;
 	
-	ArxDuration minDuration = ArxDurationMs(500 * m_level);
-	ArxDuration maxDuration = ArxDuration_ZERO;
+	GameDuration minDuration = GameDurationMsf(500 * m_level);
+	GameDuration maxDuration = 0;
 	
 	int number = glm::clamp(int(m_level), 1, 10);
 	float ft = 360.0f / number;
 	
 	for(int i = 0; i < number; i++) {
 		Vec3f target = m_pos + angleToVectorXZ(i * ft) * 500.0f;
-		ArxDuration duration = minDuration + ArxDurationMs(Random::getu(0, 5000));
+		GameDuration duration = minDuration + GameDurationMs(Random::getu(0, 5000));
 		maxDuration = std::max(maxDuration, duration);
 		
 		CLightning * lightning = new CLightning();
@@ -92,7 +93,7 @@ void MassLightningStrikeSpell::Launch() {
 		pTab.push_back(lightning);
 	}
 	
-	m_duration = maxDuration + ArxDurationMs(1000);
+	m_duration = maxDuration + GameDurationMs(1000);
 	
 	EERIE_LIGHT * light = dynLightCreate(m_light);
 	if(light) {
@@ -113,7 +114,7 @@ void MassLightningStrikeSpell::Launch() {
 
 void MassLightningStrikeSpell::End() {
 	
-	endLightDelayed(m_light, ArxDurationMs(200));
+	endLightDelayed(m_light, GameDurationMs(200));
 	
 	ARX_SOUND_Stop(m_snd_loop);
 	ARX_SOUND_PlaySFX(SND_SPELL_LIGHTNING_END);
@@ -132,7 +133,7 @@ void MassLightningStrikeSpell::Update() {
 		lightning->m_caster = m_caster;
 		lightning->m_level = m_level;
 		
-		lightning->Update(ArxDurationMs(g_framedelay));
+		lightning->Update(g_gameTime.lastFrameDuration());
 	}
 	
 	for(size_t i = 0; i < pTab.size(); i++) {
@@ -156,7 +157,7 @@ void MassLightningStrikeSpell::Update() {
 		ARX_SOUND_PlaySFX(SND_SPELL_ELECTRIC, &position, Random::getf(0.8f, 1.2f));
 	}
 	
-	if(0 > (toMs(m_duration) - 1800) && !m_soundEffectPlayed) {
+	if(0 > m_duration - GameDurationMs(1800) && !m_soundEffectPlayed) {
 		m_soundEffectPlayed = true;
 		ARX_SOUND_PlaySFX(SND_SPELL_ELECTRIC, NULL, Random::getf(0.8f, 1.2f));
 	}
@@ -164,7 +165,8 @@ void MassLightningStrikeSpell::Update() {
 	EERIE_LIGHT * light = lightHandleGet(m_light);
 	if(light) {
 		light->intensity = Random::getf(1.3f, 2.3f);
-	}	
+	}
+	
 }
 
 
@@ -236,7 +238,8 @@ void ControlTargetSpell::Launch()
 	
 	ARX_SOUND_PlaySFX(SND_SPELL_CONTROL_TARGET);
 	
-	m_duration = ArxDurationMs(1000);
+	m_duration = GameDurationMs(1000);
+	m_hasDuration = true;
 	
 	eSrc = Vec3f_ZERO;
 	eTarget = Vec3f_ZERO;
@@ -288,10 +291,7 @@ void ControlTargetSpell::Update() {
 	int n = BEZIERPrecision;
 	float delta = 1.0f / n;
 	
-	float elapsed = arxtime.now_f() - toMs(m_timcreation);
-	float fOneOnDuration = 1.f / toMs(m_duration);
-	
-	fTrail = (elapsed * fOneOnDuration) * 9 * (n + 2);
+	fTrail = (m_elapsed / m_duration) * 9.f * float(n + 2);
 
 	Vec3f lastpos = pathways[0];
 	
@@ -354,17 +354,17 @@ bool FreezeTimeSpell::CanLaunch() {
 void FreezeTimeSpell::Launch() {
 	ARX_SOUND_PlaySFX(SND_SPELL_FREEZETIME);
 	
-	float max_slowdown = std::max(0.f, GLOBAL_SLOWDOWN - 0.01f);
+	float max_slowdown = std::max(0.f, g_gameTime.speed() - 0.01f);
 	m_slowdown = glm::clamp(m_level * 0.08f, 0.f, max_slowdown);
-	GLOBAL_SLOWDOWN -= m_slowdown;
+	g_gameTime.setSpeed(g_gameTime.speed() - m_slowdown);
 	
-	m_duration = (m_launchDuration > ArxDuration::ofRaw(-1)) ? m_launchDuration : ArxDurationMs(200000);
+	m_duration = (m_launchDuration >= 0) ? m_launchDuration : GameDurationMs(200000);
 	m_hasDuration = true;
 	m_fManaCostPerSecond = 30.f * m_slowdown;
 }
 
 void FreezeTimeSpell::End() {
-	GLOBAL_SLOWDOWN += m_slowdown;
+	g_gameTime.setSpeed(g_gameTime.speed() + m_slowdown);
 	
 	Entity * caster = entities.get(m_caster);
 	if(caster) {
@@ -375,7 +375,8 @@ void FreezeTimeSpell::End() {
 void MassIncinerateSpell::Launch() {
 	ARX_SOUND_PlaySFX(SND_SPELL_MASS_INCINERATE);
 	
-	m_duration = ArxDurationMs(20000);
+	m_duration = GameDurationMs(20000);
+	m_hasDuration = true;
 	
 	for(size_t ii = 0; ii < entities.size(); ii++) {
 		const EntityHandle handle = EntityHandle(ii);
@@ -394,7 +395,7 @@ void MassIncinerateSpell::Launch() {
 		}
 		
 		tio->sfx_flag |= SFX_TYPE_YLSIDE_DEATH | SFX_TYPE_INCINERATE;
-		tio->sfx_time = arxtime.now();
+		tio->sfx_time = g_gameTime.now();
 		
 		m_targets.push_back(tio->index());
 	}
@@ -427,7 +428,8 @@ bool TeleportSpell::CanLaunch() {
 }
 
 void TeleportSpell::Launch() {
-	m_duration = ArxDurationMs(7000);
+	m_duration = GameDurationMs(7000);
+	m_hasDuration = true;
 	
 	ARX_SOUND_PlaySFX(SND_SPELL_TELEPORT, &m_caster_pos);
 	
@@ -444,8 +446,7 @@ extern Vec3f lastteleport;
 
 void TeleportSpell::Update() {
 	
-	float elapsed = arxtime.now_f() - toMs(m_timcreation);
-	float TELEPORT = elapsed / toMs(m_duration);
+	float TELEPORT = m_elapsed / m_duration;
 	
 	if(LASTTELEPORT < 0.5f && TELEPORT >= 0.5f) {
 		Vec3f pos = lastteleport;
@@ -455,5 +456,6 @@ void TeleportSpell::Update() {
 		ARX_SOUND_PlaySFX(SND_SPELL_TELEPORTED, &player.pos);
 	} else {
 		LASTTELEPORT = TELEPORT;
-	}	
+	}
+	
 }

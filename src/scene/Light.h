@@ -118,10 +118,10 @@ struct EERIE_LIGHT {
 	float ex_speed;
 	float ex_flaresize;
 	LightHandle m_ignitionLightHandle;
-	ArxInstant creationTime;
+	GameInstant creationTime;
 	
 	// will start to fade before the end of duration...
-	ArxDuration duration;
+	GameDuration duration;
 	
 	audio::SourceId sample;
 	math::Quantizer m_storedFlameTime;
@@ -152,7 +152,7 @@ EERIE_LIGHT * dynLightCreate(LightHandle & handle);
 EERIE_LIGHT * dynLightCreate();
 
 void lightHandleDestroy(LightHandle & handle);
-void endLightDelayed(LightHandle & handle, ArxDuration delay);
+void endLightDelayed(LightHandle & handle, GameDuration delay);
 
 void resetDynLights();
 
@@ -170,25 +170,20 @@ struct ShaderLight {
 	Color3f rgb255;
 };
 
-static const int llightsSize = 16;
+static const size_t llightsSize = 16;
 
-void setMaxLLights(int count);
-void UpdateLlights(ShaderLight lights[], int & lightsCount, const Vec3f pos, bool forPlayerColor);
+void setMaxLLights(size_t count);
+void UpdateLlights(ShaderLight lights[], size_t & lightsCount, const Vec3f pos, bool forPlayerColor);
 
 void InitTileLights();
 void ResetTileLights();
-void ComputeTileLights(short x,short z);
+void ComputeTileLights(short x, short z);
 void ClearTileLights();
 
 float GetColorz(const Vec3f &pos);
 
-ColorRGBA ApplyLight(const ShaderLight lights[],
-                     const int lightsCount,
-                     const glm::quat & quat,
-                     const Vec3f & position,
-                     const Vec3f & normal,
-                     const ColorMod & colorMod,
-                     float materialDiffuse = 1.f);
+ColorRGBA ApplyLight(ShaderLight lights[], size_t lightsCount, const glm::quat & quat, const Vec3f & position,
+                     const Vec3f & normal, const ColorMod & colorMod, float materialDiffuse = 1.f);
 
 void ApplyTileLights(EERIEPOLY * ep, const Vec2s & pos);
 

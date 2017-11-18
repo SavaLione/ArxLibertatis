@@ -42,8 +42,8 @@ bool InvisibilitySpell::CanLaunch() {
 }
 
 void InvisibilitySpell::Launch() {
-	m_duration = (m_launchDuration > ArxDuration::ofRaw(-1)) ? m_launchDuration : ArxDurationMs(6000000);
-	m_hasDuration = true;
+	m_hasDuration = m_launchDuration >= 0;
+	m_duration = m_hasDuration ? m_launchDuration : 0;
 	m_fManaCostPerSecond = 3.f;
 	
 	if(m_caster == EntityHandle_Player) {
@@ -75,6 +75,7 @@ void InvisibilitySpell::Update() {
 			if(!(target->gameFlags & GFLAG_INVISIBILITY)) {
 				m_targets.clear();
 				ARX_SPELLS_Fizzle(this);
+				spells.endSpell(this);
 			}
 		}
 	}
@@ -99,8 +100,8 @@ void ManaDrainSpell::Launch() {
 	spells.endByCaster(m_caster, SPELL_LIFE_DRAIN);
 	spells.endByCaster(m_caster, SPELL_HARM);
 	
-	m_duration = (m_launchDuration > ArxDuration::ofRaw(-1)) ? m_launchDuration : ArxDurationMs(6000000);
-	m_hasDuration = true;
+	m_hasDuration = m_launchDuration >= 0;
+	m_duration = m_hasDuration ? m_launchDuration : 0;
 	m_fManaCostPerSecond = 2.f;
 	
 	m_snd_loop = ARX_SOUND_PlaySFX(SND_SPELL_MAGICAL_SHIELD, &m_caster_pos, 1.2f, ARX_SOUND_PLAY_LOOPED);
@@ -109,7 +110,7 @@ void ManaDrainSpell::Launch() {
 	damage.radius = 150.f;
 	damage.damages = 8.f;
 	damage.area = DAMAGE_FULL;
-	damage.duration = ArxDurationMs(100000000);
+	damage.duration = GameDurationMs(100000000);
 	damage.source = m_caster;
 	damage.flags = DAMAGE_FLAG_DONT_HURT_SOURCE | DAMAGE_FLAG_FOLLOW_SOURCE | DAMAGE_FLAG_ADD_VISUAL_FX;
 	damage.type = DAMAGE_TYPE_FAKEFIRE | DAMAGE_TYPE_MAGICAL | DAMAGE_TYPE_DRAIN_MANA;
@@ -171,7 +172,8 @@ ExplosionSpell::ExplosionSpell()
 void ExplosionSpell::Launch() {
 	ARX_SOUND_PlaySFX(SND_SPELL_EXPLOSION);
 	
-	m_duration = ArxDurationMs(2000);
+	m_duration = GameDurationMs(2000);
+	m_hasDuration = true;
 	
 	Vec3f target = entities[m_caster]->pos;
 	if(m_caster == EntityHandle_Player) {
@@ -198,7 +200,7 @@ void ExplosionSpell::Launch() {
 		light->fallstart = 500.f;
 		light->rgb = Color3f(0.1f, 0.1f, 0.8f) + Color3f(1.f / 3, 1.f / 3, 1.f / 5) * randomColor3f();
 		light->pos = target;
-		light->duration = ArxDurationMs(200);
+		light->duration = GameDurationMs(200);
 	}
 	
 	AddQuakeFX(300, 2000, 400, true);
@@ -222,7 +224,7 @@ void ExplosionSpell::Update() {
 	EERIE_LIGHT * light = dynLightCreate(m_light);
 	if(light) {
 		light->rgb = Color3f(0.1f, 0.1f, 0.8f) + randomColor3f() * Color3f(1.f/3, 1.f/3, 1.f/5);
-		light->duration = ArxDurationMs(200);
+		light->duration = GameDurationMs(200);
 		
 		float choice = Random::getf();
 		if(choice > .8f) {
@@ -242,13 +244,14 @@ void ExplosionSpell::Update() {
 
 			ARX_PARTICLES_Add_Smoke(pos, 2, 20); // flag 1 = randomize pos
 		}
-	}	
+	}
+	
 }
 
 
 void EnchantWeaponSpell::Launch()
 {
-	m_duration = ArxDurationMs(20);
+	m_duration = GameDurationMs(20);
 }
 
 void EnchantWeaponSpell::End() {
@@ -272,8 +275,8 @@ void LifeDrainSpell::Launch() {
 	spells.endByCaster(m_caster, SPELL_HARM);
 	spells.endByCaster(m_caster, SPELL_MANA_DRAIN);
 	
-	m_duration = (m_launchDuration > ArxDuration::ofRaw(-1)) ? m_launchDuration : ArxDurationMs(6000000);
-	m_hasDuration = true;
+	m_hasDuration = m_launchDuration >= 0;
+	m_duration = m_hasDuration ? m_launchDuration : 0;
 	m_fManaCostPerSecond = 12.f;
 	
 	m_snd_loop = ARX_SOUND_PlaySFX(SND_SPELL_MAGICAL_SHIELD, &m_caster_pos, 0.8f, ARX_SOUND_PLAY_LOOPED);
@@ -282,7 +285,7 @@ void LifeDrainSpell::Launch() {
 	damage.radius = 150.f;
 	damage.damages = m_level * 0.08f;
 	damage.area = DAMAGE_AREA;
-	damage.duration = ArxDurationMs(100000000);
+	damage.duration = GameDurationMs(100000000);
 	damage.source = m_caster;
 	damage.flags = DAMAGE_FLAG_DONT_HURT_SOURCE | DAMAGE_FLAG_FOLLOW_SOURCE | DAMAGE_FLAG_ADD_VISUAL_FX;
 	damage.type = DAMAGE_TYPE_FAKEFIRE | DAMAGE_TYPE_MAGICAL | DAMAGE_TYPE_DRAIN_LIFE;

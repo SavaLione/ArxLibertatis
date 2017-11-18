@@ -30,11 +30,11 @@
 
 Renderer * GRenderer;
 
-TextureStage * Renderer::GetTextureStage(unsigned int textureStage) {
+TextureStage * Renderer::GetTextureStage(size_t textureStage) {
 	return (textureStage < m_TextureStages.size()) ? m_TextureStages[textureStage] : NULL;
 }
 
-const TextureStage * Renderer::GetTextureStage(unsigned int textureStage) const {
+const TextureStage * Renderer::GetTextureStage(size_t textureStage) const {
 	return (textureStage < m_TextureStages.size()) ? m_TextureStages[textureStage] : NULL;
 }
 
@@ -61,9 +61,7 @@ void Renderer::SetTexture(unsigned int textureStage, TextureContainer * pTexture
 
 Renderer::Renderer()
 	: m_initialized(false)
-{
-	m_state.setColorKey(true); // TODO only enable this when needed
-}
+{ }
 
 Renderer::~Renderer() {
 	if(isInitialized()) {

@@ -48,6 +48,7 @@ ZeniMax Media Inc., Suite 120, Rockville, Maryland 20850 USA.
 #include <string>
 #include <vector>
 
+#include "core/TimeTypes.h"
 #include "audio/AudioTypes.h"
 #include "math/Types.h"
 
@@ -124,7 +125,7 @@ aalError setSamplePitch(SourceId sample_id, float pitch);
 aalError setSamplePosition(SourceId sample_id, const Vec3f & position);
 
 aalError getSampleName(SampleId sample_id, res::path & name);
-aalError getSampleLength(SampleId sample_id, size_t & length, TimeUnit unit = UNIT_MS);
+aalError getSampleLength(SampleId sample_id, size_t & length);
 aalError getSamplePan(SourceId sample_id, float * pan);
 aalError getSampleCone(SourceId sample_id, SourceCone * cone);
 bool isSamplePlaying(SourceId sample_id);
@@ -135,17 +136,18 @@ aalError sampleStop(SourceId & sample_id);
 
 // Ambiance
 
-aalError setAmbianceUserData(AmbianceId ambiance_id, void * data);
+aalError setAmbianceType(AmbianceId ambiance_id, PlayingAmbianceType type);
 aalError setAmbianceVolume(AmbianceId ambiance_id, float volume);
 
 aalError getAmbianceName(AmbianceId ambiance_id, res::path & name);
-aalError getAmbianceUserData(AmbianceId ambiance_id, void ** data);
+aalError getAmbianceType(AmbianceId ambiance_id, PlayingAmbianceType * type);
 aalError getAmbianceVolume(AmbianceId ambiance_id, float & volume);
 bool isAmbianceLooped(AmbianceId ambiance_id);
 
 //! play_count == 0 -> infinite loop, play_count == 1 -> play once
-aalError ambiancePlay(AmbianceId ambiance_id, const Channel & channel, bool loop = false, size_t fade_interval = 0);
-aalError ambianceStop(AmbianceId ambiance_id, size_t fade_interval = 0);
+aalError ambiancePlay(AmbianceId ambiance_id, const Channel & channel, bool loop = false,
+                      PlatformDuration fade_interval = 0);
+aalError ambianceStop(AmbianceId ambiance_id, PlatformDuration fade_interval = 0);
 
 } // namespace audio
 

@@ -26,7 +26,6 @@
 
 RotatingCone::RotatingCone()
 	: m_def(16)
-	, ulCurrentTime(0)
 	, m_currdurationang(0)
 	, m_ang(0.f)
 	, m_coneScale(0.f)
@@ -68,15 +67,14 @@ void RotatingCone::Init(float rbase, float rhaut, float hauteur) {
 	m_tsouffle = TextureContainer::Load("graph/obj3d/textures/(fx)_sebsouffle");
 }
 
-void RotatingCone::Update(float timeDelta, Vec3f pos, float coneScale) {
+void RotatingCone::Update(GameDuration timeDelta, Vec3f pos, float coneScale) {
 	
 	m_currdurationang += timeDelta;
-	ulCurrentTime += timeDelta;
 	
 	m_pos = pos;
 	m_coneScale = coneScale;
 	
-	m_ang = (float)m_currdurationang / 1000.f;
+	m_ang = m_currdurationang / GameDurationMs(1000);
 	
 	if(m_ang > 1.f) {
 		m_currdurationang = 0;
@@ -102,8 +100,10 @@ void RotatingCone::Render() {
 		d3dv->p = d3dvs;
 		int col = Random::get(0, 80);
 		
-		if(!arxtime.is_paused())
+		// TODO per-frame randomness
+		if(!g_gameTime.isPaused()) {
 			d3dv->color = Color::grayb(col).toRGB(col);
+		}
 		
 		d3dv->uv.x = u;
 		d3dv->uv.y = 0.f;
@@ -117,8 +117,10 @@ void RotatingCone::Render() {
 		d3dv->p = d3dvs;
 		col = Random::get(0, 80);
 		
-		if(!arxtime.is_paused())
+		// TODO per-frame randomness
+		if(!g_gameTime.isPaused()) {
 			d3dv->color = Color::black.toRGB(col);
+		}
 		
 		d3dv->uv.x = u;
 		d3dv->uv.y = 1.f;

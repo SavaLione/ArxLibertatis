@@ -63,10 +63,12 @@ void SpeedSpell::Launch() {
 		m_snd_loop = ARX_SOUND_PlaySFX(SND_SPELL_SPEED_LOOP, &entities[m_target]->pos, 1.f, ARX_SOUND_PLAY_LOOPED);
 	}
 	
-	m_duration = (m_launchDuration > ArxDuration::ofRaw(-1)) ? m_launchDuration : ArxDurationMs(20000);
-	
 	if(m_caster == EntityHandle_Player) {
-		m_duration = ArxDurationMs(200000000);
+		m_duration = 0;
+		m_hasDuration = false;
+	} else {
+		m_duration = (m_launchDuration >= 0) ? m_launchDuration : GameDurationMs(20000);
+		m_hasDuration = true;
 	}
 	
 	std::vector<VertexGroup> & grouplist = entities[m_target]->obj->grouplist;
@@ -121,7 +123,7 @@ void SpeedSpell::Update() {
 		Vec3f pos = entities[m_target]->obj->vertexWorldPositions[m_trails[i].vertexIndex].v;
 		
 		m_trails[i].trail->SetNextPosition(pos);
-		m_trails[i].trail->Update(g_framedelay);
+		m_trails[i].trail->Update(g_gameTime.lastFrameDuration());
 	}
 	
 	for(size_t i = 0; i < m_trails.size(); i++) {
@@ -138,7 +140,7 @@ void DispellIllusionSpell::Launch() {
 	
 	ARX_SOUND_PlaySFX(SND_SPELL_DISPELL_ILLUSION);
 	
-	m_duration = ArxDurationMs(1000);
+	m_duration = GameDurationMs(1000);
 	
 	for(size_t n = 0; n < MAX_SPELLS; n++) {
 		SpellBase * spell = spells[SpellHandle(n)];
@@ -171,9 +173,8 @@ void DispellIllusionSpell::Update() {
 
 FireballSpell::FireballSpell()
 	: SpellBase()
-	, m_elapsed(ArxDuration_ZERO)
 	, bExplo(false)
-	, m_createBallDuration(ArxDurationMs(2000))
+	, m_createBallDuration(GameDurationMs(2000))
 {
 }
 
@@ -183,7 +184,8 @@ FireballSpell::~FireballSpell() {
 
 void FireballSpell::Launch() {
 	
-	m_duration = ArxDurationMs(6000);
+	m_duration = GameDurationMs(6000);
+	m_hasDuration = true;
 	
 	if(m_caster != EntityHandle_Player) {
 		m_hand_group = ActionPoint();
@@ -238,12 +240,10 @@ void FireballSpell::Launch() {
 void FireballSpell::End() {
 	
 	ARX_SOUND_Stop(m_snd_loop);
-	endLightDelayed(m_light, ArxDurationMs(500));
+	endLightDelayed(m_light, GameDurationMs(500));
 }
 
 void FireballSpell::Update() {
-	
-	m_elapsed += ArxDurationMs(g_framedelay);
 	
 	if(m_elapsed <= m_createBallDuration) {
 		
@@ -309,7 +309,7 @@ void FireballSpell::Update() {
 			
 			dd = glm::clamp(dd, 1.f, m_level);
 			
-			SpawnFireballTail(eCurPos, move, (float)dd, 1);
+			SpawnFireballTail(eCurPos, move, dd, 1);
 		}
 	}
 	
@@ -326,7 +326,7 @@ void FireballSpell::Update() {
 		//m_duration = std::min(ulCurrentTime + 1500, m_duration);
 		
 		DoSphericDamage(Sphere(eCurPos, 30.f * m_level), 3.f * m_level, DAMAGE_AREA, DAMAGE_TYPE_FIRE | DAMAGE_TYPE_MAGICAL, m_caster);
-		m_duration = ArxDuration_ZERO;
+		m_duration = 0;
 		ARX_SOUND_PlaySFX(SND_SPELL_FIRE_HIT, &sphere.origin);
 		ARX_NPC_SpawnAudibleSound(sphere.origin, entities[m_caster]);
 	}
@@ -343,15 +343,15 @@ Vec3f FireballSpell::getPosition() {
 
 CreateFoodSpell::CreateFoodSpell()
 	: SpellBase()
-	, m_elapsed(ArxDuration_ZERO)
 {}
 
 void CreateFoodSpell::Launch() {
 	
 	ARX_SOUND_PlaySFX(SND_SPELL_CREATE_FOOD, &m_caster_pos);
 	
-	m_duration = (m_launchDuration > ArxDuration::ofRaw(-1)) ? m_launchDuration : ArxDurationMs(3500);
-	m_elapsed = ArxDuration_ZERO;
+	m_duration = (m_launchDuration >= 0) ? m_launchDuration : GameDurationMs(3500);
+	m_hasDuration = true;
+	m_elapsed = 0;
 	
 	if(m_caster == EntityHandle_Player || m_target == EntityHandle_Player) {
 		player.hunger = 100;
@@ -370,13 +370,11 @@ void CreateFoodSpell::End() {
 
 void CreateFoodSpell::Update() {
 	
-	m_elapsed += ArxDurationMs(g_framedelay);
-	
 	m_pos = entities.player()->pos;
 	
-	ArxDuration ff = m_duration - m_elapsed;
+	GameDuration timeRemaining = m_duration - m_elapsed;
 	
-	if(ff < ArxDurationMs(1500)) {
+	if(timeRemaining < GameDurationMs(1500)) {
 		m_particles.m_parameters.m_spawnFlags = PARTICLE_CIRCULAR;
 		m_particles.m_parameters.m_gravity = Vec3f_ZERO;
 		
@@ -388,15 +386,15 @@ void CreateFoodSpell::Update() {
 			if(pP->isAlive()) {
 				pP->fColorEnd.a = 0;
 					
-				if(pP->m_age + ff < pP->m_timeToLive) {
-					pP->m_age = pP->m_timeToLive - ff;
+				if(pP->m_age + timeRemaining < pP->m_timeToLive) {
+					pP->m_age = pP->m_timeToLive - timeRemaining;
 				}
 			}
 		}
 	}
 
 	m_particles.SetPos(m_pos);
-	m_particles.Update(ArxDurationMs(g_framedelay));
+	m_particles.Update(g_gameTime.lastFrameDuration());
 	
 	m_particles.Render();
 }
@@ -404,10 +402,7 @@ void CreateFoodSpell::Update() {
 
 IceProjectileSpell::IceProjectileSpell()
 	: SpellBase()
-	, m_elapsed(ArxDuration_ZERO)
 	, iNumber(0)
-	, iMax(0)
-	, fColor(0)
 	, tex_p1(NULL)
 	, tex_p2(NULL)
 { }
@@ -416,7 +411,8 @@ void IceProjectileSpell::Launch() {
 	
 	ARX_SOUND_PlaySFX(SND_SPELL_ICE_PROJECTILE_LAUNCH, &m_caster_pos);
 	
-	m_duration = ArxDurationMs(4200);
+	m_duration = GameDurationMs(4200);
+	m_hasDuration = true;
 	
 	Vec3f target;
 	float angleb;
@@ -430,10 +426,9 @@ void IceProjectileSpell::Launch() {
 	target += angleToVectorXZ(angleb) * 150.0f;
 	
 	
-	fColor = 1.f;
 	tex_p1 = TextureContainer::Load("graph/obj3d/textures/(fx)_tsu_blueting");
 	tex_p2 = TextureContainer::Load("graph/obj3d/textures/(fx)_tsu_bluepouf");
-	iMax = (int)(30 + m_level * 5.2f);
+	int iMax = int(30 + m_level * 5.2f);
 	
 	float fspelldist = glm::clamp(float(iMax * 15), 200.0f, 450.0f);
 	
@@ -447,10 +442,10 @@ void IceProjectileSpell::Launch() {
 
 	float fd = fdist(s, e);
 
-	float fCalc = toMs(m_duration) * (fd / fspelldist);
-	m_duration = ArxDurationMs(checked_range_cast<unsigned long>(fCalc));
+	float fCalc = toMsf(m_duration) * (fd / fspelldist);
+	m_duration = GameDurationMsf(fCalc);
 
-	float fDist = (fd / fspelldist) * iMax ;
+	float fDist = (fd / fspelldist) * iMax;
 
 	iNumber = checked_range_cast<int>(fDist);
 
@@ -484,8 +479,7 @@ void IceProjectileSpell::Launch() {
 		icicle.sizeMax = arx::randomVec() + Vec3f(0.f, 0.2f, 0.f);
 		icicle.sizeMax = glm::max(icicle.sizeMax, minSize);
 		
-		int iNum = static_cast<int>(i / 2);
-		icicle.pos = tv1a[iNum] + arx::randomOffsetXZ(randomRange);
+		icicle.pos = tv1a[i / 2] + arx::randomOffsetXZ(randomRange);
 		
 		DamageParameters damage;
 		damage.pos = icicle.pos;
@@ -506,10 +500,9 @@ void IceProjectileSpell::End() {
 
 void IceProjectileSpell::Update() {
 	
-	m_elapsed += ArxDurationMs(g_framedelay);
-
-	if(m_duration - m_elapsed < ArxDurationMs(1000)) {
-		fColor = toMs(m_duration - m_elapsed) * ( 1.0f / 1000 );
+	float fColor = 1.f;
+	if(m_duration - m_elapsed < GameDurationMs(1000)) {
+		fColor = (m_duration - m_elapsed) / GameDurationMs(1000);
 		
 		for(int i = 0; i < iNumber; i++) {
 			m_icicles[i].size.y *= fColor;
@@ -521,8 +514,7 @@ void IceProjectileSpell::Update() {
 	mat.setDepthTest(true);
 	mat.setBlendType(RenderMaterial::Screen);
 	
-	float fOneOnDuration = 1.f / toMs(m_duration);
-	iMax = (int)((iNumber * 2) * fOneOnDuration * toMs(m_elapsed));
+	int iMax = int(float(iNumber) * 2.f * (m_elapsed / m_duration));
 
 	if(iMax > iNumber) {
 		iMax = iNumber;
@@ -560,7 +552,7 @@ void IceProjectileSpell::Update() {
 				pd->move = arx::randomVec(-2.f, 2.f);
 				pd->siz = 20.f;
 				float t = std::min(Random::getf(2000.f, 4000.f),
-				                   toMs(m_duration - m_elapsed) + Random::getf(0.f, 500.0f));
+				                   toMsf(m_duration - m_elapsed) + Random::getf(0.f, 500.0f));
 				pd->tolive = checked_range_cast<u32>(t);
 				pd->tc = tex_p2;
 				pd->m_flags = FADE_IN_AND_OUT | ROTATING | DISSIPATING;
@@ -576,7 +568,7 @@ void IceProjectileSpell::Update() {
 				pd->move = Vec3f(0.f, Random::getf(-2.f, 2.f), 0.f);
 				pd->siz = 0.5f;
 				float t = std::min(Random::getf(2000.f, 3000.f),
-				              toMs(m_duration - m_elapsed) + Random::getf(0.f, 500.0f));
+				              toMsf(m_duration - m_elapsed) + Random::getf(0.f, 500.0f));
 				pd->tolive = checked_range_cast<u32>(t);
 				pd->tc = tex_p1;
 				pd->m_flags = FADE_IN_AND_OUT | ROTATING | DISSIPATING;

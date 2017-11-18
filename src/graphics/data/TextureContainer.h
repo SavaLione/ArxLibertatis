@@ -57,6 +57,7 @@ ZeniMax Media Inc., Suite 120, Rockville, Maryland 20850 USA.
 #ifndef ARX_GRAPHICS_DATA_TEXTURECONTAINER_H
 #define ARX_GRAPHICS_DATA_TEXTURECONTAINER_H
 
+#include <stddef.h>
 #include <vector>
 #include <map>
 
@@ -67,7 +68,7 @@ ZeniMax Media Inc., Suite 120, Rockville, Maryland 20850 USA.
 #include "math/Vector.h"
 #include "util/Flags.h"
 
-class Texture2D;
+class Texture;
 
 extern long GLOBAL_EERIETEXTUREFLAG_LOADSCENE_RELEASE;
 
@@ -165,8 +166,8 @@ public:
 	 */
 	bool CreateHalo();
 
-	static const int HALO_RADIUS = 5;
-	TextureContainer *getHalo() {
+	static const size_t HALO_RADIUS = 5;
+	TextureContainer * getHalo() {
 		return (TextureHalo ? TextureHalo : (CreateHalo() ? TextureHalo : NULL));
 	}
 
@@ -186,7 +187,7 @@ public:
 	TCFlags m_dwFlags;
 	u32 userflags;
 	
-	Texture2D * m_pTexture; // Diffuse
+	Texture * m_pTexture; // Diffuse
 	
 	/*!
 	 * End of the image in texture coordinates (image size divided by stored size).
@@ -202,8 +203,6 @@ public:
 	
 	RoomBatches m_roomBatches;
 	ModelBatch m_modelBatch;
-	
-	bool hasColorKey();
 	
 };
 

@@ -48,6 +48,7 @@ ZeniMax Media Inc., Suite 120, Rockville, Maryland 20850 USA.
 #include <cmath>
 #include <algorithm>
 
+#include "core/TimeTypes.h"
 #include "audio/AudioTypes.h"
 #include "audio/AudioResource.h"
 
@@ -72,19 +73,13 @@ extern res::path sample_path;
 extern res::path ambiance_path;
 extern res::path environment_path;
 extern size_t stream_limit_bytes;
-extern size_t session_time;
+extern PlatformInstant session_time;
 
 // Resources
-extern ResourceList<Mixer> _mixer;
-extern ResourceList<Sample> _sample;
-extern ResourceList<Ambiance> _amb;
-extern ResourceList<Environment> _env;
-
-//! Convert a value from time units to bytes
-size_t unitsToBytes(size_t v, const PCMFormat & format, TimeUnit unit = UNIT_MS);
-
-//! Convert a value from bytes to time units
-size_t bytesToUnits(size_t v, const PCMFormat & format, TimeUnit unit = UNIT_MS);
+extern ResourceList<Mixer> g_mixers;
+extern ResourceList<Sample> g_samples;
+extern ResourceList<Ambiance> g_ambiances;
+extern ResourceList<Environment> g_environments;
 
 inline float LinearToLogVolume(float volume) {
 	return 0.2F * std::log10(volume) + 1.0F;

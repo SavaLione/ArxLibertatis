@@ -50,6 +50,7 @@ ZeniMax Media Inc., Suite 120, Rockville, Maryland 20850 USA.
 #include <stddef.h>
 #include <string>
 
+#include "core/TimeTypes.h"
 #include "graphics/Color.h"
 #include "graphics/data/Mesh.h"
 #include "io/resource/ResourcePath.h"
@@ -82,14 +83,13 @@ extern std::string TELEPORT_TO_LEVEL;
 extern std::string TELEPORT_TO_POSITION;
 
 extern float PULSATE;
+
 extern float g_framedelay;
 
 extern bool g_requestLevelInit;
 
 extern long CURRENTLEVEL;
 extern long TELEPORT_TO_ANGLE;
-
-extern float GLOBAL_SLOWDOWN;
 
 inline float bowZoomFromDuration(float duration) {
 	return duration / 710.f;
@@ -114,21 +114,25 @@ extern bool LOADEDD;
 
 extern bool g_debugToggles[10];
 extern bool g_debugTriggers[10];
-extern u32 g_debugTriggersTime[10];
-static const u32 g_debugTriggersDecayDuration = 200;
+extern PlatformInstant g_debugTriggersTime[10];
+static const PlatformDuration g_debugTriggersDecayDuration = PlatformDurationMs(200);
 extern float g_debugValues[10];
 
-extern long		CHANGE_LEVEL_ICON;
+enum ChangeLevelIcon {
+	NoChangeLevel,
+	ConfirmChangeLevel,
+	ChangeLevelNow
+};
+extern ChangeLevelIcon CHANGE_LEVEL_ICON;
 
 extern Vec3f LastValidPlayerPos;
 extern Vec3f WILL_RESTORE_PLAYER_POSITION;
 extern bool WILL_RESTORE_PLAYER_POSITION_FLAG;
 
-void SetEditMode(long ed, const bool stop_sound = true);
+void SetEditMode();
 
 void SendGameReadyMsg();
 void DANAE_StartNewQuest();
-void DanaeRestoreFullScreen();
 bool AdjustUI();
 
 void levelInit();

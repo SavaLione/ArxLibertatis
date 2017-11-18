@@ -49,8 +49,9 @@ bool MagicSightSpell::CanLaunch() {
 void MagicSightSpell::Launch() {
 	
 	m_fManaCostPerSecond = 0.36f;
-	m_hasDuration = true;
-	m_duration = (m_launchDuration > ArxDurationMs(-1)) ? m_launchDuration : ArxDurationMs(6000000);
+	
+	m_hasDuration = m_launchDuration >= 0;
+	m_duration = m_hasDuration ? m_launchDuration : 0;
 	
 	ARX_SOUND_PlaySFX(SND_SPELL_VISION_START, &m_caster_pos);
 	
@@ -78,7 +79,7 @@ void MagicSightSpell::Update() {
 	if(m_caster == EntityHandle_Player) {
 		Vec3f pos = ARX_PLAYER_FrontPos();
 		ARX_SOUND_RefreshPosition(m_snd_loop, pos);
-	}	
+	}
 }
 
 extern ParticleManager * pParticleManager;
@@ -94,7 +95,7 @@ static void LaunchMagicMissileExplosion(const Vec3f & _ePos, bool mrCheat) {
 	ParticleSystem * pPS = new ParticleSystem();
 	pPS->SetParams(cp);
 	pPS->SetPos(_ePos);
-	pPS->Update(ArxDuration_ZERO);
+	pPS->Update(0);
 	
 	EERIE_LIGHT * light = dynLightCreate();
 	if(light) {
@@ -109,7 +110,7 @@ static void LaunchMagicMissileExplosion(const Vec3f & _ePos, bool mrCheat) {
 		}
 
 		light->pos = _ePos;
-		light->duration = ArxDurationMs(1500);
+		light->duration = GameDurationMs(1500);
 	}
 
 	arx_assert(pParticleManager);
@@ -135,7 +136,8 @@ MagicMissileSpell::~MagicMissileSpell() {
 
 void MagicMissileSpell::Launch() {
 	
-	m_duration = ArxDurationMs(6000);
+	m_duration = GameDurationMs(6000);
+	m_hasDuration = true;
 	
 	m_hand_group = GetActionPointIdx(entities[m_caster]->obj, "primary_attach");
 	
@@ -191,18 +193,19 @@ void MagicMissileSpell::Launch() {
 	
 	m_mrCheat = (m_caster == EntityHandle_Player && cur_mr == 3);
 	
-	ArxDuration lMax = ArxDuration_ZERO;
+	GameDuration lMax = 0;
 	
-	long number;
+	size_t number;
 	if(sp_max || cur_rf == 3) {
-		number = long(m_level);
+		number = size_t(m_level);
 	} else {
-		number = glm::clamp(long(m_level + 1) / 2, 1l, 5l);
+		number = glm::clamp<size_t>(size_t(m_level + 1) / 2, 1, 5);
 	}
 	
 	m_missiles.reserve(number);
 	
-	for(size_t i = 0; i < size_t(number); i++) {
+	for(size_t i = 0; i < number; i++) {
+		
 		CMagicMissile * missile = NULL;
 		if(!m_mrCheat) {
 			missile = new CMagicMissile();
@@ -221,18 +224,19 @@ void MagicMissileSpell::Launch() {
 		
 		missile->Create(startPos, angles);
 		
-		ArxDuration lTime = m_duration + ArxDurationMs(Random::get(-1000, 1000));
+		GameDuration lTime = m_duration + GameDurationMs(Random::get(-1000, 1000));
 		
-		lTime		= std::max(ArxDurationMs(1000), lTime);
-		lMax		= std::max(lMax, lTime);
+		lTime = std::max(GameDurationMs(1000), lTime);
+		lMax = std::max(lMax, lTime);
 		
 		missile->SetDuration(lTime);
 		
 		EERIE_LIGHT * el = dynLightCreate(missile->lLightId);
 		if(el) {
-			el->intensity	= 0.7f + 2.3f;
-			el->fallend		= 190.f;
-			el->fallstart	= 80.f;
+			
+			el->intensity = 0.7f + 2.3f;
+			el->fallend = 190.f;
+			el->fallstart = 80.f;
 			
 			if(m_mrCheat) {
 				el->rgb = Color3f(1.f, 0.3f, 0.8f);
@@ -241,11 +245,12 @@ void MagicMissileSpell::Launch() {
 			}
 			
 			el->pos = startPos;
-			el->duration = ArxDurationMs(300);
+			el->duration = GameDurationMs(300);
+			
 		}
 	}
 	
-	m_duration = lMax + ArxDurationMs(1000);
+	m_duration = lMax + GameDurationMs(1000);
 }
 
 void MagicMissileSpell::End() {
@@ -273,7 +278,7 @@ void MagicMissileSpell::Update() {
 			LaunchMagicMissileExplosion(missile->eCurPos, m_mrCheat);
 			ARX_NPC_SpawnAudibleSound(missile->eCurPos, entities[m_caster]);
 			
-			missile->SetTTL(ArxDurationMs(1000));
+			missile->SetTTL(GameDurationMs(1000));
 			missile->bExplo = true;
 			missile->bMove  = false;
 			
@@ -283,8 +288,8 @@ void MagicMissileSpell::Update() {
 			damage.pos = missile->eCurPos;
 			damage.radius = 80.f;
 			damage.damages = (4 + m_level * ( 1.0f / 5 )) * .8f;
-			damage.area	= DAMAGE_FULL;
-			damage.duration = ArxDuration::ofRaw(-1);
+			damage.area = DAMAGE_FULL;
+			damage.duration = GameDuration::ofRaw(-1);
 			damage.source = m_caster;
 			damage.flags = DAMAGE_FLAG_DONT_HURT_SOURCE;
 			damage.type = DAMAGE_TYPE_MAGICAL;
@@ -296,7 +301,7 @@ void MagicMissileSpell::Update() {
 	}
 	
 	for(size_t i = 0 ; i < m_missiles.size() ; i++) {
-		m_missiles[i]->Update(ArxDurationMs(g_framedelay));
+		m_missiles[i]->Update(g_gameTime.lastFrameDuration());
 	}
 	
 	{ // CheckAllDestroyed
@@ -310,7 +315,7 @@ void MagicMissileSpell::Update() {
 		}
 		
 		if(nbmissiles == 0) {
-			m_duration = ArxDuration_ZERO;
+			m_duration = 0;
 		}
 	}
 	
@@ -321,9 +326,9 @@ void MagicMissileSpell::Update() {
 		
 		EERIE_LIGHT * el = lightHandleGet(pMM->lLightId);
 		if(el) {
-			el->intensity		= 0.7f + 2.3f * pMM->lightIntensityFactor;
+			el->intensity = 0.7f + 2.3f * pMM->lightIntensityFactor;
 			el->pos = pMM->eCurPos;
-			el->creationTime	= arxtime.now();
+			el->creationTime = g_gameTime.now();
 		}
 	}
 }
@@ -331,14 +336,14 @@ void MagicMissileSpell::Update() {
 
 IgnitSpell::IgnitSpell()
 	: m_srcPos(Vec3f_ZERO)
-	, m_elapsed(ArxDuration_ZERO)
 {
 	
 }
 
 void IgnitSpell::Launch() {
 	
-	m_duration = ArxDurationMs(500);
+	m_duration = GameDurationMs(500);
+	m_hasDuration = true;
 	
 	if(m_hand_group != ActionPoint()) {
 		m_srcPos = m_hand_pos;
@@ -353,13 +358,12 @@ void IgnitSpell::Launch() {
 		light->fallstart = 380.f;
 		light->rgb       = Color3f(1.f, 0.75f, 0.5f);
 		light->pos       = m_srcPos;
-		light->duration  = ArxDurationMs(300);
+		light->duration  = GameDurationMs(300);
 	}
 	
 	float fPerimeter = 400.f + m_level * 30.f;
 	
 	m_lights.clear();
-	m_elapsed = ArxDuration_ZERO;
 	
 	CheckForIgnition(Sphere(m_srcPos, fPerimeter), 1, 1);
 	
@@ -435,38 +439,28 @@ void IgnitSpell::End() {
 
 void IgnitSpell::Update() {
 	
-	if(m_elapsed < m_duration) {
-		float a = m_elapsed / m_duration;
-		
-		if(a >= 1.f) {
-			a = 1.f;
-		}
-		
-		std::vector<T_LINKLIGHTTOFX>::iterator itr;
-		for(itr = m_lights.begin(); itr != m_lights.end(); ++itr) {
-			
-			EERIE_LIGHT * targetLight = g_staticLights[itr->m_targetLight];
-			
-			Vec3f pos = glm::mix(m_srcPos, targetLight->pos, a);
-			
-			LightHandle id = itr->m_effectLight;
-			
-			EERIE_LIGHT * light = lightHandleGet(id);
-			if(light) {
-				light->intensity = Random::getf(0.7f, 2.7f);
-				light->pos = pos;
-			}
+	float a = m_elapsed / m_duration;
+	
+	if(a >= 1.f) {
+		a = 1.f;
+	}
+	
+	std::vector<T_LINKLIGHTTOFX>::iterator itr;
+	for(itr = m_lights.begin(); itr != m_lights.end(); ++itr) {
+		EERIE_LIGHT * targetLight = g_staticLights[itr->m_targetLight];
+		EERIE_LIGHT * light = lightHandleGet(itr->m_effectLight);
+		if(light) {
+			light->intensity = Random::getf(0.7f, 2.7f);
+			light->pos = glm::mix(m_srcPos, targetLight->pos, a);
 		}
 	}
 	
-	if(!arxtime.is_paused()) {
-		m_elapsed += ArxDurationMs(g_framedelay);
-	}
 }
 
 void DouseSpell::Launch() {
 	
-	m_duration = ArxDurationMs(500);
+	m_duration = GameDurationMs(500);
+	m_hasDuration = true;
 	
 	Vec3f target;
 	if(m_hand_group != ActionPoint()) {
@@ -560,5 +554,6 @@ void ActivatePortalSpell::Launch() {
 	
 	ARX_SOUND_PlayInterface(SND_SPELL_ACTIVATE_PORTAL);
 	
-	m_duration = ArxDurationMs(20);
+	m_duration = GameDurationMs(20);
+	m_hasDuration = true;
 }

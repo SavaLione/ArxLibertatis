@@ -193,7 +193,7 @@ public:
 			
 			if(flg & flag('d')) {
 				spflags |= SPELLCAST_FLAG_NOCHECKCANCAST;
-				duration = context.getFloat();
+				duration = long(context.getFloat());
 				if(duration <= 0) {
 					duration = 99999999; // TODO should this be FLT_MAX?
 				}
@@ -242,7 +242,7 @@ public:
 		
 		DebugScript(' ' << spellname << ' ' << level << ' ' << target << ' ' << spflags << ' ' << duration);
 		
-		TryToCastSpell(context.getEntity(), spellid, level, t->index(), spflags, ArxDurationMs(duration));
+		TryToCastSpell(context.getEntity(), spellid, level, t->index(), spflags, GameDurationMs(duration));
 		
 		return Success;
 	}

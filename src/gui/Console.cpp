@@ -109,9 +109,12 @@ bool ScriptConsole::keyPressed(Keyboard::Key key, KeyModifiers mod) {
 		}
 		
 		case Keyboard::Key_Enter: {
-			execute();
-			clear();
-			return true;
+			if(!mod.alt) {
+				execute();
+				clear();
+				return true;
+			}
+			break;
 		}
 		
 		case Keyboard::Key_Tab: {
@@ -354,8 +357,8 @@ void ScriptConsole::open() {
 	if(!m_enabled) {
 		config.input.allowConsole = true;
 		m_enabled = true;
-		m_wasPaused =  arxtime.is_paused();
-		arxtime.pause();
+		m_wasPaused = (g_gameTime.isPaused() & GameTime::PauseUser) != 0;
+		g_gameTime.pause(GameTime::PauseUser);
 		textUpdated();
 	}
 }
@@ -364,8 +367,8 @@ void ScriptConsole::close() {
 	if(m_enabled) {
 		GInput->stopTextInput();
 		m_enabled = false;
-		if(!m_wasPaused && arxtime.is_paused()) {
-			arxtime.resume();
+		if(!m_wasPaused) {
+			g_gameTime.resume(GameTime::PauseUser);
 		}
 	}
 }
@@ -562,8 +565,9 @@ void ScriptConsole::update() {
 	{
 		static const PlatformDuration BlinkDuration = PlatformDurationMs(600);
 		m_blinkTime += g_platformTime.lastFrameDuration();
-		if(m_blinkTime > (BlinkDuration + BlinkDuration))
-			m_blinkTime = PlatformDuration_ZERO;
+		if(m_blinkTime > (BlinkDuration + BlinkDuration)) {
+			m_blinkTime = 0;
+		}
 		m_blink = m_blinkTime > BlinkDuration;
 	}
 	

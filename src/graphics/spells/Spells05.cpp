@@ -85,7 +85,7 @@ static void LaunchPoisonExplosion(const Vec3f & aePos) {
 	
 	pPS->SetParams(g_particleParameters[ParticleParam_Poison1]);
 	pPS->SetPos(aePos);
-	pPS->Update(ArxDuration_ZERO);
+	pPS->Update(0);
 
 	std::list<Particle *>::iterator i;
 
@@ -110,8 +110,8 @@ CPoisonProjectile::CPoisonProjectile()
 	, bOk(false)
 	, fTrail(-1.f)
 {
-	SetDuration(ArxDurationMs(2000));
-	m_elapsed = m_duration + ArxDurationMs(1);
+	SetDuration(GameDurationMs(2000));
+	m_elapsed = m_duration + GameDurationMs(1);
 }
 
 void CPoisonProjectile::Create(Vec3f _eSrc, float _fBeta)
@@ -125,8 +125,8 @@ void CPoisonProjectile::Create(Vec3f _eSrc, float _fBeta)
 	eSrc = _eSrc;
 
 	bOk = false;
-
-	eMove = Vec3f(-fBetaRadSin * 2, 0.f, fBetaRadCos * 2); 
+	
+	eMove = Vec3f(-fBetaRadSin * 2, 0.f, fBetaRadCos * 2);
 	
 	Vec3f rayEnd = eSrc;
 	rayEnd.x -= fBetaRadSin * (50 * 20);
@@ -147,17 +147,17 @@ void CPoisonProjectile::Create(Vec3f _eSrc, float _fBeta)
 	
 	pPS.SetParams(pp);
 	pPS.SetPos(eSrc);
-	pPS.Update(ArxDuration_ZERO);
+	pPS.Update(0);
 }
 
-void CPoisonProjectile::Update(ArxDuration timeDelta)
+void CPoisonProjectile::Update(GameDuration timeDelta)
 {
-	if(m_elapsed <= ArxDurationMs(2000)) {
+	if(m_elapsed <= GameDurationMs(2000)) {
 		m_elapsed += timeDelta;
 	}
 
 	// on passe de 5 à 100 partoches en 1.5secs
-	if(m_elapsed < ArxDurationMs(750)) {
+	if(m_elapsed < GameDurationMs(750)) {
 		pPS.m_parameters.m_nbMax = 2;
 		pPS.Update(timeDelta);
 	} else {
@@ -178,7 +178,7 @@ void CPoisonProjectile::Update(ArxDuration timeDelta)
 		pPS.Update(timeDelta);
 		pPS.SetPos(eCurPos);
 
-		fTrail = ((toMs(m_elapsed) - 750) * (1.0f / (toMs(m_duration) - 750.0f))) * 9 * (BEZIERPrecision + 2);
+		fTrail = ((m_elapsed - GameDurationMs(750)) / (m_duration - GameDurationMs(750))) * 9 * (BEZIERPrecision + 2);
 	}
 
 	if(m_elapsed >= m_duration)
@@ -201,7 +201,7 @@ void CPoisonProjectile::Render() {
 	for(i = 0; i < 9; i++) {
 		
 		int kpprec = std::max(i - 1, 0);
-		int kpsuiv = i + 1 ;
+		int kpsuiv = i + 1;
 		int kpsuivsuiv = (i < (9 - 2)) ? kpsuiv + 1 : kpsuiv;
 		
 		for(int toto = 1; toto < n; toto++) {

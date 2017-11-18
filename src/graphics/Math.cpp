@@ -63,36 +63,25 @@ ZeniMax Media Inc., Suite 120, Rockville, Maryland 20850 USA.
  *
  */
 
-#define OPTIM_COMPUTE_INTERVALS(VV0,VV1,VV2,D0,D1,D2,D0D1,D0D2,A,B,C,X0,X1) \
+#define OPTIM_COMPUTE_INTERVALS(VV0, VV1, VV2, D0, D1, D2, D0D1, D0D2, A, B, C, X0, X1) \
 	{ \
-		if(D0D1>0.0f) \
-		{ \
-			/* here we know that D0D2<=0.0 */ \
+		if(D0D1 > 0.0f) { \
+			/* here we know that D0D2 <= 0.0 */ \
 			/* that is D0, D1 are on the same side, D2 on the other or on the plane */ \
-			A=VV2; B=(VV0-VV2)*D2; C=(VV1-VV2)*D2; X0=D2-D0; X1=D2-D1; \
-		} \
-		else if(D0D2>0.0f)\
-		{ \
-			/* here we know that d0d1<=0.0 */ \
-			A=VV1; B=(VV0-VV1)*D1; C=(VV2-VV1)*D1; X0=D1-D0; X1=D1-D2; \
-		} \
-		else if(D1*D2>0.0f || D0!=0.0f) \
-		{ \
-			/* here we know that d0d1<=0.0 or that D0!=0.0 */ \
-			A=VV0; B=(VV1-VV0)*D0; C=(VV2-VV0)*D0; X0=D0-D1; X1=D0-D2; \
-		} \
-		else if(D1!=0.0f) \
-		{ \
-			A=VV1; B=(VV0-VV1)*D1; C=(VV2-VV1)*D1; X0=D1-D0; X1=D1-D2; \
-		} \
-		else if(D2!=0.0f) \
-		{ \
-			A=VV2; B=(VV0-VV2)*D2; C=(VV1-VV2)*D2; X0=D2-D0; X1=D2-D1; \
-		} \
-		else \
-		{ \
+			A = VV2; B = (VV0 - VV2) * D2; C = (VV1 - VV2) * D2; X0 = D2 - D0; X1 = D2 - D1; \
+		} else if(D0D2 > 0.0f) { \
+			/* here we know that d0d1 <= 0.0 */ \
+			A = VV1; B = (VV0 - VV1) * D1; C = (VV2 - VV1) * D1; X0 = D1 - D0; X1 = D1 - D2; \
+		} else if(D1 * D2 > 0.0f || D0 != 0.0f) { \
+			/* here we know that d0d1 <=0 .0 or that D0 != 0.0 */ \
+			A = VV0; B = (VV1 - VV0) * D0; C = (VV2 - VV0) * D0; X0 = D0 - D1; X1 = D0 - D2; \
+		} else if(D1 != 0.0f) { \
+			A = VV1; B = (VV0 - VV1) * D1; C = (VV2 - VV1) * D1; X0 = D1 - D0; X1 = D1 - D2; \
+		} else if(D2 != 0.0f) { \
+			A = VV2; B = (VV0 - VV2) * D2; C = (VV1 - VV2) * D2; X0 = D2 - D0; X1 = D2 - D1; \
+		} else { \
 			/* triangles are coplanar */ \
-			return coplanar_tri_tri(N1,V0,V1,V2,U0,U1,U2); \
+			return coplanar_tri_tri(N1, V0, V1, V2, U0, U1, U2); \
 		} \
 	}
 
@@ -101,7 +90,7 @@ ZeniMax Media Inc., Suite 120, Rockville, Maryland 20850 USA.
 /* this edge to edge test is based on Franlin Antonio's gem:
    "Faster Line Segment Intersection", in Graphics Gems III,
    pp. 199-202 */
-#define EDGE_EDGE_TEST(V0,U0,U1)                        \
+#define EDGE_EDGE_TEST(V0, U0, U1) \
 	Bx=U0[i0]-U1[i0];                                   \
 	By=U0[i1]-U1[i1];                                   \
 	Cx=V0[i0]-U0[i0];                                   \
@@ -121,42 +110,17 @@ ZeniMax Media Inc., Suite 120, Rockville, Maryland 20850 USA.
 		}                                               \
 	}
 
-#define EDGE_AGAINST_TRI_EDGES(V0,V1,U0,U1,U2)       \
-	{                                                \
-		float Ax,Ay,Bx,By,Cx,Cy,e,d,f;               \
-		Ax=V1[i0]-V0[i0];                            \
-		Ay=V1[i1]-V0[i1];                            \
-		/* test edge U0,U1 against V0,V1 */          \
-		EDGE_EDGE_TEST(V0,U0,U1);                    \
-		/* test edge U1,U2 against V0,V1 */          \
-		EDGE_EDGE_TEST(V0,U1,U2);                    \
-		/* test edge U2,U1 against V0,V1 */          \
-		EDGE_EDGE_TEST(V0,U2,U0);                    \
-	}
-
-#define POINT_IN_TRI(V0,U0,U1,U2)                 \
-	{                                             \
-		float a,b,c,d0,d1,d2;                     \
-		/* is T1 completly inside T2? */          \
-		/* check if V0 is inside tri(U0,U1,U2) */ \
-		a=U1[i1]-U0[i1];                          \
-		b=-(U1[i0]-U0[i0]);                       \
-		c=-a*U0[i0]-b*U0[i1];                     \
-		d0=a*V0[i0]+b*V0[i1]+c;                   \
-		\
-		a=U2[i1]-U1[i1];                          \
-		b=-(U2[i0]-U1[i0]);                       \
-		c=-a*U1[i0]-b*U1[i1];                     \
-		d1=a*V0[i0]+b*V0[i1]+c;                   \
-		\
-		a=U0[i1]-U2[i1];                          \
-		b=-(U0[i0]-U2[i0]);                       \
-		c=-a*U2[i0]-b*U2[i1];                     \
-		d2=a*V0[i0]+b*V0[i1]+c;                   \
-		if(d0*d1>0.0)                             \
-		{                                         \
-			if(d0*d2>0.0) return 1;               \
-		}                                         \
+#define EDGE_AGAINST_TRI_EDGES(V0, V1, U0, U1, U2) \
+	{ \
+		float Ax, Ay, Bx, By, Cx, Cy, e, d, f; \
+		Ax = V1[i0] - V0[i0]; \
+		Ay = V1[i1] - V0[i1]; \
+		/* test edge U0,U1 against V0,V1 */ \
+		EDGE_EDGE_TEST(V0, U0, U1); \
+		/* test edge U1,U2 against V0,V1 */ \
+		EDGE_EDGE_TEST(V0, U1, U2); \
+		/* test edge U2,U1 against V0,V1 */ \
+		EDGE_EDGE_TEST(V0, U2, U0); \
 	}
 
 static int coplanar_tri_tri(const float N[3], const float V0[3], const float V1[3],
@@ -206,26 +170,25 @@ static int coplanar_tri_tri(const float N[3], const float V0[3], const float V1[
 	return 0;
 }
 
-#define CROSS(dest,v1,v2) \
-	dest[0]=v1[1]*v2[2]-v1[2]*v2[1]; \
-	dest[1]=v1[2]*v2[0]-v1[0]*v2[2]; \
-	dest[2]=v1[0]*v2[1]-v1[1]*v2[0];
+#define CROSS(dest, v1, v2) \
+	dest[0] = v1[1] * v2[2] - v1[2] * v2[1]; \
+	dest[1] = v1[2] * v2[0] - v1[0] * v2[2]; \
+	dest[2] = v1[0] * v2[1] - v1[1] * v2[0];
 
-#define DOT(v1,v2) (v1[0]*v2[0]+v1[1]*v2[1]+v1[2]*v2[2])
+#define DOT(v1, v2) (v1[0] * v2[0] + v1[1] * v2[1] + v1[2] * v2[2])
 
-#define SUB(dest,v1,v2) \
-	dest[0]=v1[0]-v2[0]; \
-	dest[1]=v1[1]-v2[1]; \
-	dest[2]=v1[2]-v2[2];
+#define SUB(dest, v1, v2) \
+	dest[0] = v1[0] - v2[0]; \
+	dest[1] = v1[1] - v2[1]; \
+	dest[2] = v1[2] - v2[2];
 
 /* sort so that a<=b */
-#define SORT(a,b)       \
-	if(a>b)    \
-	{          \
+#define SORT(a, b) \
+	if(a > b) { \
 		float c; \
-		c=a;     \
-		a=b;     \
-		b=c;     \
+		c = a; \
+		a = b; \
+		b = c; \
 	}
 
 //***********************************************************************************************
@@ -396,80 +359,12 @@ bool Triangles_Intersect(const EERIE_TRI & v, const EERIE_TRI & u)
 	if (bb1.max.z < bb2.min.z) return false;
 
 	if (bb1.min.z > bb2.max.z) return false;
-
-	if (tri_tri_intersect(v, u)) 
+	
+	if (tri_tri_intersect(v, u))
 		return true;
-
+	
 	return false;
 }
-
-///////////////////////////////////////////////////////////////////////////////////
-/*
-#define X 0
-#define Y 1
-#define Z 2
-
-#define FINDMINMAX(x0,x1,x2,min,max) \
-	min = max = x0;   \
-	if(x1<min) min=x1;\
-	else if(x1>max) max=x1;\
-	if(x2<min) min=x2;\
-	else if(x2>max) max=x2;
-
-//======================== X-tests ========================
-#define AXISTEST_X01(a, b, fa, fb)			   \
-	p0 = a*v0[Y] - b*v0[Z];			       	   \
-	p2 = a*v2[Y] - b*v2[Z];			       	   \
-	if(p0<p2) {min=p0; max=p2;} else {min=p2; max=p0;} \
-	rad = fa * boxhalfsize[Y] + fb * boxhalfsize[Z];   \
-	if(min>rad || max<-rad) return 0;
-
-#define AXISTEST_X2(a, b, fa, fb)			   \
-	p0 = a*v0[Y] - b*v0[Z];			           \
-	p1 = a*v1[Y] - b*v1[Z];			       	   \
-	if(p0<p1) {min=p0; max=p1;} else {min=p1; max=p0;} \
-	rad = fa * boxhalfsize[Y] + fb * boxhalfsize[Z];   \
-	if(min>rad || max<-rad) return 0;
-
-//======================== Y-tests ========================
-#define AXISTEST_Y02(a, b, fa, fb)			   \
-	p0 = -a*v0[X] + b*v0[Z];		      	   \
-	p2 = -a*v2[X] + b*v2[Z];	       	       	   \
-	if(p0<p2) {min=p0; max=p2;} else {min=p2; max=p0;} \
-	rad = fa * boxhalfsize[X] + fb * boxhalfsize[Z];   \
-	if(min>rad || max<-rad) return 0;
-
-#define AXISTEST_Y1(a, b, fa, fb)			   \
-	p0 = -a*v0[X] + b*v0[Z];		      	   \
-	p1 = -a*v1[X] + b*v1[Z];	     	       	   \
-	if(p0<p1) {min=p0; max=p1;} else {min=p1; max=p0;} \
-	rad = fa * boxhalfsize[X] + fb * boxhalfsize[Z];   \
-	if(min>rad || max<-rad) return 0;
-
-//======================== Z-tests ========================
-
-#define AXISTEST_Z12(a, b, fa, fb)			   \
-	p1 = a*v1[X] - b*v1[Y];			           \
-	p2 = a*v2[X] - b*v2[Y];			       	   \
-	if(p2<p1) {min=p2; max=p1;} else {min=p1; max=p2;} \
-	rad = fa * boxhalfsize[X] + fb * boxhalfsize[Y];   \
-	if(min>rad || max<-rad) return 0;
-
-#define AXISTEST_Z0(a, b, fa, fb)			   \
-	p0 = a*v0[X] - b*v0[Y];				   \
-	p1 = a*v1[X] - b*v1[Y];			           \
-	if(p0<p1) {min=p0; max=p1;} else {min=p1; max=p0;} \
-	rad = fa * boxhalfsize[X] + fb * boxhalfsize[Y];   \
-	if(min>rad || max<-rad) return 0;
-
-
-#undef X
-#undef Y
-#undef Z
-*/
-
-//*******************************************************************************************
-//*******************************************************************************************
 
 // Cylinder y origin must be min Y of cylinder
 // Cylinder height MUST be negative FROM origin (inverted Theo XYZ system Legacy)
@@ -537,8 +432,8 @@ glm::quat Quat_Slerp(const glm::quat & from, glm::quat to, float ratio)
 	{
 		float fTheta = glm::acos(fCosTheta);
 		float t = 1 / std::sin(fTheta);
-		fBeta = std::sin(fTheta * fBeta) * t ;
-		ratio = std::sin(fTheta * ratio) * t ;
+		fBeta = std::sin(fTheta * fBeta) * t;
+		ratio = std::sin(fTheta * ratio) * t;
 	}
 
 	return glm::quat(
@@ -588,10 +483,10 @@ glm::mat4 toRotationMatrix(const Anglef & angle) {
 
 glm::quat angleToQuatForArrow(const Anglef & angle) {
 	float aa = angle.getPitch();
-	float ab = 90 - angle.getYaw();
+	float ab = 90.f - angle.getYaw();
 	
-	Vec3f front(0,0,1);
-	Vec3f up(0,-1,0);
+	Vec3f front(0.f, 0.f, 1.f);
+	Vec3f up(0.f, -1.f, 0.f);
 	
 	front = VRotateZ(front, aa);
 	front = VRotateY(front, ab);
@@ -718,7 +613,7 @@ void GenerateMatrixUsingVector(glm::mat4x4 & matrix, const Vec3f & vect, float r
 	// a reference vector.
 	Vec3f yAxis;
 
-	if (!zAxis.x && !zAxis.z)
+	if(zAxis.x == 0.f && zAxis.z == 0.f)
 		yAxis = Vec3f(-zAxis.y, 0.f, 0.f);
 	else
 		yAxis = Vec3f(0.f, 1.f, 0.f);

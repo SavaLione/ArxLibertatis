@@ -161,7 +161,7 @@ struct IO_NPCDATA {
 	ResourcePool lifePool;
 	ResourcePool manaPool;
 	
-	ArxInstant reachedtime;
+	GameInstant reachedtime;
 	long reachedtarget;	//Is target in REACHZONE ?
 	Entity * weapon; // Linked Weapon (r-hand)
 	long detect;
@@ -170,7 +170,7 @@ struct IO_NPCDATA {
 	float absorb;
 	float damages;
 	float tohit;
-	ArxDuration aimtime;
+	GameDuration aimtime;
 	float critical;
 	float reach;
 	float backstab_skill;
@@ -199,9 +199,8 @@ struct IO_NPCDATA {
 	unsigned char resist_magic;
 	unsigned char resist_fire;
 	
-	short strike_time;
-	short walk_start_time;
-	ArxInstant aiming_start;
+	GameDuration walk_start_time;
+	GameInstant aiming_start;
 	NPCFlags npcflags;
 	IO_PATHFIND pathfind;
 	EERIE_EXTRA_ROTATE * ex_rotate;
@@ -264,5 +263,7 @@ float GetIOHeight(Entity * io);
 float GetIORadius(const Entity *io);
 
 Cylinder GetIOCyl(Entity * io);
+
+bool isEnemy(const Entity * entity);
 
 #endif // ARX_GAME_NPC_H

@@ -70,22 +70,22 @@ public:
 		
 		HandleFlags("aem") {
 			if(flg & flag('a')) { // Magic
-				g_guiBookCurrentTopTab = BOOKMODE_MINIMAP;
+				g_playerBook.forcePage(BOOKMODE_MINIMAP);
 			}
 			if(flg & flag('e')) { // Equip
-				g_guiBookCurrentTopTab = BOOKMODE_SPELLS;
+				g_playerBook.forcePage(BOOKMODE_SPELLS);
 			}
 			if(flg & flag('m')) { // Map
-				g_guiBookCurrentTopTab = BOOKMODE_QUESTS;
+				g_playerBook.forcePage(BOOKMODE_QUESTS);
 			}
 		}
 		
 		std::string command = context.getWord();
 		
 		if(command == "open") {
-			ARX_INTERFACE_BookOpen();
+			g_playerBook.open();
 		} else if(command == "close") {
-			ARX_INTERFACE_BookClose();
+			g_playerBook.close();
 		} else if(command == "change") {
 			// Nothing to do, mode already changed by flags.
 		} else {
@@ -128,17 +128,17 @@ public:
 	
 	Result execute(Context & context) {
 		
-		gui::Note::Type type;
+		Note::Type type;
 		std::string tpname = context.getWord();
 		if(tpname == "note") {
-			type = gui::Note::SmallNote;
+			type = Note::SmallNote;
 		} else if(tpname == "notice") {
-			type = gui::Note::Notice;
+			type = Note::Notice;
 		} else if(tpname == "book") {
-			type = gui::Note::Book;
+			type = Note::Book;
 		} else {
 			ScriptWarning << "unexpected note type: " << tpname;
-			type = gui::Note::SmallNote;
+			type = Note::SmallNote;
 		}
 		
 		std::string text = loadUnlocalized(context.getWord());

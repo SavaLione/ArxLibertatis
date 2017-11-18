@@ -117,13 +117,13 @@ struct CinematicSpeech {
 
 struct Notification {
 	
-	ArxInstant timecreation;
-	ArxDuration duration;
+	GameInstant timecreation;
+	GameDuration duration;
 	std::string text;
 	
 	void clear() {
-		timecreation = ArxInstant_ZERO;
-		duration = ArxDuration_ZERO;
+		timecreation = 0;
+		duration = 0;
 		text.clear();
 	}
 	
@@ -144,8 +144,8 @@ struct ARX_SPEECH {
 	audio::SampleId sample;
 	long mood;
 	SpeechFlags flags;
-	ArxInstant time_creation;
-	ArxDuration duration;
+	GameInstant time_creation;
+	GameDuration duration;
 	float fDeltaY;
 	int iTimeScroll;
 	float fPixelScroll;
@@ -161,8 +161,8 @@ struct ARX_SPEECH {
 		sample = 0;
 		mood = 0;
 		flags = 0;
-		time_creation = ArxInstant_ZERO;
-		duration = ArxDuration_ZERO;
+		time_creation = 0;
+		duration = 0;
 		fDeltaY = 0;
 		iTimeScroll = 0;
 		fPixelScroll = 0;
@@ -179,7 +179,7 @@ struct ARX_SPEECH {
 const size_t MAX_ASPEECH = 100;
 extern ARX_SPEECH aspeech[MAX_ASPEECH];
 
-extern Notification speech[MAX_SPEECH];
+extern Notification g_speech[MAX_SPEECH];
 
 void ARX_SPEECH_FirstInit();
 void ARX_SPEECH_Reset();

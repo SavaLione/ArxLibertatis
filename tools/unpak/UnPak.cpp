@@ -76,7 +76,7 @@ static void processDirectory(PakDirectory & dir, const fs::path & prefix,
 			if(action == UnpakExtract || action == UnpakManifest) {
 				
 				PakFile * file = entry.second;
-				char * data = (char*)file->readAlloc();
+				char * data = file->readAlloc();
 				arx_assert(file->size() == 0 || data != NULL);
 				
 				if(action == UnpakExtract) {
@@ -243,7 +243,7 @@ static void addResourceDir(PakReader & resources, const fs::path & base) {
 
 int utf8_main(int argc, char ** argv) {
 	
-	ARX_UNUSED(resources);
+	ARX_UNUSED(g_resources);
 	
 	Logger::initialize();
 	

@@ -40,7 +40,6 @@
 
 HealSpell::HealSpell()
 	: SpellBase()
-	, m_elapsed(ArxDuration_ZERO)
 {}
 
 bool HealSpell::CanLaunch() {
@@ -56,8 +55,7 @@ void HealSpell::Launch() {
 	
 	m_hasDuration = true;
 	m_fManaCostPerSecond = 0.4f * m_level;
-	m_duration = (m_launchDuration > ArxDuration::ofRaw(-1)) ? m_launchDuration : ArxDurationMs(3500);
-	m_elapsed = ArxDuration_ZERO;
+	m_duration = (m_launchDuration >= 0) ? m_launchDuration : GameDurationMs(3500);
 	
 	if(m_caster == EntityHandle_Player) {
 		m_pos = player.pos;
@@ -76,7 +74,7 @@ void HealSpell::Launch() {
 		light->fallend   = 350.f;
 		light->rgb = Color3f(0.4f, 0.4f, 1.0f);
 		light->pos = m_pos + Vec3f(0.f, -50.f, 0.f);
-		light->duration = ArxDurationMs(200);
+		light->duration = GameDurationMs(200);
 		light->extras = 0;
 	}
 }
@@ -86,8 +84,6 @@ void HealSpell::End() {
 }
 
 void HealSpell::Update() {
-	
-	m_elapsed += ArxDurationMs(g_framedelay);
 	
 	if(m_caster == EntityHandle_Player) {
 		m_pos = player.pos;
@@ -102,13 +98,13 @@ void HealSpell::Update() {
 		light->fallend   = 350.f;
 		light->rgb = Color3f(0.4f, 0.4f, 1.0f);
 		light->pos = m_pos + Vec3f(0.f, -50.f, 0.f);
-		light->duration = ArxDurationMs(200);
+		light->duration = GameDurationMs(200);
 		light->extras = 0;
 	}
 
-	ArxDuration ff = m_duration - m_elapsed;
+	GameDuration ff = m_duration - m_elapsed;
 	
-	if(ff < ArxDurationMs(1500)) {
+	if(ff < GameDurationMs(1500)) {
 		m_particles.m_parameters.m_spawnFlags = PARTICLE_CIRCULAR;
 		m_particles.m_parameters.m_gravity = Vec3f_ZERO;
 
@@ -128,7 +124,7 @@ void HealSpell::Update() {
 	}
 
 	m_particles.SetPos(m_pos);
-	m_particles.Update(ArxDurationMs(g_framedelay));
+	m_particles.Update(g_gameTime.lastFrameDuration());
 	m_particles.Render();
 	
 	for(size_t ii = 0; ii < entities.size(); ii++) {
@@ -136,7 +132,7 @@ void HealSpell::Update() {
 		Entity * e = entities[handle];
 		
 		if (    e
-			&& (e->show==SHOW_FLAG_IN_SCENE) 
+			&& (e->show==SHOW_FLAG_IN_SCENE)
 			&& (e->gameFlags & GFLAG_ISINTREATZONE)
 			&& (e->ioflags & IO_NPC)
 			&& (e->_npcdata->lifePool.current>0.f)
@@ -161,7 +157,8 @@ void HealSpell::Update() {
 				}
 			}
 		}
-	}	
+	}
+	
 }
 
 void DetectTrapSpell::Launch() {
@@ -176,7 +173,7 @@ void DetectTrapSpell::Launch() {
 		}
 	}
 	
-	m_duration = ArxDurationMs(60000);
+	m_duration = GameDurationMs(60000);
 	m_fManaCostPerSecond = 0.4f;
 	m_hasDuration = true;
 	
@@ -217,13 +214,14 @@ void ArmorSpell::Launch()
 	
 	m_snd_loop = ARX_SOUND_PlaySFX(SND_SPELL_ARMOR_LOOP, &entities[m_target]->pos, 1.f, ARX_SOUND_PLAY_LOOPED);
 	
-	m_duration = (m_launchDuration > ArxDuration::ofRaw(-1)) ? m_launchDuration : ArxDurationMs(20000);
-	
 	if(m_caster == EntityHandle_Player) {
-		m_duration = ArxDurationMs(20000000);
+		m_duration = 0;
+		m_hasDuration = false;
+	} else {
+		m_duration = (m_launchDuration >= 0) ? m_launchDuration : GameDurationMs(20000);
+		m_hasDuration = true;
 	}
 	
-	m_hasDuration = true;
 	m_fManaCostPerSecond = 0.2f * m_level;
 	
 	Entity * io = entities.get(m_target);
@@ -282,13 +280,14 @@ void LowerArmorSpell::Launch() {
 		ARX_SOUND_PlaySFX(SND_SPELL_LOWER_ARMOR, &entities[m_target]->pos);
 	}
 	
-	m_duration = (m_launchDuration > ArxDuration::ofRaw(-1)) ? m_launchDuration : ArxDurationMs(20000);
-	
 	if(m_caster == EntityHandle_Player) {
-		m_duration = ArxDurationMs(20000000);
+		m_duration = 0;
+		m_hasDuration = false;
+	} else {
+		m_duration = (m_launchDuration >= 0) ? m_launchDuration : GameDurationMs(20000);
+		m_hasDuration = true;
 	}
 	
-	m_hasDuration = true;
 	m_fManaCostPerSecond = 0.2f * m_level;
 	
 	Entity * io = entities.get(m_target);
@@ -359,15 +358,15 @@ void HarmSpell::Launch() {
 	spells.endByCaster(m_caster, SPELL_LIFE_DRAIN);
 	spells.endByCaster(m_caster, SPELL_MANA_DRAIN);
 	
-	m_duration = (m_launchDuration > ArxDuration::ofRaw(-1)) ? m_launchDuration : ArxDurationMs(6000000);
-	m_hasDuration = true;
+	m_hasDuration = m_launchDuration >= 0;
+	m_duration = m_hasDuration ? m_launchDuration : 0;
 	m_fManaCostPerSecond = 0.4f;
 
 	DamageParameters damage;
 	damage.radius = 150.f;
 	damage.damages = 4.f;
 	damage.area = DAMAGE_FULL;
-	damage.duration = ArxDurationMs(100000000);
+	damage.duration = GameDurationMs(100000000);
 	damage.source = m_caster;
 	damage.flags = DAMAGE_FLAG_DONT_HURT_SOURCE | DAMAGE_FLAG_FOLLOW_SOURCE | DAMAGE_FLAG_ADD_VISUAL_FX;
 	damage.type = DAMAGE_TYPE_FAKEFIRE | DAMAGE_TYPE_MAGICAL;

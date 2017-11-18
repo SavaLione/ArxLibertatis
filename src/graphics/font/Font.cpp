@@ -43,7 +43,7 @@
 //! Pre-load all visible characters below this one when creating a font object
 static const Font::Char FONT_PRELOAD_LIMIT = 127;
 
-Font::Font(const res::path & fontFile, unsigned int fontSize, FT_Face face) 
+Font::Font(const res::path & fontFile, unsigned int fontSize, FT_Face face)
 	: info(fontFile, fontSize)
 	, referenceCount(0)
 	, face(face)
@@ -150,7 +150,7 @@ bool Font::insertGlyph(Char character) {
 	if(glyph.size.x != 0 && glyph.size.y != 0) {
 		
 		Image imgGlyph;
-		imgGlyph.Create(glyph.size.x, glyph.size.y, Image::Format_A8);
+		imgGlyph.create(glyph.size.x, glyph.size.y, Image::Format_A8);
 		
 		FT_Bitmap * srcBitmap = &face->glyph->bitmap;
 		arx_assert(srcBitmap->pitch >= 0);
@@ -158,7 +158,7 @@ bool Font::insertGlyph(Char character) {
 		
 		// Copy pixels
 		unsigned char * src = srcBitmap->buffer;
-		unsigned char * dst = imgGlyph.GetData();
+		unsigned char * dst = imgGlyph.getData();
 		memcpy(dst, src, glyph.size.x * glyph.size.y);
 		
 		Vec2i offset;
@@ -177,31 +177,6 @@ bool Font::insertGlyph(Char character) {
 	}
 	
 	return true;
-}
-
-bool Font::writeToDisk() {
-	
-	bool ok = true;
-	
-	for(unsigned int i = 0; i < textures->getTextureCount(); ++i) {
-		Texture2D & tex = textures->getTexture(i);
-		
-		std::stringstream ss;
-		ss << face->family_name;
-		if(face->style_name != NULL) {
-			ss << "_";
-			ss << face->style_name;
-		}
-		ss << "_";
-		ss << info.size;
-		ss << "_page";
-		ss << i;
-		ss << ".png";
-		
-		ok = ok && tex.GetImage().save(ss.str());
-	}
-	
-	return ok;
 }
 
 bool Font::insertMissingGlyphs(text_iterator begin, text_iterator end) {
@@ -354,7 +329,7 @@ Font::TextSize Font::process(int x, int y, text_iterator start, text_iterator en
 		if(startX == endX) {
 			startX = glyph.draw_offset.x;
 		}
-		endX = pen.x + glyph.draw_offset.x + glyph.size.x;
+		endX = s32(pen.x) + glyph.draw_offset.x + glyph.size.x;
 		
 		// Advance
 		pen.x += glyph.advance.x;
@@ -388,7 +363,7 @@ Font::TextSize Font::process(int x, int y, text_iterator start, text_iterator en
 		
 	}
 	
-	return TextSize(Vec2i(x, y), startX, endX, pen.x, getLineHeight());
+	return TextSize(Vec2i(x, y), startX, endX, s32(pen.x), getLineHeight());
 }
 
 Font::TextSize Font::draw(int x, int y, text_iterator start, text_iterator end, Color color) {

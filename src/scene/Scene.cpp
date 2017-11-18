@@ -69,7 +69,7 @@ ZeniMax Media Inc., Suite 120, Rockville, Maryland 20850 USA.
 
 #include "graphics/Draw.h"
 #include "graphics/DrawLine.h"
-#include "graphics/GraphicsModes.h"
+#include "graphics/GlobalFog.h"
 #include "graphics/Math.h"
 #include "graphics/VertexBuffer.h"
 #include "graphics/data/TextureContainer.h"
@@ -77,6 +77,7 @@ ZeniMax Media Inc., Suite 120, Rockville, Maryland 20850 USA.
 #include "graphics/effects/PolyBoom.h"
 #include "graphics/effects/Halo.h"
 #include "graphics/particle/ParticleEffects.h"
+#include "graphics/texture/Texture.h"
 #include "graphics/texture/TextureStage.h"
 
 #include "input/Input.h"
@@ -91,7 +92,6 @@ ZeniMax Media Inc., Suite 120, Rockville, Maryland 20850 USA.
 #include "platform/profiler/Profiler.h"
 
 
-extern Color ulBKGColor;
 extern bool EXTERNALVIEW; // *sigh*
 
 EERIE_PORTAL_DATA * portals = NULL;
@@ -203,9 +203,9 @@ static void ApplyLavaGlowToVertex(const Vec3f & odtv, ColorRGBA & color, float p
 	power = 1.f - std::sin(WATEREFFECT + odtv.x + odtv.z) * 0.05f * power;
 	Color inColor = Color::fromRGBA(color);
 	
-	long lr = clipByte(inColor.r * power);
-	long lg = clipByte(inColor.g * power);
-	long lb = clipByte(inColor.b * power);
+	u8 lr = clipByte(int(inColor.r * power));
+	u8 lg = clipByte(int(inColor.g * power));
+	u8 lb = clipByte(int(inColor.b * power));
 
 	color = Color(lr, lg, lb, 255).toRGBA();
 }
@@ -402,8 +402,8 @@ bool ARX_SCENE_PORTAL_ClipIO(Entity * io, const Vec3f & position) {
 
 static EERIEPOLY * ARX_PORTALS_GetRoomNumForPosition2(const Vec3f & pos, long flag) {
 	
-	EERIEPOLY * ep; 
-
+	EERIEPOLY * ep;
+	
 	if(flag & 1) {
 		ep=CheckInPoly(pos + Vec3f(0.f, -150.f, 0.f));
 
@@ -510,7 +510,7 @@ static EERIEPOLY * ARX_PORTALS_GetRoomNumForCamera(const Vec3f & pos, const Vec3
 }
 
 // flag==1 for player
-long ARX_PORTALS_GetRoomNumForPosition(const Vec3f & pos,long flag) {
+long ARX_PORTALS_GetRoomNumForPosition(const Vec3f & pos, long flag) {
 	
 	ARX_PROFILE_FUNC();
 	
@@ -781,7 +781,7 @@ static void RoomFrustrumAdd(size_t num, const EERIE_FRUSTRUM & fr) {
 	if(RoomDraw[num].frustrum.nb_frustrums < MAX_FRUSTRUMS - 1) {
 		RoomDraw[num].frustrum.frustrums[RoomDraw[num].frustrum.nb_frustrums] = fr;
 		RoomDraw[num].frustrum.nb_frustrums++;
-	}	
+	}
 }
 
 static void RenderWaterBatch() {
@@ -803,45 +803,51 @@ static void RenderWaterBatch() {
 	
 }
 
-static float FluidTextureDisplacement(bool calcSin, const TexturedVertex& v, float time,
+static Vec2f FluidTextureDisplacement(const Vec3f & p, float time,
                                       float divVar1, float divVar2, float divVar3,
-                                      float divVar4, float addVar1 = 0,
-                                      float addVar2 = 0, float sign = 1) {
-	if(calcSin) {
-		return (v.p.x + addVar1)*(1.f/divVar1) + sign * (glm::sin((v.p.x + addVar2)*(1.f/divVar2) + time * (1.f/divVar3))) * (1.f/divVar4);
-	}
-	return (v.p.z + addVar1)*(1.f/divVar1) + sign * (glm::cos((v.p.z + addVar2)*(1.f/divVar2) + time * (1.f/divVar3))) * (1.f/divVar4);
+                                      float divVar4, float addVar1,
+                                      float addVar2, Vec2f sign) {
+	
+	float u = (p.x + addVar1)*(1.f/divVar1) + sign.x * (glm::sin((p.x + addVar2)*(1.f/divVar2) + time * (1.f/divVar3))) * (1.f/divVar4);
+	float v = (p.z + addVar1)*(1.f/divVar1) + sign.y * (glm::cos((p.z + addVar2)*(1.f/divVar2) + time * (1.f/divVar3))) * (1.f/divVar4);
+	return Vec2f(u, v);
 }
 
-static void CalculateWaterDisplacement(float & fTu, float & fTv, EERIEPOLY * ep,
-                                       float time, int vertIndex, int step) {
+static Vec2f CalculateWaterDisplacement(EERIEPOLY * ep, float time, int vertIndex, int step) {
+	
+	const Vec3f & p = ep->v[vertIndex].p;
+	
 	switch(step) {
-	case(0):fTu = FluidTextureDisplacement(true, ep->v[vertIndex], time, 1000, 200, 1000, 32); 
-			fTv = FluidTextureDisplacement(false, ep->v[vertIndex], time, 1000, 200, 1000, 32); 
-			break;
-	case(1):fTu = FluidTextureDisplacement(true, ep->v[vertIndex], time, 1000, 200, 1000, 28, 30.f, 30); 
-			fTv = FluidTextureDisplacement(false, ep->v[vertIndex], time, 1000, 200, 1000, 28, 30.f, 30, -1.0); 
-			break;
-	case(2):fTu = FluidTextureDisplacement(true, ep->v[vertIndex], time, 1000, 200, 1000, 40, 60.f, 60, -1.0);
-			fTv = FluidTextureDisplacement(false, ep->v[vertIndex], time, 1000, 200, 1000, 40, 60.f, 60, -1.0);
-			break;
-	default:break;
+	case(0): {
+		return FluidTextureDisplacement(p, time, 1000, 200, 1000, 32, 0.f, 0.f, Vec2f(1.f, 1.f));
+	}
+	case(1): {
+		return FluidTextureDisplacement(p, time, 1000, 200, 1000, 28, 30.f, 30, Vec2f(1.f, -1.f));
+	}
+	case(2): {
+		return FluidTextureDisplacement(p, time, 1000, 200, 1000, 40, 60.f, 60, Vec2f(-1.f, -1.f));
+	}
+	default:
+		return Vec2f_ZERO;
 	}
 }
 
-static void CalculateLavaDisplacement(float & fTu, float & fTv, EERIEPOLY * ep,
-                                      float time, int vertIndex, int step) {
+static Vec2f CalculateLavaDisplacement(EERIEPOLY * ep, float time, int vertIndex, int step) {
+	
+	const Vec3f & p = ep->v[vertIndex].p;
+	
 	switch(step) {
-	case(0):fTu = FluidTextureDisplacement(true, ep->v[vertIndex], time, 1000, 200, 2000, 20); 
-			fTv = FluidTextureDisplacement(false, ep->v[vertIndex], time, 1000, 200, 2000, 20); 
-			break;
-	case(1):fTu = FluidTextureDisplacement(true, ep->v[vertIndex], time, 1000, 100, 2000, 10); 
-			fTv = FluidTextureDisplacement(false, ep->v[vertIndex], time, 1000, 100, 2000, 10);
-			break;
-	case(2):fTu = FluidTextureDisplacement(true, ep->v[vertIndex], time, 600, 160, 2000, 11); 
-			fTv = FluidTextureDisplacement(false, ep->v[vertIndex], time, 600, 160, 2000, 11);
-			break;
-	default:break;
+	case(0): {
+		return FluidTextureDisplacement(p, time, 1000, 200, 2000, 20, 0.f, 0.f, Vec2f(1.f, 1.f));
+	}
+	case(1): {
+		return FluidTextureDisplacement(p, time, 1000, 100, 2000, 10, 0.f, 0.f, Vec2f(1.f, 1.f));
+	}
+	case(2): {
+		return FluidTextureDisplacement(p, time, 600, 160, 2000, 11, 0.f, 0.f, Vec2f(1.f, 1.f));
+	}
+	default:
+		return Vec2f_ZERO;
 	}
 }
 
@@ -868,7 +874,7 @@ static void RenderWater() {
 	
 	unsigned short * indices = dynamicVertices.indices;
 	
-	float time = arxtime.get_frame_time();
+	float time = toMsf(g_gameTime.now());
 
 	while(iNb--) {
 		EERIEPOLY * ep = vPolyWater[iNb];
@@ -886,40 +892,35 @@ static void RenderWater() {
 			pVertex = dynamicVertices.append(iNbVertex);
 		}
 		
-		float fTu;
-		float fTv;
-
 		for(int j = 0; j < iNbVertex; ++j) {
 			pVertex->p.x = ep->v[j].p.x;
 			pVertex->p.y = -ep->v[j].p.y;
 			pVertex->p.z = ep->v[j].p.z;
 			pVertex->color = Color(80, 80, 80, 255).toRGBA();
-
+			
 			for(int i = 0; i < FTVU_STEP_COUNT; ++i) {
-				CalculateWaterDisplacement(fTu, fTv, ep, time, j, i);
-
+				Vec2f uv = CalculateWaterDisplacement(ep, time, j, i);
 				if(ep->type & POLY_FALL) {
-					fTv += time * (1.f/4000);
+					uv.y += time * (1.f/4000);
 				}
-				pVertex->uv[i].x = fTu;
-				pVertex->uv[i].y = fTv;
-			}	
+				pVertex->uv[i] = uv;
+			}
 			pVertex++;
-
-			if(j == 2){						
-				*indices++ = iNbIndice++; 
-				*indices++ = iNbIndice++; 
-				*indices++ = iNbIndice++; 
+			
+			if(j == 2){
+				*indices++ = iNbIndice++;
+				*indices++ = iNbIndice++;
+				*indices++ = iNbIndice++;
 				dynamicVertices.nbindices += 3;
 			}
 		}
 		if(iNbVertex == 4) {
-			*indices++ = iNbIndice++; 
-			*indices++ = iNbIndice - 2; 
-			*indices++ = iNbIndice - 3; 
-			dynamicVertices.nbindices += 3;	
+			*indices++ = iNbIndice++;
+			*indices++ = iNbIndice - 2;
+			*indices++ = iNbIndice - 3;
+			dynamicVertices.nbindices += 3;
 		}
-	}	
+	}
 	
 	dynamicVertices.unlock();
 	RenderWaterBatch();
@@ -981,7 +982,7 @@ static void RenderLava() {
 	
 	unsigned short * indices = dynamicVertices.indices;
 	
-	float time = arxtime.get_frame_time();
+	float time = toMsf(g_gameTime.now());
 
 	while(iNb--) {
 		EERIEPOLY * ep = vPolyLava[iNb];
@@ -999,31 +1000,27 @@ static void RenderLava() {
 			pVertex = dynamicVertices.append(iNbVertex);
 		}
 		
-		float fTu;
-		float fTv;
-
 		for(int j = 0; j < iNbVertex; ++j) {
 			pVertex->p.x = ep->v[j].p.x;
 			pVertex->p.y = -ep->v[j].p.y;
 			pVertex->p.z = ep->v[j].p.z;
 			pVertex->color = Color(102, 102, 102, 255).toRGBA();
 			for(int i = 0; i < FTVU_STEP_COUNT; ++i) {
-				CalculateLavaDisplacement(fTu, fTv, ep, time, j, i);
-				pVertex->uv[i].x = fTu;
-				pVertex->uv[i].y = fTv;
+				Vec2f uv = CalculateLavaDisplacement(ep, time, j, i);
+				pVertex->uv[i] = uv;
 			}
 			pVertex++;
-			if(j == 2){	
-				*indices++ = iNbIndice++; 
-				*indices++ = iNbIndice++; 
-				*indices++ = iNbIndice++; 
+			if(j == 2) {
+				*indices++ = iNbIndice++;
+				*indices++ = iNbIndice++;
+				*indices++ = iNbIndice++;
 				dynamicVertices.nbindices += 3;
 			}
-		}								
-		if(iNbVertex == 4) {			
-			*indices++ = iNbIndice++; 
-			*indices++ = iNbIndice - 2; 
-			*indices++ = iNbIndice - 3; 
+		}
+		if(iNbVertex == 4) {
+			*indices++ = iNbIndice++;
+			*indices++ = iNbIndice - 2;
+			*indices++ = iNbIndice - 3;
 			dynamicVertices.nbindices += 3;
 		}
 	}
@@ -1037,7 +1034,7 @@ static void RenderLava() {
 
 static void ARX_PORTALS_Frustrum_RenderRoomTCullSoft(size_t room_num,
                                                      const EERIE_FRUSTRUM_DATA & frustrums,
-                                                     ArxInstant now,
+                                                     GameInstant now,
                                                      const Vec3f & camPos
 ) {
 	ARX_PROFILE_FUNC();
@@ -1170,11 +1167,11 @@ static void ARX_PORTALS_Frustrum_RenderRoomTCullSoft(size_t room_num,
 				}
 
 				if(ep->type & POLY_LAVA) {
-					float uvScroll = toMs(now) * (1.f/12000);
+					float uvScroll = toMsf(now) * (1.f/12000);
 					ManageLava_VertexBuffer(ep, to, uvScroll, pMyVertexCurr);
 					vPolyLava.push_back(ep);
 				} else if(ep->type & POLY_WATER) {
-					float uvScroll = toMs(now) * (1.f/1000);
+					float uvScroll = toMsf(now) * (1.f/1000);
 					ManageWater_VertexBuffer(ep, to, uvScroll, pMyVertexCurr);
 					vPolyWater.push_back(ep);
 				}
@@ -1209,12 +1206,12 @@ static void ARX_PORTALS_Frustrum_RenderRoomTCullSoft(size_t room_num,
 						fr = 0.f;
 					else
 						fr = std::max(ffr, fr * 255.f);
-
-					fr=std::min(fr,255.f);
-					fb*=255.f;
-					fb=std::min(fb,255.f);
-					u8 lfr = fr;
-					u8 lfb = fb;
+					
+					fr = std::min(fr, 255.f);
+					fb *= 255.f;
+					fb = std::min(fb, 255.f);
+					u8 lfr = u8(fr);
+					u8 lfb = u8(fb);
 					u8 lfg = 0x1E;
 					
 					ep->color[k] = Color(lfr, lfg, lfb, 255).toRGBA();
@@ -1242,12 +1239,7 @@ static void BackgroundRenderOpaque(size_t room_num) {
 	
 	ARX_PROFILE_FUNC();
 	
-	UseRenderState state(render3D());
-	
 	EERIE_ROOM_DATA & room = portals->rooms[room_num];
-	
-	//render opaque
-	GRenderer->SetAlphaFunc(Renderer::CmpGreater, .5f);
 	
 	std::vector<TextureContainer *>::const_iterator itr;
 	for(itr = room.ppTextureContainer.begin(); itr != room.ppTextureContainer.end(); ++itr) {
@@ -1255,7 +1247,12 @@ static void BackgroundRenderOpaque(size_t room_num) {
 		TextureContainer *pTexCurr = *itr;
 		const SMY_ARXMAT & roomMat = pTexCurr->m_roomBatches.tMatRoom[room_num];
 		
+		RenderState baseState = render3D();
+		
 		GRenderer->SetTexture(0, pTexCurr);
+		baseState.setAlphaCutout(pTexCurr->m_pTexture && pTexCurr->m_pTexture->hasAlpha());
+		
+		UseRenderState state(baseState);
 		
 		if(roomMat.count[BatchBucket_Opaque]) {
 			if (pTexCurr->userflags & POLY_METAL)
@@ -1275,7 +1272,6 @@ static void BackgroundRenderOpaque(size_t room_num) {
 	}
 	
 	GRenderer->GetTextureStage(0)->setColorOp(TextureStage::OpModulate);
-	GRenderer->SetAlphaFunc(Renderer::CmpNotEqual, 0.f);
 	
 }
 
@@ -1293,17 +1289,18 @@ static void BackgroundRenderTransparent(size_t room_num) {
 	
 	ARX_PROFILE_FUNC();
 	
-	RenderState baseState = render3D().depthWrite(false).depthOffset(2);
-	
 	//render transparency
 	EERIE_ROOM_DATA & room = portals->rooms[room_num];
 	
 	std::vector<TextureContainer *>::const_iterator itr;
 	for(itr = room.ppTextureContainer.begin(); itr != room.ppTextureContainer.end(); ++itr) {
-
+		
+		RenderState baseState = render3D().depthWrite(false).depthOffset(2);
+		
 		TextureContainer * pTexCurr = *itr;
 		GRenderer->SetTexture(0, pTexCurr);
-
+		baseState.setAlphaCutout(pTexCurr->m_pTexture && pTexCurr->m_pTexture->hasAlpha());
+		
 		SMY_ARXMAT & roomMat = pTexCurr->m_roomBatches.tMatRoom[room_num];
 
 		for(size_t i = 0; i < ARRAY_SIZE(transRenderOrder); i++) {
@@ -1429,14 +1426,14 @@ void ARX_SCENE_Update() {
 	
 	ARX_PROFILE_FUNC();
 	
-	ArxInstant now = arxtime.now();
+	GameInstant now = g_gameTime.now();
 	
-	WATEREFFECT = (toMs(now) % long(2 * glm::pi<float>() / 0.0005f)) * 0.0005f;
+	WATEREFFECT = (toMsi(now) % long(2 * glm::pi<float>() / 0.0005f)) * 0.0005f;
 	
 	const Vec3f camPos = ACTIVECAM->orgTrans.pos;
 	const float camDepth = ACTIVECAM->cdepth;
 	
-	long l = camDepth * 0.42f;
+	long l = long(camDepth * 0.42f);
 	long clip3D = (l / (long)BKG_SIZX) + 1;
 	short radius = clip3D + 4;
 
@@ -1480,7 +1477,7 @@ void ARX_SCENE_Update() {
 		RoomDrawRelease();
 	}
 
-	ARX_THROWN_OBJECT_Manage(g_framedelay);
+	ARX_THROWN_OBJECT_Manage(g_gameTime.lastFrameDuration());
 
 	UpdateInter();
 }
@@ -1526,10 +1523,7 @@ void ARX_SCENE_Render() {
 		SPECIAL_DRAGINTER_RENDER=0;
 	}
 	
-	{
-		UseRenderState state(render3D());
-		PopAllTriangleListOpaque();
-	}
+	PopAllTriangleListOpaque();
 	
 	// *Now* draw the player
 	if(entities.player()->animlayer[0].cur_anim) {
@@ -1538,10 +1532,8 @@ void ARX_SCENE_Render() {
 		if(!EXTERNALVIEW) {
 			// In first person mode, always render the player over other objects
 			// in order to avoid clipping the player and weapon with walls.
-			UseRenderState state(render3D().depthTest(false));
-			PopAllTriangleListOpaque(/*clear=*/false);
+			PopAllTriangleListOpaque(render3D().depthTest(false), /*clear=*/false);
 		}
-		UseRenderState state(render3D());
 		PopAllTriangleListOpaque();
 	}
 	
@@ -1552,18 +1544,15 @@ void ARX_SCENE_Render() {
 	PopAllTriangleListTransparency();
 	
 	GRenderer->SetFogColor(Color::none);
-	GRenderer->SetAlphaFunc(Renderer::CmpGreater, .5f);
 	
 	for(size_t i = 0; i < RoomDrawList.size(); i++) {
 		BackgroundRenderTransparent(RoomDrawList[i]);
 	}
 	
-	GRenderer->SetAlphaFunc(Renderer::CmpNotEqual, 0.f);
-	
 	RenderWater();
 	RenderLava();
 	
-	GRenderer->SetFogColor(ulBKGColor);
+	GRenderer->SetFogColor(g_fogColor);
 	GRenderer->GetTextureStage(0)->setColorOp(TextureStage::OpModulate);
 	
 	Halo_Render();

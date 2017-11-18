@@ -48,6 +48,7 @@ ZeniMax Media Inc., Suite 120, Rockville, Maryland 20850 USA.
 #include <string>
 #include <vector>
 
+#include "core/TimeTypes.h"
 #include "audio/AudioTypes.h"
 #include "io/resource/ResourcePath.h"
 #include "platform/Platform.h"
@@ -63,8 +64,8 @@ public:
 	
 	aalError load();
 	
-	void setUserData(void * _data) { data = _data; }
-	void * getUserData() const { return data; }
+	void setType(PlayingAmbianceType type) { m_type = type; }
+	PlayingAmbianceType getType() const { return m_type; }
 	
 	const Channel & getChannel() const { return channel; }
 	const res::path & getName() const { return name; }
@@ -76,9 +77,8 @@ public:
 	bool isIdle() const { return status == Idle; }
 	bool isLooped() const { return loop; }
 	
-	aalError play(const Channel & channel, bool loop = true,
-	              size_t fade_interval = 0);
-	aalError stop(size_t fade_interval = 0);
+	aalError play(const Channel & channel, bool loop = true, PlatformDuration fade_interval = 0);
+	aalError stop(PlatformDuration fade_interval = 0);
 	aalError pause();
 	aalError resume();
 	aalError update();
@@ -105,14 +105,17 @@ private:
 	Fade fade;
 	
 	Channel channel;
-	float fade_time, fade_interval, fade_max;
-	s32 start, time;
+	PlatformDuration fade_time;
+	PlatformDuration fade_interval;
+	float fade_max;
+	PlatformInstant start;
+	PlatformDuration m_time;
 	
 	TrackList tracks;
 	
 	res::path name;
 	
-	void * data;
+	PlayingAmbianceType m_type;
 	
 };
 

@@ -197,7 +197,6 @@ SDL1InputBackend::SDL1InputBackend() : m_textHandler(NULL) {
 	cursorAbs = Vec2i_ZERO;
 	cursorInWindow = false;
 	std::fill_n(keyStates, ARRAY_SIZE(keyStates), false);
-	std::fill_n(buttonStates, ARRAY_SIZE(buttonStates), false);
 	std::fill_n(clickCount, ARRAY_SIZE(clickCount), 0);
 	std::fill_n(unclickCount, ARRAY_SIZE(unclickCount), 0);
 	
@@ -235,12 +234,6 @@ void SDL1InputBackend::setAbsoluteMouseCoords(int absX, int absY) {
 
 void SDL1InputBackend::getRelativeMouseCoords(int & relX, int & relY, int & wheelDir) const {
 	relX = 0, relY = 0, wheelDir = currentWheel;
-}
-
-bool SDL1InputBackend::isMouseButtonPressed(int buttonId, int & deltaTime) const  {
-	arx_assert(buttonId >= Mouse::ButtonBase && buttonId < Mouse::ButtonMax);
-	deltaTime = 0; // TODO
-	return buttonStates[buttonId - Mouse::ButtonBase];
 }
 
 void SDL1InputBackend::getMouseButtonClickCount(int buttonId, int & numClick, int & numUnClick) const {
@@ -291,12 +284,12 @@ void SDL1InputBackend::onEvent(const SDL_Event & event) {
 				ARX_UNUSED(end);
 				m_textHandler->newText(text);
 			}
-			// fall-through
 		}
+		// fall-through
 		case SDL_KEYUP: {
 			SDLKey key = event.key.keysym.sym;
-			if(key >= 0 && size_t(key) < ARRAY_SIZE(sdlToArxKey) && sdlToArxKey[key] != Keyboard::Key_Invalid) {
-				Keyboard::Key arxkey = sdlToArxKey[key];
+			if(size_t(key) < ARRAY_SIZE(sdlToArxKey) && sdlToArxKey[size_t(key)] != Keyboard::Key_Invalid) {
+				Keyboard::Key arxkey = sdlToArxKey[size_t(key)];
 				if(m_textHandler && event.key.state == SDL_PRESSED) {
 					KeyModifiers mod;
 					mod.shift = (event.key.keysym.mod & KMOD_SHIFT) != 0;
@@ -330,10 +323,10 @@ void SDL1InputBackend::onEvent(const SDL_Event & event) {
 				wheel--;
 			} else if(button < ARRAY_SIZE(sdlToArxButton) && sdlToArxButton[button] != Mouse::Button_Invalid) {
 				size_t i = sdlToArxButton[button] - Mouse::ButtonBase;
-				if((event.button.state == SDL_PRESSED)) {
-					buttonStates[i] = true, clickCount[i]++;
+				if(event.button.state == SDL_PRESSED) {
+					clickCount[i]++;
 				} else {
-					buttonStates[i] = false, unclickCount[i]++;
+					unclickCount[i]++;
 				}
 			} else {
 				LogWarning << "Unmapped SDL mouse button: " << (int)button;

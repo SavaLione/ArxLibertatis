@@ -54,16 +54,16 @@ ZeniMax Media Inc., Suite 120, Rockville, Maryland 20850 USA.
 
 CSpellFx::CSpellFx()
 {
-	SetDuration(ArxDurationMs(1000));
+	SetDuration(GameDurationMs(1000));
 }
 
-void CSpellFx::SetDuration(ArxDuration ulaDuration) {
+void CSpellFx::SetDuration(GameDuration ulaDuration) {
 	m_duration = ulaDuration;
 
-	if(m_duration <= ArxDuration_ZERO)
-		m_duration = ArxDurationMs(100);
+	if(m_duration <= 0)
+		m_duration = GameDurationMs(100);
 	
-	m_elapsed = ArxDuration_ZERO;
+	m_elapsed = 0;
 }
 
 void Draw3DLineTexNew(const RenderMaterial & mat, Vec3f startPos, Vec3f endPos, Color startColor, Color endColor, float startSize, float endSize) {
@@ -85,8 +85,8 @@ void Draw3DLineTexNew(const RenderMaterial & mat, Vec3f startPos, Vec3f endPos, 
 	q1.v[3].uv = Vec2f_Y_AXIS;
 	
 	q1.v[0].p = startPos + Vec3f(0.f, zzs, 0.f);
-	q1.v[1].p = startPos + Vec3f(0.f,-zzs, 0.f);
-	q1.v[2].p = endPos + Vec3f(0.f,-zze, 0.f);
+	q1.v[1].p = startPos + Vec3f(0.f, -zzs, 0.f);
+	q1.v[2].p = endPos + Vec3f(0.f, -zze, 0.f);
 	q1.v[3].p = endPos + Vec3f(0.f, zze, 0.f);
 	
 	drawQuadRTP(mat, q1);

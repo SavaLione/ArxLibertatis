@@ -78,10 +78,9 @@ void MiniMap::getData(int showLevel) {
 	
 	if(m_levels[showLevel].m_texContainer == NULL) {
 		
-		char levelMap[256];
-		const char * name = GetLevelNameByNum(showLevel);
+		std::string name = GetLevelNameByNum(showLevel);
 		
-		sprintf(levelMap, "graph/levels/level%s/map", name);
+		res::path levelMap = "graph/levels/level" + name + "/map";
 		m_levels[showLevel].m_texContainer = TextureContainer::Load(levelMap, TextureContainer::NoColorKey);
 		
 		if(m_levels[showLevel].m_texContainer) { // 4 pix/meter
@@ -121,7 +120,7 @@ void MiniMap::getData(int showLevel) {
 
 void MiniMap::validatePos() {
 	
-	int showLevel = ARX_LEVELS_GetRealNum(m_currentLevel); 
+	int showLevel = ARX_LEVELS_GetRealNum(m_currentLevel);
 	
 	if((showLevel >= 0) && (showLevel < int(MAX_MINIMAP_LEVELS))) {
 		
@@ -147,7 +146,7 @@ void MiniMap::validatePlayerPos(int currentLevel, long blockPlayerControls, ARX_
 		
 		float req;
 		
-		if((m_player->Interface & INTER_MAP) && (!(m_player->Interface & INTER_COMBATMODE)) && (bookMode == BOOKMODE_MINIMAP)) {
+		if((m_player->Interface & INTER_PLAYERBOOK) && (!(m_player->Interface & INTER_COMBATMODE)) && (bookMode == BOOKMODE_MINIMAP)) {
 			req = 20.f;
 		} else {
 			req = 80.f;
@@ -421,10 +420,10 @@ void MiniMap::showBookEntireMap(int showLevel) {
 		verts[3].uv = Vec2f_Y_AXIS;
 		
 		const Rect mouseTestRect(
-			verts[0].p.x,
-			verts[0].p.y,
-			verts[2].p.x,
-			verts[2].p.y
+			s32(verts[0].p.x),
+			s32(verts[0].p.y),
+			s32(verts[2].p.x),
+			s32(verts[2].p.y)
 		);
 		
 		if(mouseTestRect.contains(Vec2i(DANAEMouse))) {
@@ -481,8 +480,8 @@ void MiniMap::revealPlayerPos(int showLevel) {
 	
 	playerPos += start;
 	
-	Vec2i startCell = playerCell - Vec2i(glm::ceil(maxDistance / cas.x));
-	Vec2i endCell = playerCell + Vec2i(glm::ceil(maxDistance / cas.y));
+	Vec2i startCell = playerCell - Vec2i(s32(glm::ceil(maxDistance / cas.x)));
+	Vec2i endCell = playerCell + Vec2i(s32(glm::ceil(maxDistance / cas.y)));
 
 	Vec2i maxCell = Vec2i(MINIMAP_MAX_X - 1, MINIMAP_MAX_Z - 1);
 	
@@ -504,7 +503,7 @@ void MiniMap::revealPlayerPos(int showLevel) {
 		float revealPercent = (maxDistance - d) * (1.f / maxDistance);
 		revealPercent = arx::clamp(revealPercent * 2.0f, 0.0f, 1.0f);
 		
-		int r = revealPercent * 255.f;
+		int r = int(revealPercent * 255.f);
 		
 		int ucLevel = std::max(r, (int)m_levels[showLevel].m_revealed[x][z]);
 		m_levels[showLevel].m_revealed[x][z] = checked_range_cast<unsigned char>(ucLevel);

@@ -26,8 +26,8 @@
 struct QUAKE_FX_STRUCT {
 	float intensity;
 	float frequency;
-	ArxInstant start;
-	ArxDuration duration;
+	GameInstant start;
+	GameDuration duration;
 	bool sound;
 };
 
@@ -38,7 +38,7 @@ void AddQuakeFX(float intensity, float duration, float period, bool sound) {
 	if(QuakeFx.intensity > 0.f) {
 		QuakeFx.intensity += intensity;
 
-		QuakeFx.duration += ArxDurationMs(s64(duration));
+		QuakeFx.duration += GameDurationMsf(duration);
 		QuakeFx.frequency += period;
 		QuakeFx.frequency *= .5f;
 		QuakeFx.sound = QuakeFx.sound || sound;
@@ -48,9 +48,9 @@ void AddQuakeFX(float intensity, float duration, float period, bool sound) {
 	} else {
 		QuakeFx.intensity = intensity;
 
-		QuakeFx.start = arxtime.now();
+		QuakeFx.start = g_gameTime.now();
 
-		QuakeFx.duration = ArxDurationMs(s64(duration));
+		QuakeFx.duration = GameDurationMsf(duration);
 		QuakeFx.frequency = period;
 		QuakeFx.sound = sound;
 
@@ -59,8 +59,8 @@ void AddQuakeFX(float intensity, float duration, float period, bool sound) {
 	}
 
 	if(!sound) {
-		if(QuakeFx.duration > ArxDurationMs(1500))
-			QuakeFx.duration = ArxDurationMs(1500);
+		if(QuakeFx.duration > GameDurationMs(1500))
+			QuakeFx.duration = GameDurationMs(1500);
 
 		if(QuakeFx.intensity > 220)
 			QuakeFx.intensity = 220;
@@ -73,22 +73,27 @@ void RemoveQuakeFX() {
 }
 
 void ManageQuakeFX(EERIE_CAMERA * cam) {
-	if(QuakeFx.intensity>0.f) {
-		ArxDuration tim = arxtime.now() - QuakeFx.start;
+	if(QuakeFx.intensity > 0.f) {
+		GameDuration tim = g_gameTime.now() - QuakeFx.start;
 
 		if(tim >= QuakeFx.duration) {
-			QuakeFx.intensity=0.f;
+			QuakeFx.intensity = 0.f;
 			return;
 		}
 
-		float itmod=1.f-(tim/QuakeFx.duration);
-		float periodicity=std::sin((float)arxtime.get_frame_time()*QuakeFx.frequency*( 1.0f / 100 ));
+		float itmod = 1.f - (tim / QuakeFx.duration);
+		
+		float periodicity = 0;
+		if(QuakeFx.frequency > 0.f) {
+			periodicity = timeWaveSin(g_gameTime.now(), GameDurationMsf(628.319f / QuakeFx.frequency));
+		}
 
 		if(periodicity > 0.5f && QuakeFx.sound)
 			ARX_SOUND_PlaySFX(SND_QUAKE, NULL, 1.0F - 0.5F * QuakeFx.intensity);
 
 		float truepower = periodicity * QuakeFx.intensity * itmod * 0.01f;
 		float halfpower = truepower * .5f;
+		
 		cam->orgTrans.pos += arx::randomVec(-halfpower, halfpower);
 		cam->angle.setPitch(cam->angle.getPitch() + Random::getf() * truepower - halfpower);
 		cam->angle.setYaw(cam->angle.getYaw() + Random::getf() * truepower - halfpower);

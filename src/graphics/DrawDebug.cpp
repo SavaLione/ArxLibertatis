@@ -130,7 +130,7 @@ static void drawDebugLights() {
 		}
 		
 		Vec2f center = Vec2f(p) / p.w;
-		const Rect mouseTestRect(center.x - 20, center.y - 20, center.x + 20, center.y + 20);
+		const Rect mouseTestRect(s32(center.x) - 20, s32(center.y) - 20, s32(center.x) + 20, s32(center.y) + 20);
 		if(mouseTestRect.contains(Vec2i(DANAEMouse))) {
 			UseRenderState state(RenderState().depthTest(true));
 			Sphere fallstart;
@@ -531,8 +531,8 @@ static void drawDebugEntities() {
 		if(closerThan(entity->pos, player.pos, DebugTextMaxDistance)) {
 			
 			if(visible && entity->bbox2D.valid()) {
-				int x = (entity->bbox2D.min.x + entity->bbox2D.max.x) / 2;
-				int y = entity->bbox2D.min.y - hFontDebug->getLineHeight() - 2;
+				int x = int(entity->bbox2D.min.x + entity->bbox2D.max.x) / 2;
+				int y = int(entity->bbox2D.min.y - hFontDebug->getLineHeight() - 2);
 				UNICODE_ARXDrawTextCenter(hFontDebug, Vec2f(x, y), entity->idString(), color);
 			} else {
 				drawTextAt(hFontDebug, entity->pos, entity->idString(), color);
@@ -582,12 +582,12 @@ static float pointInTriangle(Vec2f p, Vec3f a, Vec3f b, Vec3f c) {
 }
 
 static void drawDebugMaterialTexture(Vec2f & textpos, const std::string & type,
-                                     const Texture2D & t, Color color) {
+                                     const Texture & t, Color color) {
 	
 	const std::string & name = t.getFileName().string();
 	
 	std::ostringstream oss;
-	oss << "(" << t.GetFormat() << ", " << t.getSize().x << "×" << t.getSize().y;
+	oss << "(" << t.getFormat() << ", " << t.getSize().x << "×" << t.getSize().y;
 	if(t.getStoredSize() != t.getSize()) {
 		oss << " [" << t.getStoredSize().x << "×" << t.getStoredSize().y << "]";
 	}
@@ -597,12 +597,12 @@ static void drawDebugMaterialTexture(Vec2f & textpos, const std::string & type,
 	oss << ")";
 	std::string format = oss.str();
 	
-	float type_s = hFontDebug->getTextSize(type).width() + 10;
-	float name_s = hFontDebug->getTextSize(name).width() + 10;
-	float format_s = hFontDebug->getTextSize(format).width();
+	s32 type_s = hFontDebug->getTextSize(type).width() + 10;
+	s32 name_s = hFontDebug->getTextSize(name).width() + 10;
+	s32 format_s = hFontDebug->getTextSize(format).width();
 	
 	Vec2i pos = Vec2i(textpos);
-	pos.x -= (type_s + name_s + format_s) * 0.5f;
+	pos.x -= s32(float(type_s + name_s + format_s) * 0.5f);
 	if(pos.x < g_size.left + 5) {
 		pos.x = g_size.left + 5;
 	} else if(pos.x + type_s + name_s + format_s > g_size.right - 5) {
@@ -872,9 +872,9 @@ struct DebugRay {
 	Vec3f start;
 	Vec3f dir;
 	Color color;
-	float expiration;
+	PlatformInstant expiration;
 	
-	DebugRay(Vec3f start, Vec3f dir, Color color, float expiration)
+	DebugRay(Vec3f start, Vec3f dir, Color color, PlatformInstant expiration)
 		: start(start)
 		, dir(dir)
 		, color(color)
@@ -884,8 +884,8 @@ struct DebugRay {
 
 static std::vector<DebugRay> debugRays;
 
-void debug::drawRay(Vec3f start, Vec3f dir, Color color, float duration) {
-	DebugRay ray = DebugRay(start, dir, color, arxtime.now_f() + duration * 1000);
+void debug::drawRay(Vec3f start, Vec3f dir, Color color, PlatformDuration duration) {
+	DebugRay ray = DebugRay(start, dir, color, g_platformTime.frameStart() + duration * 1000);
 	debugRays.push_back(ray);
 }
 
@@ -895,7 +895,7 @@ static void updateAndRenderDebugDrawables() {
 		drawLine(ray.start, ray.dir, ray.color);
 	}
 	
-	float now = arxtime.now_f();
+	PlatformInstant now = g_platformTime.frameStart();
 	
 	for(size_t i = 0; i < debugRays.size(); i++) {
 		if(debugRays[i].expiration < now) {

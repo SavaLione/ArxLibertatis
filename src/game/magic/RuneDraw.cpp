@@ -111,7 +111,7 @@ void ARX_SPELLS_UpdateBookSymbolDraw(Rect rect) {
 		return;
 	}
 	
-	ArxInstant now = arxtime.now();
+	GameInstant now = g_gameTime.now();
 
 	SYMBOL_DRAW * sd = &g_bookSymbolDraw;
 	AnimationDuration elapsed = toAnimationDuration(now - sd->starttime);
@@ -126,7 +126,7 @@ void ARX_SPELLS_UpdateBookSymbolDraw(Rect rect) {
 		
 	AnimationDuration timePerComponent = sd->duration * (1.0f / float(nbcomponents));
 
-	if(timePerComponent <= AnimationDuration_ZERO)
+	if(timePerComponent <= 0)
 		timePerComponent = AnimationDurationMs(1);
 
 	AnimationDuration timeRemaining = elapsed;
@@ -170,7 +170,7 @@ void ARX_SPELLS_UpdateBookSymbolDraw(Rect rect) {
 
 void ARX_SPELLS_UpdateSymbolDraw() {
 	
-	ArxInstant now = arxtime.now();
+	GameInstant now = g_gameTime.now();
 	
 	for(size_t i = 0; i < entities.size(); i++) {
 		const EntityHandle handle = EntityHandle(i);
@@ -238,7 +238,7 @@ void ARX_SPELLS_UpdateSymbolDraw() {
 			AnimationDuration elapsed = toAnimationDuration(now - sd->starttime);
 
 			if(elapsed > sd->duration) {
-				endLightDelayed(io->dynlight, ArxDurationMs(600));
+				endLightDelayed(io->dynlight, GameDurationMs(600));
 				io->dynlight = LightHandle();
 				
 				delete io->symboldraw;
@@ -281,14 +281,14 @@ void ARX_SPELLS_UpdateSymbolDraw() {
 				vect *= symbolVecScale;
 				vect += vect / Vec2s(2);
 
-				if(oldtime <= AnimationDurationMs(ti)) {
+				if(oldtime <= AnimationDurationMsf(ti)) {
 					float ratio = toMsf(oldtime)*div_ti;
 					old_pos += Vec2s(Vec2f(vect) * ratio);
 					break;
 				}
 
 				old_pos += vect;
-				oldtime -= AnimationDurationMs(ti);
+				oldtime -= AnimationDurationMsf(ti);
 			}
 
 			for(size_t j = 0; j < nbcomponents; j++) {
@@ -296,7 +296,7 @@ void ARX_SPELLS_UpdateSymbolDraw() {
 				vect *= symbolVecScale;
 				vect += vect / Vec2s(2);
 
-				if(newtime <= AnimationDurationMs(ti)) {
+				if(newtime <= AnimationDurationMsf(ti)) {
 					float ratio = toMsf(newtime) * div_ti;
 					pos1 += Vec2s(Vec2f(vect) * ratio);
 					AddFlare(Vec2f(pos1), 0.1f, 1, io);
@@ -305,7 +305,7 @@ void ARX_SPELLS_UpdateSymbolDraw() {
 				}
 
 				pos1 += vect;
-				newtime -= AnimationDurationMs(ti);
+				newtime -= AnimationDurationMsf(ti);
 				
 			}
 		}
@@ -339,8 +339,8 @@ static void ARX_SPELLS_RequestSymbolDrawCommon(Entity * io, float duration,
 	sd->duration = AnimationDurationMs(std::max(1l, long(duration)));
 	sd->sequence = info.sequence;
 
-	sd->starttime = arxtime.now();
-	sd->elapsed = AnimationDuration_ZERO;
+	sd->starttime = g_gameTime.now();
+	sd->elapsed = 0;
 	
 	sd->cPosStart = info.startOffset;
 

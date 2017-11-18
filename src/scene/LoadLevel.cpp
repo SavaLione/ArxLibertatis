@@ -119,7 +119,7 @@ Entity * LoadInter_Ex(const res::path & classPath, EntityInstance instance,
 	
 	res::path tmp = io->instancePath(); // Get the directory name to check for
 	std::string id = io->className();
-	if(PakDirectory * dir = resources->getDirectory(tmp)) {
+	if(PakDirectory * dir = g_resources->getDirectory(tmp)) {
 		if(PakFile * file = dir->getFile(id + ".asl")) {
 			loadScript(io->over_script, file);
 			io->over_script.master = (io->script.data != NULL) ? &io->script : NULL;
@@ -160,13 +160,15 @@ bool DanaeLoadLevel(const res::path & file, bool loadEntities) {
 	LogDebug("fileDlf " << file);
 
 	size_t FileSize = 0;
-	char * dat = resources->readAlloc(file, FileSize);
+	char * dat = g_resources->readAlloc(file, FileSize);
 	if(!dat) {
 		LogError << "Unable to find " << file;
 		return false;
 	}
 	
-	PakFile * lightingFile = resources->getFile(lightingFileName);
+	g_requestLevelInit = true;
+	
+	PakFile * lightingFile = g_resources->getFile(lightingFileName);
 	
 	progressBarAdvance();
 	LoadLevelScreen();
@@ -438,7 +440,7 @@ bool DanaeLoadLevel(const res::path & file, bool loadEntities) {
 			
 			app[j].flag = (PathwayType)dlpw->flag; // save/load enum
 			app[j].rpos = dlpw->rpos.toVec3();
-			app[j]._time = static_cast<float>(dlpw->time);
+			app[j]._time = GameDurationMs(dlpw->time); // TODO save/load time
 		}
 	}
 	
@@ -460,7 +462,7 @@ bool DanaeLoadLevel(const res::path & file, bool loadEntities) {
 		// using compression
 		if(dlh.version >= 1.44f) {
 			char * compressed = lightingFile->readAlloc();
-			dat = (char*)blastMemAlloc(compressed, lightingFile->size(), FileSize);
+			dat = blastMemAlloc(compressed, lightingFile->size(), FileSize);
 			free(compressed);
 		} else {
 			dat = lightingFile->readAlloc();
@@ -506,7 +508,7 @@ bool DanaeLoadLevel(const res::path & file, bool loadEntities) {
 			el->pos = dlight->pos.toVec3();
 			if(FASTmse) {
 				el->pos += trans;
-			} 
+			}
 			
 			el->rgb = dlight->rgb;
 			
@@ -583,16 +585,16 @@ extern Entity * FlyingOverIO;
 
 extern long JUST_RELOADED;
 
-void DanaeClearLevel(long flag)
+void DanaeClearLevel()
 {
 	JUST_RELOADED = 0;
 	g_miniMap.reset();
 
 	fadeReset();
-	LAST_JUMP_ENDTIME = ArxInstant_ZERO;
+	LAST_JUMP_ENDTIME = 0;
 	FAST_RELEASE = 1;
 	MCache_ClearAll();
-	ARX_GAME_Reset(flag);
+	ARX_GAME_Reset();
 	FlyingOverIO = NULL;
 
 	EERIE_PATHFINDER_Release();
@@ -610,8 +612,6 @@ void DanaeClearLevel(long flag)
 	
 	TextureContainer::DeleteAll(TextureContainer::Level);
 	g_miniMap.clearMarkerTexCont();
-	
-	arxtime.init();
 	
 	bGCroucheToggle = false;
 	
@@ -666,7 +666,6 @@ void RestoreLastLoadedLightning(BackgroundData & eb)
 	}
 
 plusloin:
-	;
 	free(LastLoadedLightning);
 	LastLoadedLightning = NULL;
 	LastLoadedLightningNb = 0;

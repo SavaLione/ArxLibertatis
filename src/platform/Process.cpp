@@ -140,7 +140,7 @@ static process_handle run(const char * exe, const char * const args[], int stdou
 			#if ARX_HAVE_OPEN
 			if(detach && dev_null > 0) {
 				(void)dup2(dev_null, 0);
-				if(stdout > 0) {
+				if(stdout <= 0) {
 					dup2(dev_null, 1);
 				}
 				(void)dup2(dev_null, 2);
@@ -243,7 +243,7 @@ process_id getProcessId(process_handle process) {
 	#if ARX_PLATFORM == ARX_PLATFORM_WIN32
 	return process ? GetProcessId(process) : 0;
 	#else
-	return process_id(process);
+	return process;
 	#endif
 }
 
@@ -363,7 +363,7 @@ void reapZombies() {
 	#if ARX_PLATFORM != ARX_PLATFORM_WIN32 && ARX_HAVE_WAITPID
 	std::vector<process_handle>::iterator it = g_childProcesses.begin();
 	while(it != g_childProcesses.end()) {
-		if(waitpid(*it, NULL, WNOHANG) == 0) {
+		if(waitpid(*it, NULL, WNOHANG) != 0) {
 			it = g_childProcesses.erase(it);
 		} else {
 			++it;

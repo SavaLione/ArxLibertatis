@@ -125,7 +125,7 @@ aalError init(const std::string & backendName, const std::string & deviceName, H
 	
 	mutex = new Lock();
 	
-	session_time = platform::getTimeMs();
+	session_time = platform::getTime();
 	
 	return AAL_OK;
 }
@@ -138,10 +138,10 @@ aalError clean() {
 	
 	LogDebug("Clean");
 	
-	_amb.clear();
-	_sample.clear();
-	_mixer.clear();
-	_env.clear();
+	g_ambiances.clear();
+	g_samples.clear();
+	g_mixers.clear();
+	g_environments.clear();
 	
 	delete backend, backend = NULL;
 	
@@ -243,7 +243,7 @@ aalError update() {
 	
 	AAL_ENTRY
 	
-	session_time = platform::getTimeMs();
+	session_time = platform::getTime();
 	
 	// Update sources
 	for(Backend::source_iterator p = backend->sourcesBegin(); p != backend->sourcesEnd();) {
@@ -256,21 +256,21 @@ aalError update() {
 	}
 	
 	// Update ambiances
-	for(size_t i = 0; i < _amb.size(); i++) {
-		Ambiance * ambiance = _amb[i];
+	for(size_t i = 0; i < g_ambiances.size(); i++) {
+		Ambiance * ambiance = g_ambiances[i];
 		if(ambiance) {
 			ambiance->update();
 			if(ambiance->getChannel().flags & FLAG_AUTOFREE && ambiance->isIdle()) {
-				_amb.remove(i);
+				g_ambiances.remove(i);
 			}
 		}
 	}
 	
 	// Update samples
-	for(size_t i = 0; i < _sample.size(); i++) {
-		Sample * sample = _sample[i];
+	for(size_t i = 0; i < g_samples.size(); i++) {
+		Sample * sample = g_samples[i];
 		if(sample && sample->isReferenced() < 1) {
-			_sample.remove(i);
+			g_samples.remove(i);
 		}
 	}
 	
@@ -285,7 +285,7 @@ MixerId createMixer() {
 	
 	Mixer * mixer = new Mixer();
 	
-	MixerId id = MixerId(_mixer.add(mixer));
+	MixerId id = MixerId(g_mixers.add(mixer));
 	if(id == MixerId()) {
 		delete mixer;
 	}
@@ -300,7 +300,7 @@ SampleId createSample(const res::path & name) {
 	Sample * sample = new Sample(name);
 	
 	SampleId s_id = INVALID_ID;
-	if(sample->load() || (s_id = _sample.add(sample)) == INVALID_ID) {
+	if(sample->load() || (s_id = g_samples.add(sample)) == INVALID_ID) {
 		delete sample;
 	} else {
 		sample->reference();
@@ -315,7 +315,7 @@ AmbianceId createAmbiance(const res::path & name) {
 	
 	Ambiance * ambiance = new Ambiance(name);
 	AmbianceId a_id = AmbianceId();
-	if(ambiance->load() || (a_id = AmbianceId(_amb.add(ambiance))) == AmbianceId()) {
+	if(ambiance->load() || (a_id = AmbianceId(g_ambiances.add(ambiance))) == AmbianceId()) {
 		delete ambiance;
 		LogError << "Ambiance " << name << " not found";
 	}
@@ -329,7 +329,7 @@ EnvId createEnvironment(const res::path & name) {
 	
 	Environment * env = new Environment(name);
 	EnvId e_id = EnvId();
-	if(env->load() || (e_id = EnvId(_env.add(env))) == EnvId()) {
+	if(env->load() || (e_id = EnvId(g_environments.add(env))) == EnvId()) {
 		delete env;
 		LogError << "Environment " << name << " not found";
 	}
@@ -344,11 +344,11 @@ aalError deleteSample(SampleId sample_id) {
 	AAL_ENTRY
 	
 	SampleId s_id = Backend::getSampleId(sample_id);
-	if(!_sample.isValid(s_id)) {
+	if(!g_samples.isValid(s_id)) {
 		return AAL_ERROR_HANDLE;
 	}
 	
-	_sample.remove(s_id);
+	g_samples.remove(s_id);
 	
 	return AAL_OK;
 }
@@ -361,7 +361,7 @@ aalError deleteAmbiance(AmbianceId a_id) {
 		return AAL_ERROR_HANDLE;
 	}
 	
-	_amb.remove(a_id.handleData());
+	g_ambiances.remove(a_id.handleData());
 	
 	return AAL_OK;
 }
@@ -370,8 +370,8 @@ AmbianceId getAmbiance(const res::path & name) {
 	
 	AAL_ENTRY_V(AmbianceId())
 	
-	for(size_t i = 0; i < _amb.size(); i++) {
-		if(_amb[i] && name == _amb[i]->getName()) {
+	for(size_t i = 0; i < g_ambiances.size(); i++) {
+		if(g_ambiances[i] && name == g_ambiances[i]->getName()) {
 			return AmbianceId(i);
 		}
 	}
@@ -383,8 +383,8 @@ EnvId getEnvironment(const res::path & name) {
 	
 	AAL_ENTRY_V(EnvId())
 	
-	for(size_t i = 0; i < _env.size(); i++) {
-		if(_env[i] && name == _env[i]->name) {
+	for(size_t i = 0; i < g_environments.size(); i++) {
+		if(g_environments[i] && name == g_environments[i]->name) {
 			return EnvId(i);
 		}
 	}
@@ -398,11 +398,11 @@ AmbianceId getNextAmbiance(AmbianceId ambiance_id) {
 	
 	AAL_ENTRY_V(AmbianceId())
 	
-	size_t i = (ambiance_id != AmbianceId() && _amb.isValid(ambiance_id.handleData()))
+	size_t i = (ambiance_id != AmbianceId() && g_ambiances.isValid(ambiance_id.handleData()))
 	           ? ambiance_id.handleData() + 1 : 0;
 	
-	for(; i < _amb.size(); i++) {
-		if(_amb[i]) {
+	for(; i < g_ambiances.size(); i++) {
+		if(g_ambiances[i]) {
 			return AmbianceId(i);
 		}
 	}
@@ -448,13 +448,13 @@ aalError setListenerEnvironment(EnvId e_id) {
 	
 	AAL_ENTRY
 	
-	if(!_env.isValid(e_id.handleData())) {
+	if(!g_environments.isValid(e_id.handleData())) {
 		return AAL_ERROR_HANDLE;
 	}
 	
-	LogDebug("SetListenerEnvironment " << _env[e_id.handleData()]->name);
+	LogDebug("SetListenerEnvironment " << g_environments[e_id.handleData()]->name);
 	
-	return backend->setListenerEnvironment(*_env[e_id.handleData()]);
+	return backend->setListenerEnvironment(*g_environments[e_id.handleData()]);
 }
 
 // Mixer setup
@@ -463,67 +463,67 @@ aalError setMixerVolume(MixerId m_id, float volume) {
 	
 	AAL_ENTRY
 	
-	if(!_mixer.isValid(m_id.handleData())) {
+	if(!g_mixers.isValid(m_id.handleData())) {
 		return AAL_ERROR_HANDLE;
 	}
 	
 	LogDebug("SetMixerVolume " << m_id.handleData() << " volume=" << volume);
 	
-	return _mixer[m_id.handleData()]->setVolume(volume);
+	return g_mixers[m_id.handleData()]->setVolume(volume);
 }
 
 aalError setMixerParent(MixerId m_id, MixerId pm_id) {
 	
 	AAL_ENTRY
 	
-	if(m_id == pm_id || !_mixer.isValid(m_id.handleData()) || !_mixer.isValid(pm_id.handleData())) {
+	if(m_id == pm_id || !g_mixers.isValid(m_id.handleData()) || !g_mixers.isValid(pm_id.handleData())) {
 		return AAL_ERROR_HANDLE;
 	}
 	
 	LogDebug("SetMixerParent " << m_id.handleData() << " parent=" << pm_id.handleData());
 	
-	return _mixer[m_id.handleData()]->setParent(_mixer[pm_id.handleData()]);
+	return g_mixers[m_id.handleData()]->setParent(g_mixers[pm_id.handleData()]);
 }
 
-// Mixer control 
+// Mixer control
 
 aalError mixerStop(MixerId m_id) {
 	
 	AAL_ENTRY
 	
-	if(!_mixer.isValid(m_id.handleData())) {
+	if(!g_mixers.isValid(m_id.handleData())) {
 		return AAL_ERROR_HANDLE;
 	}
 	
 	LogDebug("MixerStop " << m_id.handleData());
 	
-	return _mixer[m_id.handleData()]->stop();
+	return g_mixers[m_id.handleData()]->stop();
 }
 
 aalError mixerPause(MixerId m_id) {
 	
 	AAL_ENTRY;
 	
-	if(!_mixer.isValid(m_id.handleData())) {
+	if(!g_mixers.isValid(m_id.handleData())) {
 		return AAL_ERROR_HANDLE;
 	}
 	
 	LogDebug("MixerPause " << m_id.handleData());
 	
-	return _mixer[m_id.handleData()]->pause();
+	return g_mixers[m_id.handleData()]->pause();
 }
 
 aalError mixerResume(MixerId m_id) {
 	
 	AAL_ENTRY
 	
-	if(!_mixer.isValid(m_id.handleData())) {
+	if(!g_mixers.isValid(m_id.handleData())) {
 		return AAL_ERROR_HANDLE;
 	}
 	
 	LogDebug("MixerResume " << m_id.handleData());
 	
-	return _mixer[m_id.handleData()]->resume();
+	return g_mixers[m_id.handleData()]->resume();
 }
 
 // Sample setup
@@ -573,28 +573,30 @@ aalError getSampleName(SampleId sample_id, res::path & name) {
 	AAL_ENTRY
 	
 	SampleId s_id = Backend::getSampleId(sample_id);
-	if(!_sample.isValid(s_id)) {
+	if(!g_samples.isValid(s_id)) {
 		return AAL_ERROR_HANDLE;
 	}
 	
-	name = _sample[s_id]->getName();
+	name = g_samples[s_id]->getName();
 	
 	return AAL_OK;
 }
 
-aalError getSampleLength(SampleId sample_id, size_t & length, TimeUnit unit) {
+aalError getSampleLength(SampleId sample_id, size_t & length) {
 	
 	length = 0;
 	
 	AAL_ENTRY
 	
 	SampleId s_id = Backend::getSampleId(sample_id);
-	if(!_sample.isValid(s_id)) {
+	if(!g_samples.isValid(s_id)) {
 		return AAL_ERROR_HANDLE;
 	}
 	
-	Sample * sample = _sample[s_id];
-	length = bytesToUnits(sample->getLength(), sample->getFormat(), unit);
+	Sample * sample = g_samples[s_id];
+	const PCMFormat & format = sample->getFormat();
+	
+	length = size_t(u64(sample->getLength()) * 1000 / (format.frequency * format.channels * (format.quality >> 3)));
 	
 	return AAL_OK;
 }
@@ -621,20 +623,16 @@ aalError samplePlay(SampleId & sample_id, const Channel & channel, unsigned play
 	
 	SampleId s_id = Backend::getSampleId(sample_id);
 	sample_id = Backend::clearSource(sample_id);
-	if(!_sample.isValid(s_id) || !_mixer.isValid(channel.mixer.handleData())) {
+	if(!g_samples.isValid(s_id) || !g_mixers.isValid(channel.mixer.handleData())) {
 		return AAL_ERROR_HANDLE;
 	}
 	
-	LogDebug("SamplePlay " << _sample[s_id]->getName() << " play_count=" << play_count);
+	LogDebug("SamplePlay " << g_samples[s_id]->getName() << " play_count=" << play_count);
 	
 	Source * source = backend->getSource(sample_id);
 	if(source) {
 		if(channel.flags == source->getChannel().flags) {
 			source = NULL;
-		} else if(channel.flags & FLAG_RESTART) {
-			source->stop();
-		} else if(channel.flags & FLAG_ENQUEUE) {
-			source->play(play_count);
 		} else if(source->isIdle()) {
 			source->setMixer(channel.mixer);
 			source->setVolume(channel.volume);
@@ -664,7 +662,7 @@ aalError samplePlay(SampleId & sample_id, const Channel & channel, unsigned play
 	sample_id = source->getId();
 	
 	if(channel.flags & FLAG_AUTOFREE) {
-		_sample[s_id]->dereference();
+		g_samples[s_id]->dereference();
 	}
 	
 	return AAL_OK;
@@ -688,7 +686,7 @@ aalError sampleStop(SourceId & sample_id) {
 
 // Ambiance setup
 
-aalError setAmbianceUserData(AmbianceId a_id, void * data) {
+aalError setAmbianceType(AmbianceId a_id, PlayingAmbianceType type) {
 	
 	AAL_ENTRY
 	
@@ -696,13 +694,13 @@ aalError setAmbianceUserData(AmbianceId a_id, void * data) {
 		return AAL_ERROR_HANDLE;
 	}
 	
-	if(!_amb.isValid(a_id.handleData())) {
+	if(!g_ambiances.isValid(a_id.handleData())) {
 		return AAL_ERROR_HANDLE;
 	}
 	
-	LogDebug("SetAmbianceUserData " << _amb[a_id.handleData()]->getName() << " " << data);
+	LogDebug("SetAmbianceUserData " << g_ambiances[a_id.handleData()]->getName() << " " << type);
 	
-	_amb[a_id.handleData()]->setUserData(data);
+	g_ambiances[a_id.handleData()]->setType(type);
 	
 	return AAL_OK;
 }
@@ -715,13 +713,13 @@ aalError setAmbianceVolume(AmbianceId a_id, float volume) {
 		return AAL_ERROR_HANDLE;
 	}
 	
-	if(!_amb.isValid(a_id.handleData())) {
+	if(!g_ambiances.isValid(a_id.handleData())) {
 		return AAL_ERROR_HANDLE;
 	}
 	
-	LogDebug("SetAmbianceVolume " << _amb[a_id.handleData()]->getName() << " " << volume);
+	LogDebug("SetAmbianceVolume " << g_ambiances[a_id.handleData()]->getName() << " " << volume);
 	
-	return _amb[a_id.handleData()]->setVolume(volume);
+	return g_ambiances[a_id.handleData()]->setVolume(volume);
 }
 
 // Ambiance status
@@ -736,16 +734,16 @@ aalError getAmbianceName(AmbianceId a_id, res::path & name) {
 		return AAL_ERROR_HANDLE;
 	}
 	
-	if(!_amb.isValid(a_id.handleData())) {
+	if(!g_ambiances.isValid(a_id.handleData())) {
 		return AAL_ERROR_HANDLE;
 	}
 	
-	name = _amb[a_id.handleData()]->getName();
+	name = g_ambiances[a_id.handleData()]->getName();
 	
 	return AAL_OK;
 }
 
-aalError getAmbianceUserData(AmbianceId a_id, void ** data) {
+aalError getAmbianceType(AmbianceId a_id, PlayingAmbianceType * type) {
 	
 	AAL_ENTRY
 	
@@ -753,11 +751,11 @@ aalError getAmbianceUserData(AmbianceId a_id, void ** data) {
 		return AAL_ERROR_HANDLE;
 	}
 	
-	if(!_amb.isValid(a_id.handleData())) {
+	if(!g_ambiances.isValid(a_id.handleData())) {
 		return AAL_ERROR_HANDLE;
 	}
 	
-	*data = _amb[a_id.handleData()]->getUserData();
+	*type = g_ambiances[a_id.handleData()]->getType();
 	
 	return AAL_OK;
 }
@@ -772,15 +770,15 @@ aalError getAmbianceVolume(AmbianceId a_id, float & _volume) {
 		return AAL_ERROR_HANDLE;
 	}
 	
-	if(!_amb.isValid(a_id.handleData())) {
+	if(!g_ambiances.isValid(a_id.handleData())) {
 		return AAL_ERROR_HANDLE;
 	}
 	
-	if(!(_amb[a_id.handleData()]->getChannel().flags & FLAG_VOLUME)) {
+	if(!(g_ambiances[a_id.handleData()]->getChannel().flags & FLAG_VOLUME)) {
 		return AAL_ERROR_INIT;
 	}
 	
-	_volume = _amb[a_id.handleData()]->getChannel().volume;
+	_volume = g_ambiances[a_id.handleData()]->getChannel().volume;
 	
 	return AAL_OK;
 }
@@ -793,16 +791,16 @@ bool isAmbianceLooped(AmbianceId a_id) {
 		return false;
 	}
 	
-	if(!_amb.isValid(a_id.handleData())) {
+	if(!g_ambiances.isValid(a_id.handleData())) {
 		return false;
 	}
 	
-	return _amb[a_id.handleData()]->isLooped();
+	return g_ambiances[a_id.handleData()]->isLooped();
 }
 
 // Ambiance control
 
-aalError ambiancePlay(AmbianceId a_id, const Channel & channel, bool loop, size_t fade_interval) {
+aalError ambiancePlay(AmbianceId a_id, const Channel & channel, bool loop, PlatformDuration fade_interval) {
 	
 	AAL_ENTRY
 	
@@ -810,16 +808,17 @@ aalError ambiancePlay(AmbianceId a_id, const Channel & channel, bool loop, size_
 		return AAL_ERROR_HANDLE;
 	}
 	
-	if(!_amb.isValid(a_id.handleData()) || !_mixer.isValid(channel.mixer.handleData())) {
+	if(!g_ambiances.isValid(a_id.handleData()) || !g_mixers.isValid(channel.mixer.handleData())) {
 		return AAL_ERROR_HANDLE;
 	}
 	
-	LogDebug("AmbiancePlay " << _amb[a_id.handleData()]->getName() << " loop=" << loop << " fade=" << fade_interval);
+	LogDebug("AmbiancePlay " << g_ambiances[a_id.handleData()]->getName() << " loop=" << loop
+	         << " fade=" << toMs(fade_interval));
 	
-	return _amb[a_id.handleData()]->play(channel, loop, fade_interval);
+	return g_ambiances[a_id.handleData()]->play(channel, loop, fade_interval);
 }
 
-aalError ambianceStop(AmbianceId a_id, size_t fade_interval) {
+aalError ambianceStop(AmbianceId a_id, PlatformDuration fade_interval) {
 	
 	AAL_ENTRY
 	
@@ -827,13 +826,13 @@ aalError ambianceStop(AmbianceId a_id, size_t fade_interval) {
 		return AAL_ERROR_HANDLE;
 	}
 	
-	if(!_amb.isValid(a_id.handleData())) {
+	if(!g_ambiances.isValid(a_id.handleData())) {
 		return AAL_ERROR_HANDLE;
 	}
 	
-	LogDebug("AmbianceStop " << _amb[a_id.handleData()]->getName() << " " << fade_interval);
+	LogDebug("AmbianceStop " << g_ambiances[a_id.handleData()]->getName() << " " << toMs(fade_interval));
 	
-	_amb[a_id.handleData()]->stop(fade_interval);
+	g_ambiances[a_id.handleData()]->stop(fade_interval);
 	
 	return AAL_OK;
 }

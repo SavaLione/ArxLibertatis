@@ -46,10 +46,8 @@ extern PlatformInstant SLID_START;
 bool bOldLookToggle;
 
 FlyingEyeSpell::FlyingEyeSpell()
-	: m_lastupdate(ArxInstant_ZERO)
-{
-	
-}
+	: m_lastupdate(0)
+{ }
 
 bool FlyingEyeSpell::CanLaunch() {
 	
@@ -79,8 +77,8 @@ void FlyingEyeSpell::Launch() {
 	ARX_SOUND_PlaySFX(SND_SPELL_EYEBALL_IN);
 	
 	m_lastupdate = m_timcreation;
-	m_duration = ArxDurationMs(1000000);
-	m_hasDuration = true;
+	m_duration = 0;
+	m_hasDuration = false;
 	m_fManaCostPerSecond = 3.2f;
 	eyeball.exist = 1;
 	
@@ -183,17 +181,17 @@ static void FlyingEyeSpellUpdateHand(const Vec3f & pos, LightHandle & light) {
 
 void FlyingEyeSpell::Update() {
 	
-	const ArxInstant now = arxtime.now();
+	const GameInstant now = g_gameTime.now();
 	
-	const ArxDuration framediff3 = now - m_lastupdate;
+	const GameDuration framediff3 = now - m_lastupdate;
 	
-	eyeball.floating = std::sin(toMs(m_lastupdate - m_timcreation) * 0.001f);
+	eyeball.floating = std::sin((m_lastupdate - m_timcreation) / GameDurationMs(1000));
 	eyeball.floating *= 10.f;
 	
-	if(m_lastupdate - m_timcreation <= ArxDurationMs(3000)) {
-		eyeball.exist = toMs(m_lastupdate - m_timcreation) * (1.0f / 30);
+	if(m_lastupdate - m_timcreation <= GameDurationMs(3000)) {
+		eyeball.exist = long((m_lastupdate - m_timcreation) / GameDurationMs(30));
 		eyeball.size = Vec3f(1.f - float(eyeball.exist) * 0.01f);
-		eyeball.angle.setYaw(eyeball.angle.getYaw() + toMs(framediff3) * 0.6f);
+		eyeball.angle.setYaw(eyeball.angle.getYaw() + toMsf(framediff3) * 0.6f);
 	} else {
 		eyeball.exist = 2;
 	}
@@ -229,7 +227,7 @@ void FireFieldSpell::Launch() {
 	
 	ARX_SOUND_PlaySFX(SND_SPELL_FIRE_FIELD_START);
 	
-	m_duration = (m_launchDuration > ArxDuration::ofRaw(-1)) ? m_launchDuration : ArxDurationMs(100000);
+	m_duration = (m_launchDuration >= 0) ? m_launchDuration : GameDurationMs(100000);
 	m_hasDuration = true;
 	m_fManaCostPerSecond = 2.8f;
 	m_light = LightHandle();
@@ -261,7 +259,7 @@ void FireFieldSpell::Launch() {
 	damage.radius = 150.f;
 	damage.damages = 10.f;
 	damage.area = DAMAGE_FULL;
-	damage.duration = ArxDurationMs(100000000);
+	damage.duration = GameDurationMs(100000000);
 	damage.source = m_caster;
 	damage.flags = 0;
 	damage.type = DAMAGE_TYPE_MAGICAL | DAMAGE_TYPE_FIRE | DAMAGE_TYPE_FIELD;
@@ -275,7 +273,7 @@ void FireFieldSpell::Launch() {
 	
 	pPSStream1.SetParams(g_particleParameters[ParticleParam_FireFieldFlame]);
 	pPSStream1.SetPos(m_pos + Vec3f(0, 10, 0));
-	pPSStream1.Update(ArxDuration_ZERO);
+	pPSStream1.Update(0);
 }
 
 void FireFieldSpell::End() {
@@ -288,8 +286,8 @@ void FireFieldSpell::End() {
 
 void FireFieldSpell::Update() {
 	
-	pPSStream.Update(ArxDurationMs(g_framedelay));
-	pPSStream1.Update(ArxDurationMs(g_framedelay));
+	pPSStream.Update(g_gameTime.lastFrameDuration());
+	pPSStream1.Update(g_gameTime.lastFrameDuration());
 	
 	EERIE_LIGHT * el = dynLightCreate(m_light);
 	if(el) {
@@ -298,7 +296,7 @@ void FireFieldSpell::Update() {
 		el->fallstart = Random::getf(150.f, 180.f);
 		el->fallend   = Random::getf(290.f, 320.f);
 		el->rgb = Color3f(1.f, 0.8f, 0.6f) + Color3f(Random::getf(-0.1f, 0.f), 0.f, 0.f);
-		el->duration = ArxDurationMs(600);
+		el->duration = GameDurationMs(600);
 		el->extras=0;
 	}
 	
@@ -307,10 +305,10 @@ void FireFieldSpell::Update() {
 		pPSStream.Render();
 		pPSStream1.Render();
 		
-		float fDiff = g_framedelay / 8.f;
+		float fDiff = g_gameTime.lastFrameDuration() / GameDurationMs(8);
 		int nTime = checked_range_cast<int>(fDiff);
 		
-		for(long nn=0;nn<=nTime+1;nn++) {
+		for(long nn = 0; nn <= nTime + 1; nn++) {
 			
 			PARTICLE_DEF * pd = createParticle();
 			if(!pd) {
@@ -360,7 +358,7 @@ void IceFieldSpell::Launch() {
 	
 	ARX_SOUND_PlaySFX(SND_SPELL_ICE_FIELD);
 	
-	m_duration = (m_launchDuration > ArxDuration::ofRaw(-1)) ? m_launchDuration : ArxDurationMs(100000);
+	m_duration = (m_launchDuration >= 0) ? m_launchDuration : GameDurationMs(100000);
 	m_hasDuration = true;
 	m_fManaCostPerSecond = 2.8f;
 	m_light = LightHandle();
@@ -392,7 +390,7 @@ void IceFieldSpell::Launch() {
 	damage.radius = 150.f;
 	damage.damages = 10.f;
 	damage.area = DAMAGE_FULL;
-	damage.duration = ArxDurationMs(100000000);
+	damage.duration = GameDurationMs(100000000);
 	damage.source = m_caster;
 	damage.flags = 0;
 	damage.type = DAMAGE_TYPE_MAGICAL | DAMAGE_TYPE_COLD | DAMAGE_TYPE_FIELD;
@@ -441,7 +439,7 @@ void IceFieldSpell::End() {
 	
 	DamageRequestEnd(m_damage);
 	
-	ARX_SOUND_Stop(m_snd_loop); 
+	ARX_SOUND_Stop(m_snd_loop);
 	ARX_SOUND_PlaySFX(SND_SPELL_ICE_FIELD_END);
 }
 
@@ -454,7 +452,7 @@ void IceFieldSpell::Update() {
 		el->fallstart = Random::getf(150.f, 180.f);
 		el->fallend   = Random::getf(290.f, 320.f);
 		el->rgb = Color3f(0.76f, 0.76f, 1.0f) + Color3f(0.f, 0.f, Random::getf(-0.1f, 0.f));
-		el->duration = ArxDurationMs(600);
+		el->duration = GameDurationMs(600);
 		el->extras=0;
 	}
 
@@ -550,9 +548,10 @@ void LightningStrikeSpell::Launch() {
 	
 	Vec3f target(0.f, 0.f, -500.f);
 	m_lightning.Create(Vec3f_ZERO, target);
-	m_lightning.SetDuration(ArxDurationMs(500 * m_level));
+	m_lightning.SetDuration(GameDurationMsf(500 * m_level));
 	m_lightning.m_isMassLightning = false;
 	m_duration = m_lightning.m_duration;
+	m_hasDuration = true;
 	
 	ARX_SOUND_PlaySFX(SND_SPELL_LIGHTNING_START, &m_caster_pos);
 	
@@ -627,7 +626,7 @@ void LightningStrikeSpell::Update() {
 	m_lightning.m_caster = m_caster;
 	m_lightning.m_level = m_level;
 	
-	m_lightning.Update(ArxDurationMs(g_framedelay));
+	m_lightning.Update(g_gameTime.lastFrameDuration());
 	m_lightning.Render();
 	
 	ARX_SOUND_RefreshPosition(m_snd_loop, entities[m_caster]->pos);
@@ -652,7 +651,7 @@ void ConfuseSpell::Launch() {
 	
 	m_hasDuration = true;
 	m_fManaCostPerSecond = 1.5f;
-	m_duration = (m_launchDuration > ArxDuration::ofRaw(-1)) ? m_launchDuration : ArxDurationMs(5000);
+	m_duration = (m_launchDuration >= 0) ? m_launchDuration : GameDurationMs(5000);
 	
 	
 	tex_p1 = TextureContainer::Load("graph/obj3d/textures/(fx)_tsu_blueting");
@@ -663,7 +662,7 @@ void ConfuseSpell::Launch() {
 	
 	AnimLayer & au = animlayer[0];
 	au.cur_anim = anim_papii;
-	au.ctime = AnimationDuration_ZERO;
+	au.ctime = 0;
 	au.flags = EA_LOOP;
 	au.lastframe = 0;
 	au.currentInterpolation = 0;
@@ -676,7 +675,7 @@ void ConfuseSpell::Launch() {
 void ConfuseSpell::End() {
 	
 	m_targets.clear();
-	endLightDelayed(m_light, ArxDurationMs(500));
+	endLightDelayed(m_light, GameDurationMs(500));
 }
 
 void ConfuseSpell::Update() {
@@ -704,10 +703,12 @@ void ConfuseSpell::Update() {
 	mat.setBlendType(RenderMaterial::Additive);
 	mat.setTexture(tex_trail);
 	
-	Anglef stiteangle = Anglef(0.f, -glm::degrees(arxtime.now_f() * ( 1.0f / 500 )), 0.f);
+	float rot = timeWaveSaw(g_gameTime.now(), GameDurationMs(3142)) * 360.f;
+	
+	Anglef stiteangle = Anglef(0.f, -rot, 0.f);
 	
 	{
-		AnimationDuration delta = AnimationDurationUs(s64(g_framedelay * 1000.f));
+		AnimationDuration delta = toAnimationDuration(g_gameTime.lastFrameDuration());
 		EERIEDrawAnimQuatUpdate(spapi, animlayer, stiteangle, eCurPos, delta, NULL, false);
 		EERIEDrawAnimQuatRender(spapi, eCurPos, NULL, 0.f);
 	}
@@ -745,7 +746,7 @@ void ConfuseSpell::Update() {
 		light->fallend   = 420.f;
 		light->rgb = Color3f(0.3f, 0.3f, 0.5f) + Color3f(0.2f, 0.f, 0.2f) * randomColor3f();
 		light->pos = eCurPos;
-		light->duration = ArxDurationMs(200);
+		light->duration = GameDurationMs(200);
 		light->extras = 0;
 	}
 }

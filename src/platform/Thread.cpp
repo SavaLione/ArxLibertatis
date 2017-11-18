@@ -37,8 +37,8 @@
 #endif
 
 #if ARX_HAVE_GET_CPUID && !defined(ARX_INCLUDED_CPUID_H)
-#define ARX_INCLUDED_CPUID_H
-#include <cpuid.h>
+#define ARX_INCLUDED_CPUID_H <cpuid.h>
+#include ARX_INCLUDED_CPUID_H
 #endif
 
 #include <boost/static_assert.hpp>
@@ -320,13 +320,12 @@ void Thread::disableFloatDenormals() {
 	#endif
 	
 	#define ARX_CPUID_ECX_SSE3 (1 << 0)
-	#define ARX_CPUID_EDX_FXSR (1 << 24)
-	
 	if(cpuinfo[2] & ARX_CPUID_ECX_SSE3) {
 		have_daz = true;
 	}
 	
 	#if ARX_COMPILER_MSVC || ARX_HAVE_BUILTIN_IA32_FXSAVE
+	#define ARX_CPUID_EDX_FXSR (1 << 24)
 	else if(cpuinfo[3] & ARX_CPUID_EDX_FXSR) {
 		ARX_ALIGNAS(16) char buffer[512];
 		#if ARX_COMPILER_MSVC
@@ -376,19 +375,19 @@ void Thread::disableFloatDenormals() {
 
 #include <time.h>
 
-void Thread::sleep(unsigned milliseconds) {
+void Thread::sleep(PlatformDuration time) {
 	
 	timespec t;
-	t.tv_sec = milliseconds / 1000;
-	t.tv_nsec = (milliseconds % 1000) * 1000000;
+	t.tv_sec = time_t(toUs(time) / 1000000);
+	t.tv_nsec = long(toUs(time) % 1000000) * 1000l;
 	
 	nanosleep(&t, NULL);
 }
 
 #elif ARX_PLATFORM == ARX_PLATFORM_WIN32
 
-void Thread::sleep(unsigned milliseconds) {
-	Sleep(milliseconds);
+void Thread::sleep(PlatformDuration time) {
+	Sleep(DWORD(toMsi(time)));
 }
 
 #else

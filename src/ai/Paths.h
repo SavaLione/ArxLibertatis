@@ -50,6 +50,7 @@ ZeniMax Media Inc., Suite 120, Rockville, Maryland 20850 USA.
 #include <stddef.h>
 #include <string>
 
+#include "core/TimeTypes.h"
 #include "graphics/BaseGraphicsTypes.h"
 #include "graphics/Color.h"
 #include "io/resource/ResourcePath.h"
@@ -66,9 +67,9 @@ enum PathwayType {
 };
 
 struct ARX_PATHWAY {
-	Vec3f rpos; //relative pos
+	Vec3f rpos; // Relative position
 	PathwayType flag;
-	float _time;
+	GameDuration _time;
 };
 
 // ARX_PATH@flags values
@@ -126,8 +127,8 @@ DECLARE_FLAGS_OPERATORS(UsePathFlags)
 
 struct ARX_USE_PATH {
 	ARX_PATH * path;
-	float _starttime;
-	float _curtime;
+	GameInstant _starttime;
+	GameInstant _curtime;
 	UsePathFlags aupflags;
 	Vec3f initpos;
 	long lastWP;

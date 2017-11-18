@@ -58,6 +58,7 @@ ZeniMax Media Inc., Suite 120, Rockville, Maryland 20850 USA.
 #include "game/Spells.h"
 
 #include "graphics/Draw.h"
+#include "graphics/GlobalFog.h"
 #include "graphics/Math.h"
 #include "graphics/data/Mesh.h"
 #include "graphics/particle/ParticleEffects.h"
@@ -76,8 +77,8 @@ struct POLYBOOM {
 	short type;
 	short nbvert;
 	TextureContainer * tc;
-	ArxInstant timecreation;
-	ArxDuration tolive;
+	GameInstant timecreation;
+	GameDuration tolive;
 };
 
 static const size_t MAX_POLYBOOM = 4000;
@@ -86,7 +87,6 @@ static std::vector<POLYBOOM> polyboom(MAX_POLYBOOM);
 static const float BOOM_RADIUS = 420.f;
 
 extern TextureContainer * Boom;
-extern Color ulBKGColor;
 
 size_t PolyBoomCount() {
 	return polyboom.size();
@@ -147,8 +147,8 @@ void PolyBoomAddScorch(const Vec3f & poss) {
 			pb.type = 0;
 			pb.ep = ep;
 			pb.tc = tc2;
-			pb.tolive = ArxDurationMs(10000);
-			pb.timecreation = arxtime.now();
+			pb.tolive = GameDurationMs(10000);
+			pb.timecreation = g_gameTime.now();
 			pb.rgb = Color3f::black;
 			for(int k = 0; k < nbvert; k++) {
 				pb.v[k] = pb.u[k] = temp_uv1[k];
@@ -217,19 +217,19 @@ void PolyBoomAddSplat(const Sphere & sp, const Color3f & col, long flags) {
 	
 	EERIEPOLY TheoricalSplat; // clockwise
 	TheoricalSplat.v[0].p.x=-splatsize;
-	TheoricalSplat.v[0].p.y = py; 
+	TheoricalSplat.v[0].p.y = py;
 	TheoricalSplat.v[0].p.z=-splatsize;
 	
 	TheoricalSplat.v[1].p.x=-splatsize;
-	TheoricalSplat.v[1].p.y = py; 
+	TheoricalSplat.v[1].p.y = py;
 	TheoricalSplat.v[1].p.z=+splatsize;
 	
 	TheoricalSplat.v[2].p.x=+splatsize;
-	TheoricalSplat.v[2].p.y = py; 
+	TheoricalSplat.v[2].p.y = py;
 	TheoricalSplat.v[2].p.z=+splatsize;
 	
 	TheoricalSplat.v[3].p.x=+splatsize;
-	TheoricalSplat.v[3].p.y = py; 
+	TheoricalSplat.v[3].p.y = py;
 	TheoricalSplat.v[3].p.z=-splatsize;
 	TheoricalSplat.type=POLY_QUAD;
 	
@@ -250,10 +250,9 @@ void PolyBoomAddSplat(const Sphere & sp, const Color3f & col, long flags) {
 	RealSplatStart.x += poss.x;
 	RealSplatStart.z += poss.z;
 	
-	float hdiv,vdiv;
-	hdiv=vdiv=1.f/(size*2);
+	float div = 1.f / (size * 2);
 	
-	ArxInstant now = arxtime.now();
+	GameInstant now = g_gameTime.now();
 	
 	std::vector<POLYBOOM>::iterator pb = polyboom.begin();
 	while(pb != polyboom.end()) {
@@ -320,36 +319,39 @@ void PolyBoomAddSplat(const Sphere & sp, const Color3f & col, long flags) {
 						long num = Random::get(0, 2);
 						pb.tc = water_splat[num];
 						
-						pb.tolive = ArxDurationMs(1500);
+						pb.tolive = GameDurationMs(1500);
 					} else {
 						pb.type = 1;
 						
 						long num = Random::get(0, 5);
 						pb.tc = bloodsplat[num];
 						
-						pb.tolive = ArxDurationMs(16000 * size * (1.0f/40));
+						pb.tolive = GameDurationMsf((16000.f / 40) * size);
 					}
 					
-					pb.ep=ep;
+					pb.ep = ep;
 					
-					pb.timecreation=now;
+					pb.timecreation = now;
 					pb.rgb = col;
 					
 					for(int k = 0; k < nbvert; k++) {
-						float vdiff=glm::abs(ep->v[k].p.y-RealSplatStart.y);
-						pb.u[k]=(ep->v[k].p.x-RealSplatStart.x)*hdiv;
 						
-						if(pb.u[k]<0.5f)
-							pb.u[k]-=vdiff*hdiv;
-						else
-							pb.u[k]+=vdiff*hdiv;
+						float vdiff = glm::abs(ep->v[k].p.y - RealSplatStart.y);
 						
-						pb.v[k]=(ep->v[k].p.z-RealSplatStart.z)*vdiv;
+						pb.u[k] = (ep->v[k].p.x - RealSplatStart.x) * div;
+						if(pb.u[k] < 0.5f) {
+							pb.u[k] -= vdiff * div;
+						} else {
+							pb.u[k] += vdiff * div;
+						}
 						
-						if(pb.v[k]<0.5f)
-							pb.v[k]-=vdiff*vdiv;
-						else
-							pb.v[k]+=vdiff*vdiv;
+						pb.v[k] = (ep->v[k].p.z-RealSplatStart.z) * div;
+						if(pb.v[k] < 0.5f) {
+							pb.v[k] -= vdiff * div;
+						} else {
+							pb.v[k] += vdiff * div;
+						}
+						
 					}
 					
 					pb.nbvert = short(nbvert);
@@ -367,7 +369,7 @@ void PolyBoomDraw() {
 	ARX_PROFILE_FUNC();
 	
 	GRenderer->SetFogColor(Color::none); // TODO: not handled by RenderMaterial
-	ArxInstant now = arxtime.now();
+	GameInstant now = g_gameTime.now();
 	
 	for(size_t i = 0; i < polyboom.size(); i++) {
 		
@@ -375,20 +377,17 @@ void PolyBoomDraw() {
 		
 		// FIXME what exactly does pb.type do ?
 		if(pb.type & 128) {
-			if(toMs(pb.timecreation) - g_framedelay > 0) {
-				float fCalc = toMs(pb.timecreation) - g_framedelay;
-				pb.timecreation = ArxInstantMs(fCalc);
+			if(pb.timecreation - g_gameTime.lastFrameDuration() > 0) {
+				pb.timecreation = pb.timecreation - g_gameTime.lastFrameDuration();
 			}
 			
-			if(toMs(pb.timecreation) - g_framedelay > 0) {
-				float fCalc =  toMs(pb.timecreation) - g_framedelay;
-				pb.timecreation = ArxInstantMs(fCalc);
+			if(pb.timecreation - g_gameTime.lastFrameDuration() > 0) {
+				pb.timecreation = pb.timecreation - g_gameTime.lastFrameDuration();
 			}
 		}
 		
-		ArxDuration t = pb.timecreation + pb.tolive - now;
-		
-		if(t <= ArxDuration_ZERO) {
+		GameDuration t = pb.timecreation + pb.tolive - now;
+		if(t <= 0) {
 			std::swap(polyboom[i], polyboom.back());
 			polyboom.pop_back();
 			i--;
@@ -406,7 +405,7 @@ void PolyBoomDraw() {
 		
 		POLYBOOM & pb = *itr;
 		
-		ArxDuration t = pb.timecreation + pb.tolive - now;
+		GameDuration t = pb.timecreation + pb.tolive - now;
 		
 		long typp = pb.type;
 		typp &= ~128;
@@ -414,8 +413,7 @@ void PolyBoomDraw() {
 		switch(typp) {
 			
 			case 0: { // Scorch mark
-				
-				float tt = toMs(t) / float(toMs(pb.tolive)) * 0.8f;
+				float tt = t / pb.tolive * 0.8f;
 				ColorRGBA col = (player.m_improve ? (Color3f::red * (tt*.5f)) : Color3f::gray(tt)).toRGB();
 				
 				TexturedVertexUntransformed ltv[4];
@@ -443,9 +441,7 @@ void PolyBoomDraw() {
 			}
 			
 			case 1: { // Blood
-				
-				float div = 1.f / toMs(pb.tolive);
-				float tt = toMs(t) * div;
+				float tt = t / pb.tolive;
 				float tr = std::max(1.f, tt * 2 - 0.5f);
 				ColorRGBA col = Color4f(pb.rgb * tt, glm::clamp(tt * 1.5f, 0.f, 1.f)).toRGBA();
 				
@@ -470,9 +466,7 @@ void PolyBoomDraw() {
 			}
 			
 			case 2: { // Water
-				
-				float div = 1.f / toMs(pb.tolive);
-				float tt = toMs(t) * div;
+				float tt = t / pb.tolive;
 				float tr = std::max(1.f, tt * 2 - 0.5f);
 				float ttt = tt * 0.5f;
 				ColorRGBA col = (pb.rgb * ttt).toRGB();
@@ -525,5 +519,5 @@ void PolyBoomDraw() {
 		++itr;
 	}
 	
-	GRenderer->SetFogColor(ulBKGColor);
+	GRenderer->SetFogColor(g_fogColor);
 }

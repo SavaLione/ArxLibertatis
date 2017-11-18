@@ -36,6 +36,8 @@ typedef DWORD thread_id_type;
 #error "Threads not supported: need ARX_HAVE_PTHREADS on non-Windows systems"
 #endif
 
+#include "core/TimeTypes.h"
+
 class Thread {
 	
 private:
@@ -91,7 +93,7 @@ public:
 	/*!
 	 * \brief Suspend the current thread for a specific amount of time
 	 */
-	static void sleep(unsigned milliseconds);
+	static void sleep(PlatformDuration time);
 	
 	/*!
 	 * \brief Exit the current thread
@@ -122,20 +124,20 @@ class StoppableThread : public Thread {
 	
 private:
 	
-	bool stopRequested;
+	volatile bool m_stopRequested;
 	
 public:
 	
-	StoppableThread() : stopRequested(false) { }
+	StoppableThread() : m_stopRequested(false) { }
 	
 	void stop(Priority priority = Highest) {
-		stopRequested = true;
+		m_stopRequested = true;
 		setPriority(priority);
 		waitForCompletion();
 	}
 	
 	bool isStopRequested() {
-		return stopRequested;
+		return m_stopRequested;
 	}
 	
 };

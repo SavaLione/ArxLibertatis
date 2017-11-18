@@ -101,22 +101,22 @@ class TextureContainer;
 
 struct DAMAGE_INFO {
 	short exist;
-	ArxInstant start_time;
-	ArxInstant lastupd;
+	GameInstant start_time;
+	GameInstant lastupd;
 	
 	DamageParameters params;
 };
 
 const size_t MAX_DAMAGES = 200;
-DAMAGE_INFO	damages[MAX_DAMAGES];
+static DAMAGE_INFO g_damages[MAX_DAMAGES];
 
 DamageHandle DamageCreate(const DamageParameters & params) {
 	for(size_t i = 0; i < MAX_DAMAGES; i++) {
-		if(!damages[i].exist) {
-			DAMAGE_INFO & damage = damages[i];
+		if(!g_damages[i].exist) {
+			DAMAGE_INFO & damage = g_damages[i];
 			damage.params = params;
-			damage.start_time = arxtime.now();
-			damage.lastupd = ArxInstant_ZERO;
+			damage.start_time = g_gameTime.now();
+			damage.lastupd = 0;
 			damage.exist = true;
 			return DamageHandle(i);
 		}
@@ -127,7 +127,7 @@ DamageHandle DamageCreate(const DamageParameters & params) {
 
 void DamageRequestEnd(DamageHandle handle) {
 	if(handle.handleData() >= 0) {
-		damages[handle.handleData()].exist = 0;
+		g_damages[handle.handleData()].exist = 0;
 	}
 }
 
@@ -136,7 +136,7 @@ void DamageRequestEnd(DamageHandle handle) {
 extern Vec3f PUSH_PLAYER_FORCE;
 
 static float Blood_Pos = 0.f;
-static long Blood_Duration = 0;
+static GameDuration Blood_Duration = 0;
 
 static void ARX_DAMAGES_IgnitIO(Entity * io, float dmg)
 {
@@ -164,7 +164,7 @@ void ARX_DAMAGE_Show_Hit_Blood()
 {
 	Color color;
 	static float Last_Blood_Pos = 0.f;
-	static long duration;
+	static GameDuration duration;
 
 	if(Blood_Pos > 2.f) { // end of blood flash
 		Blood_Pos = 0.f;
@@ -197,12 +197,12 @@ void ARX_DAMAGE_Show_Hit_Blood()
 			}
 
 			if(duration > Blood_Duration)
-				Blood_Pos += g_framedelay * ( 1.0f / 300 );
+				Blood_Pos += g_gameTime.lastFrameDuration() / GameDurationMs(300);
 
-			duration += static_cast<long>(g_framedelay);
+			duration += g_gameTime.lastFrameDuration();
 		}
 		else
-			Blood_Pos += g_framedelay * ( 1.0f / 40 );
+			Blood_Pos += g_gameTime.lastFrameDuration() / GameDurationMs(40);
 	}
 
 	Last_Blood_Pos = Blood_Pos;
@@ -224,8 +224,8 @@ float ARX_DAMAGES_DamagePlayer(float dmg, DamageType type, EntityHandle source) 
 
 	entities.player()->dmg_sum += dmg;
 	
-	ArxDuration elapsed = arxtime.now() - entities.player()->ouch_time;
-	if(elapsed > ArxDurationMs(500)) {
+	GameDuration elapsed = g_gameTime.now() - entities.player()->ouch_time;
+	if(elapsed > GameDurationMs(500)) {
 		Entity * oes = EVENT_SENDER;
 
 		if(ValidIONum(source))
@@ -233,7 +233,7 @@ float ARX_DAMAGES_DamagePlayer(float dmg, DamageType type, EntityHandle source) 
 		else
 			EVENT_SENDER = NULL;
 
-		entities.player()->ouch_time = arxtime.now();
+		entities.player()->ouch_time = g_gameTime.now();
 		char tex[32];
 		sprintf(tex, "%5.2f", double(entities.player()->dmg_sum));
 		SendIOScriptEvent( entities.player(), SM_OUCH, tex );
@@ -258,7 +258,7 @@ float ARX_DAMAGES_DamagePlayer(float dmg, DamageType type, EntityHandle source) 
 				pio = entities[source];
 
 			if(pio && pio->poisonous && pio->poisonous_count != 0) {
-				if(Random::getf(0.f, 100.f) > player.m_misc.resistPoison) {
+				if(Random::getf(0.f, 100.f) > player.m_miscFull.resistPoison) {
 					player.poison += pio->poisonous;
 				}
 
@@ -319,10 +319,9 @@ float ARX_DAMAGES_DamagePlayer(float dmg, DamageType type, EntityHandle source) 
 
 		if(Blood_Pos == 0.f) {
 			Blood_Pos = 0.000001f;
-			Blood_Duration = 100 + (t * 200.f);
+			Blood_Duration = GameDurationMsf(100.f + t * 200.f);
 		} else {
-			long temp = t * 800.f;
-			Blood_Duration += temp;
+			Blood_Duration += GameDurationMsf(t * 800.f);
 		}
 	}
 
@@ -444,9 +443,9 @@ void ARX_DAMAGES_DamageFIX(Entity * io, float dmg, EntityHandle source, bool isS
 	else
 		EVENT_SENDER = NULL;
 
-	ArxDuration elapsed = arxtime.now() - io->ouch_time;
-	if(elapsed > ArxDurationMs(500)) {
-		io->ouch_time = arxtime.now();
+	GameDuration elapsed = g_gameTime.now() - io->ouch_time;
+	if(elapsed > GameDurationMs(500)) {
+		io->ouch_time = g_gameTime.now();
 		char tex[32];
 		sprintf(tex, "%5.2f", double(io->dmg_sum));
 		SendIOScriptEvent(io, SM_OUCH, tex);
@@ -545,7 +544,7 @@ void ARX_DAMAGES_ForceDeath(Entity * io_dead, Entity * io_killer) {
 
 	if(fartherThan(io_dead->pos, ACTIVECAM->orgTrans.pos, 3200.f)) {
 		io_dead->animlayer[0].ctime = AnimationDurationMs(9999999);
-		io_dead->animBlend.lastanimtime = ArxInstant_ZERO;
+		io_dead->animBlend.lastanimtime = 0;
 	}
 
 	std::string killer;
@@ -572,7 +571,7 @@ void ARX_DAMAGES_ForceDeath(Entity * io_dead, Entity * io_killer) {
 		if(ioo && (ioo->ioflags & IO_NPC)) {
 			if(ValidIONum(ioo->targetinfo))
 				if(entities[ioo->targetinfo] == io_dead) {
-					EVENT_SENDER = io_dead; 
+					EVENT_SENDER = io_dead;
 					Stack_SendIOScriptEvent(entities[handle], SM_NULL, killer, "target_death");
 					ioo->targetinfo = EntityHandle(TARGET_NONE);
 					ioo->_npcdata->reachedtarget = 0;
@@ -580,7 +579,7 @@ void ARX_DAMAGES_ForceDeath(Entity * io_dead, Entity * io_killer) {
 
 			if(ValidIONum(ioo->_npcdata->pathfind.truetarget))
 				if(entities[ioo->_npcdata->pathfind.truetarget] == io_dead) {
-					EVENT_SENDER = io_dead; 
+					EVENT_SENDER = io_dead;
 					Stack_SendIOScriptEvent(entities[handle], SM_NULL, killer, "target_death");
 					ioo->_npcdata->pathfind.truetarget = EntityHandle(TARGET_NONE);
 					ioo->_npcdata->reachedtarget = 0;
@@ -636,12 +635,12 @@ void ARX_DAMAGES_DealDamages(EntityHandle target, float dmg, EntityHandle source
 	float damagesdone;
 
 	if(flags & DAMAGE_TYPE_PER_SECOND) {
-		dmg = dmg * g_framedelay * (1.0f / 1000);
+		dmg = dmg * (g_gameTime.lastFrameDuration() / GameDurationMs(1000));
 	}
 
 	if(target == EntityHandle_Player) {
 		if(flags & DAMAGE_TYPE_POISON) {
-			if(Random::getf(0.f, 100.f) > player.m_misc.resistPoison) {
+			if(Random::getf(0.f, 100.f) > player.m_miscFull.resistPoison) {
 				damagesdone = dmg;
 				player.poison += damagesdone;
 			} else {
@@ -728,14 +727,14 @@ float ARX_DAMAGES_DamageNPC(Entity * io, float dmg, EntityHandle source, bool is
 
 	io->dmg_sum += dmg;
 	
-	ArxDuration elapsed = arxtime.now() - io->ouch_time;
-	if(elapsed > ArxDurationMs(500)) {
+	GameDuration elapsed = g_gameTime.now() - io->ouch_time;
+	if(elapsed > GameDurationMs(500)) {
 		if(ValidIONum(source))
 			EVENT_SENDER = entities[source];
 		else
 			EVENT_SENDER = NULL;
 
-		io->ouch_time = arxtime.now();
+		io->ouch_time = g_gameTime.now();
 		char tex[32];
 
 		if(EVENT_SENDER && EVENT_SENDER->summoner == EntityHandle_Player) {
@@ -788,7 +787,7 @@ float ARX_DAMAGES_DamageNPC(Entity * io, float dmg, EntityHandle source, bool is
 		if(io->script.data != NULL) {
 			if(source.handleData() >= EntityHandle_Player.handleData()) {
 				if(ValidIONum(source))
-					EVENT_SENDER = entities[source]; 
+					EVENT_SENDER = entities[source];
 				else
 					EVENT_SENDER = NULL;
 
@@ -869,7 +868,7 @@ float ARX_DAMAGES_DamageNPC(Entity * io, float dmg, EntityHandle source, bool is
 
 void ARX_DAMAGES_Reset()
 {
-	memset(damages, 0, sizeof(DAMAGE_INFO)*MAX_DAMAGES);
+	memset(g_damages, 0, sizeof(DAMAGE_INFO)*MAX_DAMAGES);
 }
 
 extern TextureContainer * TC_fire2;
@@ -882,8 +881,8 @@ static void ARX_DAMAGES_AddVisual(DAMAGE_INFO & di, const Vec3f & pos, float dmg
 		return;
 	}
 	
-	ArxInstant now = arxtime.now();
-	if(di.lastupd + ArxDurationMs(200) < now) {
+	GameInstant now = g_gameTime.now();
+	if(di.lastupd + GameDurationMs(200) < now) {
 		di.lastupd = now;
 		if(di.params.type & DAMAGE_TYPE_MAGICAL) {
 			ARX_SOUND_PlaySFX(SND_SPELL_MAGICAL_HIT, &pos, Random::getf(0.8f, 1.2f));
@@ -922,11 +921,11 @@ static void ARX_DAMAGES_AddVisual(DAMAGE_INFO & di, const Vec3f & pos, float dmg
 // source = -1 no source but valid pos
 // source = 0  player
 // source > 0  IO
-static void ARX_DAMAGES_UpdateDamage(DamageHandle j, ArxInstant now) {
+static void ARX_DAMAGES_UpdateDamage(DamageHandle j, GameInstant now) {
 	
 	ARX_PROFILE_FUNC();
 	
-	DAMAGE_INFO & damage = damages[j.handleData()];
+	DAMAGE_INFO & damage = g_damages[j.handleData()];
 	
 	if(!damage.exist) {
 		return;
@@ -943,16 +942,16 @@ static void ARX_DAMAGES_UpdateDamage(DamageHandle j, ArxInstant now) {
 	float dmg;
 	if(damage.params.flags & DAMAGE_NOT_FRAME_DEPENDANT) {
 		dmg = damage.params.damages;
-	} else if(damage.params.duration == ArxDuration::ofRaw(-1)) {
+	} else if(damage.params.duration == GameDuration::ofRaw(-1)) {
 		dmg = damage.params.damages;
 	} else {
-		ArxDuration FD = ArxDurationMs(g_framedelay);
+		GameDuration FD = g_gameTime.lastFrameDuration();
 		
 		if(now > damage.start_time + damage.params.duration) {
 			FD -= damage.start_time + damage.params.duration - now;
 		}
 		
-		dmg = damage.params.damages * toMs(FD) * ( 1.0f / 1000 );
+		dmg = damage.params.damages * (FD / GameDurationMs(1000));
 	}
 	
 	bool validsource = ValidIONum(damage.params.source);
@@ -987,10 +986,10 @@ static void ARX_DAMAGES_UpdateDamage(DamageHandle j, ArxInstant now) {
 					float dist = fdist(damage.params.pos, sub);
 					
 					if(damage.params.type & DAMAGE_TYPE_FIELD) {
-						ArxDuration elapsed = arxtime.now() - io->collide_door_time;
-						if(elapsed > ArxDurationMs(500)) {
+						GameDuration elapsed = g_gameTime.now() - io->collide_door_time;
+						if(elapsed > GameDurationMs(500)) {
 							EVENT_SENDER = NULL;
-							io->collide_door_time = arxtime.now();
+							io->collide_door_time = g_gameTime.now();
 							
 							const char * param = "";
 							
@@ -1059,9 +1058,9 @@ static void ARX_DAMAGES_UpdateDamage(DamageHandle j, ArxInstant now) {
 						// TODO copy-paste
 						if(handle == EntityHandle_Player) {
 							if(damage.params.type & DAMAGE_TYPE_POISON) {
-								if(Random::getf(0.f, 100.f) > player.m_misc.resistPoison) {
+								if(Random::getf(0.f, 100.f) > player.m_miscFull.resistPoison) {
 									// Failed Saving Throw
-									damagesdone = dmg; 
+									damagesdone = dmg;
 									player.poison += damagesdone;
 								} else {
 									damagesdone = 0;
@@ -1089,7 +1088,7 @@ static void ARX_DAMAGES_UpdateDamage(DamageHandle j, ArxInstant now) {
 							) {
 								if(Random::getf(0.f, 100.f) > io->_npcdata->resist_poison) {
 									// Failed Saving Throw
-									damagesdone = dmg; 
+									damagesdone = dmg;
 									io->_npcdata->poisonned += damagesdone;
 								} else {
 									damagesdone = 0;
@@ -1133,7 +1132,7 @@ static void ARX_DAMAGES_UpdateDamage(DamageHandle j, ArxInstant now) {
 		}
 	}
 	
-	if(damage.params.duration == ArxDuration::ofRaw(-1))
+	if(damage.params.duration == GameDuration::ofRaw(-1))
 		damage.exist = false;
 	else if(now > damage.start_time + damage.params.duration)
 		damage.exist = false;
@@ -1144,7 +1143,7 @@ void ARX_DAMAGES_UpdateAll() {
 	ARX_PROFILE_FUNC();
 	
 	for (size_t j = 0; j < MAX_DAMAGES; j++)
-		ARX_DAMAGES_UpdateDamage(DamageHandle(j), arxtime.now());
+		ARX_DAMAGES_UpdateDamage(DamageHandle(j), g_gameTime.now());
 }
 
 static bool SphereInIO(Entity * io, const Sphere & sphere) {
@@ -1504,10 +1503,10 @@ float ARX_DAMAGES_ComputeRepairPrice(const Entity * torepair, const Entity * bla
 void ARX_DAMAGES_DrawDebug() {
 	
 	for(size_t i = 0; i < MAX_DAMAGES; i++) {
-		if(!damages[i].exist)
+		if(!g_damages[i].exist)
 			continue;
 		
-		DAMAGE_INFO & d = damages[i];
+		DAMAGE_INFO & d = g_damages[i];
 		
 		drawLineSphere(Sphere(d.params.pos, d.params.radius), Color::red);
 	}

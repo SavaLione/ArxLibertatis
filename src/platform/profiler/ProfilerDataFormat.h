@@ -22,7 +22,7 @@
 
 #include "platform/Platform.h"
 
-#pragma pack(push,1)
+#pragma pack(push, 1)
 
 static const char * profilerMagic = "arxprof";
 struct SavedProfilerHeader {
@@ -51,15 +51,15 @@ ARX_STATIC_ASSERT(sizeof(SavedProfilerChunkHeader) == 64, "Header size mismatch"
 struct SavedProfilerThread {
 	u32 stringIndex;
 	u64 threadId;
-	u64 startTime;
-	u64 endTime;
+	s64 startTime;
+	s64 endTime;
 };
 
 struct SavedProfilerSample {
 	u32 stringIndex;
 	u64 threadId;
-	u64 startTime;
-	u64 endTime;
+	s64 startTime;
+	s64 endTime;
 };
 
 #pragma pack(pop)

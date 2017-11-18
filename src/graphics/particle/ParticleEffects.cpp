@@ -63,7 +63,7 @@ ZeniMax Media Inc., Suite 120, Rockville, Maryland 20850 USA.
 #include "gui/Interface.h"
 
 #include "graphics/Draw.h"
-#include "graphics/GraphicsModes.h"
+#include "graphics/GlobalFog.h"
 #include "graphics/GraphicsTypes.h"
 #include "graphics/Math.h"
 #include "graphics/data/TextureContainer.h"
@@ -86,12 +86,9 @@ ZeniMax Media Inc., Suite 120, Rockville, Maryland 20850 USA.
 #include "scene/Interactive.h"
 #include "scene/Light.h"
 
-//TODO(lubosz): extern globals :(
-extern Color ulBKGColor;
-
 static const size_t MAX_PARTICLES = 2200;
 static long ParticleCount = 0;
-static PARTICLE_DEF particle[MAX_PARTICLES];
+static PARTICLE_DEF g_particles[MAX_PARTICLES];
 
 static TextureContainer * blood_splat = NULL;
 TextureContainer * bloodsplat[6];
@@ -223,11 +220,13 @@ static void ARX_PARTICLES_Spawn_Blood3(const Vec3f & pos, float dmgs, Color col,
 	
 	PARTICLE_DEF * pd = createParticle();
 	if(pd) {
+		float sinW = timeWaveSin(g_gameTime.now(), GameDurationMsf(6283.19f));
+		float cosW = timeWaveCos(g_gameTime.now(), GameDurationMsf(6283.19f));
 		
 		float power = (dmgs * (1.f/60)) + .9f;
-		const float nows = arxtime.now_f() * 0.001f;
-		pd->ov = pos + Vec3f(-glm::sin(nows), glm::sin(nows), glm::cos(nows)) * 30.f;
-		pd->siz = 3.5f * power + glm::sin(nows);
+		
+		pd->ov = pos + Vec3f(-sinW, sinW, cosW) * 30.f;
+		pd->siz = 3.5f * power + sinW;
 		pd->scale = Vec3f(-pd->siz * 0.5f);
 		pd->m_flags = PARTICLE_SUB2 | SUBSTRACT | GRAVITY | ROTATING | flags;
 		pd->tolive = 1100;
@@ -433,7 +432,7 @@ void ManageTorch() {
 		el->fallend = el->fallstart + 280.f;
 		el->exist = 1;
 		el->rgb = player.m_torchColor - Color3f(rr, rr, rr) * Color3f(0.1f, 0.1f, 0.1f);
-		el->duration = ArxDuration_ZERO;
+		el->duration = 0;
 		el->extras = 0;
 		
 	} else if(cur_mr == 3) {
@@ -441,10 +440,10 @@ void ManageTorch() {
 		el->pos = player.pos;
 		el->intensity = 1.8f;
 		el->fallstart = 480.f;
-		el->fallend = el->fallstart + 480.f; 
+		el->fallend = el->fallstart + 480.f;
 		el->exist = 1;
 		el->rgb = Color3f(1.f, .5f, .8f);
-		el->duration = ArxDuration_ZERO;
+		el->duration = 0;
 		el->extras = 0;
 		
 	} else {
@@ -545,19 +544,19 @@ void ARX_PARTICLES_FirstInit() {
 
 void ARX_PARTICLES_ClearAll() {
 	
-	std::fill(particle, particle + MAX_PARTICLES, PARTICLE_DEF());
+	std::fill(g_particles, g_particles + MAX_PARTICLES, PARTICLE_DEF());
 	ParticleCount = 0;
 }
 
 PARTICLE_DEF * createParticle(bool allocateWhilePaused) {
 	
-	if(!allocateWhilePaused && arxtime.is_paused()) {
+	if(!allocateWhilePaused && g_gameTime.isPaused()) {
 		return NULL;
 	}
 	
 	for(size_t i = 0; i < MAX_PARTICLES; i++) {
 		
-		PARTICLE_DEF * pd = &particle[i];
+		PARTICLE_DEF * pd = &g_particles[i];
 		
 		if(pd->exist) {
 			continue;
@@ -565,7 +564,7 @@ PARTICLE_DEF * createParticle(bool allocateWhilePaused) {
 		
 		ParticleCount++;
 		pd->exist = true;
-		pd->timcreation = toMs(arxtime.now());
+		pd->timcreation = toMsi(g_gameTime.now());
 		
 		pd->is2D = false;
 		pd->rgb = Color3f::white;
@@ -785,19 +784,19 @@ void ARX_PARTICLES_Update(EERIE_CAMERA * cam)  {
 		return;
 	}
 	
-	const ArxInstant now = arxtime.now();
+	const GameInstant now = g_gameTime.now();
 	
 	long pcc = ParticleCount;
 	
 	for(size_t i = 0; i < MAX_PARTICLES && pcc > 0; i++) {
 
-		PARTICLE_DEF * part = &particle[i];
+		PARTICLE_DEF * part = &g_particles[i];
 		if(!part->exist) {
 			continue;
 		}
 
-		long framediff = part->timcreation + part->tolive - toMs(now);
-		long framediff2 = toMs(now) - part->timcreation;
+		long framediff = part->timcreation + part->tolive - toMsi(now);
+		long framediff2 = toMsi(now) - part->timcreation;
 		
 		if(framediff2 < long(part->delay)) {
 			continue;
@@ -834,14 +833,14 @@ void ARX_PARTICLES_Update(EERIE_CAMERA * cam)  {
 			if((part->m_flags & FIRE_TO_SMOKE) && Random::getf() > 0.7f) {
 				
 				part->ov += part->move;
-				part->tolive = part->tolive * 1.375f;
+				part->tolive = u32(part->tolive * 1.375f);
 				part->m_flags &= ~FIRE_TO_SMOKE;
 				part->tc = smokeparticle;
 				part->scale = glm::abs(part->scale * 2.4f);
 				part->rgb = Color3f::gray(.45f);
 				part->move *= 0.5f;
 				part->siz *= 1.f / 3;
-				part->timcreation = toMs(now);
+				part->timcreation = toMsi(now);
 				
 				framediff = part->tolive;
 				
@@ -951,7 +950,7 @@ void ARX_PARTICLES_Update(EERIE_CAMERA * cam)  {
 		
 		if(part->m_flags & PARTICLE_SUB2) {
 			mat.setBlendType(RenderMaterial::Subtractive2);
-			color.a = glm::clamp(r * 1.5f, 0.f, 1.f) * 255;
+			color.a = u8(glm::clamp(r * 1.5f, 0.f, 1.f) * 255);
 		} else if(part->m_flags & SUBSTRACT) {
 			mat.setBlendType(RenderMaterial::Subtractive);
 		} else {
@@ -960,7 +959,7 @@ void ARX_PARTICLES_Update(EERIE_CAMERA * cam)  {
 		
 		if(part->m_flags & ROTATING) {
 			if(!part->is2D) {
-				float rott = MAKEANGLE(float(toMs(now) + framediff2) * part->m_rotation);
+				float rott = MAKEANGLE(float(toMsi(now) + framediff2) * part->m_rotation);
 				
 				float temp = (part->zdec) ? 0.0001f : 2.f;
 				float size = std::max(siz, 0.f);
@@ -1021,7 +1020,7 @@ void TreatBackgroundActions() {
 			damage.radius = gl->ex_radius;
 			damage.damages = gl->ex_radius * (1.0f / 7);
 			damage.area = DAMAGE_FULL;
-			damage.duration = ArxDurationMs(1);
+			damage.duration = GameDurationMs(1);
 			damage.source = EntityHandle();
 			damage.flags = 0;
 			damage.type = DAMAGE_TYPE_MAGICAL | DAMAGE_TYPE_FIRE | DAMAGE_TYPE_NO_FIX;
@@ -1065,7 +1064,7 @@ void TreatBackgroundActions() {
 					pd->move = Vec3f(2.f, 2.f, 2.f) - Vec3f(4.f, 22.f, 4.f) * arx::randomVec3f();
 					pd->move *= gl->ex_speed;
 					pd->siz = 7.f * gl->ex_size;
-					pd->tolive = 500 + Random::getu(0, 1000 * gl->ex_speed);
+					pd->tolive = 500 + Random::getu(0, unsigned(1000 * gl->ex_speed));
 					if((gl->extras & EXTRAS_SPAWNFIRE) && (gl->extras & EXTRAS_SPAWNSMOKE)) {
 						pd->m_flags = FIRE_TO_SMOKE;
 					}
@@ -1091,7 +1090,7 @@ void TreatBackgroundActions() {
 					float d = (gl->extras & EXTRAS_FIREPLACE) ? 6.f : 4.f;
 					pd->move = Vec3f(vect.x * d, Random::getf(-18.f, -10.f), vect.z * d) * gl->ex_speed;
 					pd->siz = 4.f * gl->ex_size * 0.3f;
-					pd->tolive = 1200 + Random::getu(0, 500 * gl->ex_speed);
+					pd->tolive = 1200 + Random::getu(0, unsigned(500 * gl->ex_speed));
 					pd->tc = fire2;
 					pd->m_flags |= ROTATING | GRAVITY;
 					pd->m_rotation = 0.1f - Random::getf(0.f, 0.2f) * gl->ex_speed;

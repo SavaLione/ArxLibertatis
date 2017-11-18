@@ -51,16 +51,17 @@ ZeniMax Media Inc., Suite 120, Rockville, Maryland 20850 USA.
 
 // Video options
 
-void ARXMenu_Options_Video_SetFogDistance(int fogDistance);
+void ARXMenu_Options_Video_SetFogDistance(float distance);
 void ARXMenu_Options_Video_SetDetailsQuality(int lod);
+void ARXMenu_Options_Video_SetGamma(float gamma);
 
 // Audio options
 
 void ARXMenu_Options_Audio_SetDevice(const std::string & device);
-void ARXMenu_Options_Audio_SetMasterVolume(int volume);
-void ARXMenu_Options_Audio_SetSfxVolume(int volume);
-void ARXMenu_Options_Audio_SetSpeechVolume(int volume);
-void ARXMenu_Options_Audio_SetAmbianceVolume(int volume);
+void ARXMenu_Options_Audio_SetMasterVolume(float volume);
+void ARXMenu_Options_Audio_SetSfxVolume(float volume);
+void ARXMenu_Options_Audio_SetSpeechVolume(float volume);
+void ARXMenu_Options_Audio_SetAmbianceVolume(float volume);
 void ARXMenu_Options_Audio_ApplyGameVolumes();
 void ARXMenu_Options_Audio_SetMuted(bool mute);
 

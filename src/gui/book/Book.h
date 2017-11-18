@@ -20,6 +20,7 @@
 #ifndef ARX_GUI_BOOK_BOOK_H
 #define ARX_GUI_BOOK_BOOK_H
 
+#include "graphics/Color.h"
 #include "gui/Note.h"
 
 enum ARX_INTERFACE_BOOK_MODE
@@ -30,21 +31,97 @@ enum ARX_INTERFACE_BOOK_MODE
 	BOOKMODE_QUESTS
 };
 
-extern ARX_INTERFACE_BOOK_MODE g_guiBookCurrentTopTab;
+class PlayerBookPage {
+	
+public:
+	
+	void playReleaseSound();
+	void playErrorSound();
+	void manageLeftTabs(long tabNum, long & activeTab);
+	
+private:
+	
+	static const Vec2f m_activeTabPositions[10];
+	static const Vec2f m_tabPositions[10];
+	
+	void drawTab(long tabNum);
+	void drawActiveTab(long tabNum);
+	void checkTabClick(long tabNum, long &activeTab);
+	
+};
 
-extern long BOOKZOOM;
+class StatsPage : public PlayerBookPage {
+public:
+	void manage();
+	void manageNewQuest();
+private:
+	void manageStats();
+	void RenderBookPlayerCharacter();
+	bool CheckAttributeClick(Vec2f pos, float * val, TextureContainer * tc);
+	bool CheckSkillClick(Vec2f pos, float * val, TextureContainer * tc, float * oldval);
+	Color attributeModToColor(float modValue, float baseValue = 0.f);
+};
 
-void ARX_INTERFACE_BookOpen();
-void ARX_INTERFACE_BookClose();
-void ARX_INTERFACE_BookToggle();
+class SpellsPage : public PlayerBookPage {
+public:
+	SpellsPage();
+	void manage();
+private:
+	long m_currentTab;
 
-ARX_INTERFACE_BOOK_MODE nextBookPage();
-ARX_INTERFACE_BOOK_MODE prevBookPage();
-void openBookPage(ARX_INTERFACE_BOOK_MODE newPage, bool toggle = false);
+	void drawLeftTabs();
+	void drawSpells();
+};
 
-namespace gui {
-bool manageNoteActions(Note & note);
-void updateQuestBook();
-} // namespace gui
+class MapPage : public PlayerBookPage {
+public:
+	MapPage();
+	void manage();
+	void setMapLevel(long level);
+private:
+	long m_currentLevel;
+
+	void drawLeftTabs();
+	void drawMaps();
+};
+
+class QuestBookPage : public PlayerBookPage {
+public:
+	void manage();
+	void clear();
+private:
+	Note m_questBook;
+};
+
+class PlayerBook {
+public:
+	StatsPage stats;
+	SpellsPage spells;
+	MapPage map;
+	QuestBookPage questBook;
+
+	ARX_INTERFACE_BOOK_MODE m_currentPage;
+
+	PlayerBook();
+	void manage();
+	void openPage(ARX_INTERFACE_BOOK_MODE newPage, bool toggle = false);
+	void openNextPage();
+	void openPrevPage();
+	ARX_INTERFACE_BOOK_MODE currentPage() { return m_currentPage; }
+	void forcePage(ARX_INTERFACE_BOOK_MODE page);
+	void open();
+	void close();
+	void toggle();
+
+	void clearJournal();
+private:
+	bool canOpenPage(ARX_INTERFACE_BOOK_MODE page);
+	ARX_INTERFACE_BOOK_MODE nextPage();
+	ARX_INTERFACE_BOOK_MODE prevPage();
+	void onClosePage();
+	void drawTopTabs();
+};
+
+extern PlayerBook g_playerBook;
 
 #endif // ARX_GUI_BOOK_BOOK_H

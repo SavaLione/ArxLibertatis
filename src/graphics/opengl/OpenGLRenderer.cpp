@@ -38,7 +38,7 @@
 #include "core/Config.h"
 #include "gui/Credits.h"
 #include "graphics/opengl/GLDebug.h"
-#include "graphics/opengl/GLTexture2D.h"
+#include "graphics/opengl/GLTexture.h"
 #include "graphics/opengl/GLTextureStage.h"
 #include "graphics/opengl/GLVertexBuffer.h"
 #include "io/log/Logger.h"
@@ -67,6 +67,7 @@ OpenGLRenderer::OpenGLRenderer()
 	, m_hasDrawElementsBaseVertex(false)
 	, m_hasClearDepthf(false)
 	, m_hasVertexFogCoordinate(false)
+	, m_hasSampleShading(false)
 { }
 
 OpenGLRenderer::~OpenGLRenderer() {
@@ -187,7 +188,7 @@ void OpenGLRenderer::initialize() {
 		#elif ARX_HAVE_GLEW
 		oss << "GLEW " << glewVersion << '\n';
 		#endif
-		const char * start = reinterpret_cast<const char *>(glVersion);
+		const char * start = glVersion;
 		while(*start == ' ') {
 			start++;
 		}
@@ -281,7 +282,7 @@ void OpenGLRenderer::reinit() {
 	}
 	
 	// EXT_texture_filter_anisotropic is available for both OpenGL ES and desktop OpenGL
-	if(ARX_HAVE_GL_EXT(EXT_texture_filter_anisotropic)) {
+	if(ARX_HAVE_GL_EXT(EXT_texture_filter_anisotropic) || ARX_HAVE_GL_EXT(ARB_texture_filter_anisotropic)) {
 		GLfloat limit;
 		glGetFloatv(GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT, &limit);
 		m_maximumSupportedAnisotropy = limit;
@@ -344,6 +345,12 @@ void OpenGLRenderer::reinit() {
 	// Introduced in OpenGL 1.4, no extension available for OpenGL ES
 	m_hasVertexFogCoordinate = !isES;
 	
+	if(isES) {
+		m_hasSampleShading = ARX_HAVE_GLES_VER(3, 2) || ARX_HAVE_GLES_EXT(OES_sample_shading);
+	} else {
+		m_hasSampleShading = ARX_HAVE_GL_VER(4, 0) || ARX_HAVE_GL_EXT(ARB_sample_shading);
+	}
+	
 	// Synchronize GL state cache
 	
 	m_MSAALevel = 0;
@@ -377,8 +384,13 @@ void OpenGLRenderer::reinit() {
 	}
 	m_glstate.setFog(false);
 	
-	SetAlphaFunc(CmpNotEqual, 0.0f);
-	m_glstate.setColorKey(false);
+	glAlphaFunc(GL_GREATER, 0.5f);
+	#ifdef GL_VERSION_4_0
+	if(hasSampleShading()) {
+		glMinSampleShading(1.f);
+	}
+	#endif
+	m_glstate.setAlphaCutout(false);
 	
 	glEnable(GL_DEPTH_TEST);
 	glDepthFunc(GL_ALWAYS);
@@ -523,35 +535,28 @@ void OpenGLRenderer::GetProjectionMatrix(glm::mat4x4 & matProj) const {
 
 void OpenGLRenderer::ReleaseAllTextures() {
 	for(TextureList::iterator it = textures.begin(); it != textures.end(); ++it) {
-		it->Destroy();
+		it->destroy();
 	}
 }
 
 void OpenGLRenderer::RestoreAllTextures() {
 	for(TextureList::iterator it = textures.begin(); it != textures.end(); ++it) {
-		it->Restore();
+		it->restore();
 	}
 }
 
-Texture2D * OpenGLRenderer::CreateTexture2D() {
-	GLTexture2D * texture = new GLTexture2D(this);
-	textures.push_back(*texture);
-	return texture;
+void OpenGLRenderer::reloadColorKeyTextures() {
+	for(TextureList::iterator it = textures.begin(); it != textures.end(); ++it) {
+		if(it->hasColorKey()) {
+			it->restore();
+		}
+	}
 }
 
-static const GLenum arxToGlPixelCompareFunc[] = {
-	GL_NEVER, // CmpNever,
-	GL_LESS, // CmpLess,
-	GL_EQUAL, // CmpEqual,
-	GL_LEQUAL, // CmpLessEqual,
-	GL_GREATER, // CmpGreater,
-	GL_NOTEQUAL, // CmpNotEqual,
-	GL_GEQUAL, // CmpGreaterEqual,
-	GL_ALWAYS // CmpAlways
-};
-
-void OpenGLRenderer::SetAlphaFunc(PixelCompareFunc func, float ref) {
-	glAlphaFunc(arxToGlPixelCompareFunc[func], ref);
+Texture * OpenGLRenderer::createTexture() {
+	GLTexture * texture = new GLTexture(this);
+	textures.push_back(*texture);
+	return texture;
 }
 
 void OpenGLRenderer::SetViewport(const Rect & _viewport) {
@@ -670,13 +675,13 @@ void OpenGLRenderer::SetAntialiasing(bool enable) {
 		return;
 	}
 	
-	// The state used for color keying can differ between msaa and non-msaa.
+	// The state used for alpha cutouts can differ between msaa and non-msaa.
 	// Clear the old flushed state.
-	if(m_glstate.getColorKey()) {
-		bool colorkey = m_state.getColorKey();
-		m_state.setColorKey(false);
+	if(m_glstate.getAlphaCutout()) {
+		bool alphaCutout = m_state.getAlphaCutout();
+		m_state.setAlphaCutout(false);
 		flushState();
-		m_state.setColorKey(colorkey);
+		m_state.setAlphaCutout(alphaCutout);
 	}
 	
 	// This is mostly useless as multisampling must be enabled/disabled at GL context creation.
@@ -709,6 +714,17 @@ void OpenGLRenderer::setMaxAnisotropy(float value) {
 	for(TextureList::iterator it = textures.begin(); it != textures.end(); ++it) {
 		it->updateMaxAnisotropy();
 	}
+}
+
+Renderer::AlphaCutoutAntialising OpenGLRenderer::getMaxSupportedAlphaCutoutAntialiasing() const {
+	
+	#ifdef GL_VERSION_4_0
+	if(hasSampleShading()) {
+		return CrispAlphaCutoutAA;
+	}
+	#endif
+	
+	return FuzzyAlphaCutoutAA;
 }
 
 template <typename Vertex>
@@ -789,7 +805,7 @@ static VertexBuffer<Vertex> * createVertexBufferImpl(OpenGLRenderer * renderer,
 }
 
 VertexBuffer<TexturedVertex> * OpenGLRenderer::createVertexBufferTL(size_t capacity, BufferUsage usage) {
-	return createVertexBufferImpl<TexturedVertex>(this, capacity, usage); 
+	return createVertexBufferImpl<TexturedVertex>(this, capacity, usage);
 }
 
 VertexBuffer<SMY_VERTEX> * OpenGLRenderer::createVertexBuffer(size_t capacity, BufferUsage usage) {
@@ -828,11 +844,11 @@ bool OpenGLRenderer::getSnapshot(Image & image) {
 	
 	Vec2i size = mainApp->getWindow()->getSize();
 	
-	image.Create(size.x, size.y, Image::Format_R8G8B8);
+	image.create(size_t(size.x), size_t(size.y), Image::Format_R8G8B8);
 	
-	glReadPixels(0, 0, size.x, size.y, GL_RGB, GL_UNSIGNED_BYTE, image.GetData()); 
+	glReadPixels(0, 0, size.x, size.y, GL_RGB, GL_UNSIGNED_BYTE, image.getData());
 	
-	image.FlipY();
+	image.flipY();
 	
 	return true;
 }
@@ -840,15 +856,12 @@ bool OpenGLRenderer::getSnapshot(Image & image) {
 bool OpenGLRenderer::getSnapshot(Image & image, size_t width, size_t height) {
 	
 	// TODO handle scaling on the GPU so we don't need to download the whole image
-
-	// duplication to ensure use of Image::Format_R8G8B8
+	
 	Image fullsize;
-	Vec2i size = mainApp->getWindow()->getSize();
-	fullsize.Create(size.x, size.y, Image::Format_R8G8B8);
-	glReadPixels(0, 0, size.x, size.y, GL_RGB, GL_UNSIGNED_BYTE, fullsize.GetData()); 
-
-	image.ResizeFrom(fullsize, width, height, true);
-
+	getSnapshot(fullsize);
+	
+	image.resizeFrom(fullsize, width, height);
+	
 	return true;
 }
 
@@ -902,32 +915,44 @@ void OpenGLRenderer::flushState() {
 			}
 		}
 		
-		bool useA2C = m_hasMSAA && config.video.colorkeyAlphaToCoverage;
-		if(m_glstate.getColorKey() != m_state.getColorKey()
-		   || (useA2C && m_state.getColorKey()
-		       && m_glstate.isBlendEnabled() != m_state.isBlendEnabled())) {
-			/* When rendering color-keyed textures with alpha blending enabled we still
+		bool useA2C = m_hasMSAA && config.video.alphaCutoutAntialiasing == int(FuzzyAlphaCutoutAA);
+		if(m_glstate.getAlphaCutout() != m_state.getAlphaCutout()
+		   || (useA2C && m_state.getAlphaCutout() && m_glstate.isBlendEnabled() != m_state.isBlendEnabled())) {
+			
+			/* When rendering alpha cutouts with alpha blending enabled we still
 			 * need to 'discard' transparent texels, as blending might not use the src alpha!
 			 * On the other hand, we can't use GL_SAMPLE_ALPHA_TO_COVERAGE when blending
 			 * as that could result in the src alpha being applied twice (e.g. for text).
 			 * So we must toggle between alpha to coverage and alpha test when toggling blending.
 			 */
 			bool disableA2C = useA2C && !m_glstate.isBlendEnabled()
-				                && (!m_state.getColorKey() || m_state.isBlendEnabled());
+			                  && (!m_state.getAlphaCutout() || m_state.isBlendEnabled());
 			bool enableA2C = useA2C && !m_state.isBlendEnabled()
-				               && (!m_glstate.getColorKey() || m_glstate.isBlendEnabled());
-			if(m_glstate.getColorKey()) {
+			                 && (!m_glstate.getAlphaCutout() || m_glstate.isBlendEnabled());
+			if(m_glstate.getAlphaCutout()) {
 				if(disableA2C) {
 					glDisable(GL_SAMPLE_ALPHA_TO_COVERAGE);
-				} else if(!m_state.getColorKey() || enableA2C) {
+				} else if(!m_state.getAlphaCutout() || enableA2C) {
+					#ifdef GL_VERSION_4_0
+					if(hasSampleShading() && m_hasMSAA
+					   && config.video.alphaCutoutAntialiasing == int(CrispAlphaCutoutAA)) {
+						glDisable(GL_SAMPLE_SHADING);
+					}
+					#endif
 					glDisable(GL_ALPHA_TEST);
 				}
 			}
-			if(m_state.getColorKey()) {
+			if(m_state.getAlphaCutout()) {
 				if(enableA2C) {
 					glEnable(GL_SAMPLE_ALPHA_TO_COVERAGE);
-				} else if(!m_glstate.getColorKey() || disableA2C) {
+				} else if(!m_glstate.getAlphaCutout() || disableA2C) {
 					glEnable(GL_ALPHA_TEST);
+					#ifdef GL_VERSION_4_0
+					if(hasSampleShading() && m_hasMSAA
+					   && config.video.alphaCutoutAntialiasing == int(CrispAlphaCutoutAA)) {
+						glEnable(GL_SAMPLE_SHADING);
+					}
+					#endif
 				}
 			}
 		}

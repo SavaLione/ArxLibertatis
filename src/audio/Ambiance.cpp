@@ -45,6 +45,7 @@ ZeniMax Media Inc., Suite 120, Rockville, Maryland 20850 USA.
 
 #include <cctype>
 #include <algorithm>
+#include <limits>
 #include <sstream>
 
 #include <boost/smart_ptr/scoped_ptr.hpp>
@@ -87,12 +88,19 @@ struct KeySetting {
 	KeyFlags flags; // A set of KeySettingFlag
 	float min, max; // Min and max setting values
 	float from, to, cur; // Current min and max values
-	unsigned interval; // Interval between updates (On Start = 0)
-	int tupdate; // Last update time
+	PlatformDuration interval; // Interval between updates (On Start = 0)
+	PlatformDuration tupdate; // Last update time
 	
 	KeySetting()
-		: flags(0), min(0), max(0), from(0), to(0), cur(0), interval(0), tupdate(0)
-		{ }
+		: flags(0)
+		, min(0)
+		, max(0)
+		, from(0)
+		, to(0)
+		, cur(0)
+		, interval(0)
+		, tupdate(0)
+	{ }
 	
 	bool load(PakFileHandle * file) {
 		
@@ -104,7 +112,7 @@ struct KeySetting {
 		   !file->read(&_flags, 4)) {
 			return false;
 		}
-		min = _min, max = _max, interval = _interval;
+		min = _min, max = _max, interval = PlatformDurationMs(_interval);
 		flags = KeyFlags::load(_flags); // TODO save/load flags
 		
 		return true;
@@ -121,14 +129,14 @@ struct KeySetting {
 		to = max;
 	}
 	
-	float update(signed timez = 0) {
+	float update(PlatformDuration timez = 0) {
 		
 		if(min == max) {
 			return cur;
 		}
 		
-		signed elapsed = timez - tupdate;
-		if(elapsed >= (signed)interval) {
+		PlatformDuration elapsed = timez - tupdate;
+		if(elapsed >= interval) {
 			elapsed = 0;
 			tupdate += interval;
 			if(flags & FLAG_RANDOM) {
@@ -145,7 +153,7 @@ struct KeySetting {
 		}
 		
 		if(flags & FLAG_INTERPOLATE) {
-			cur = from + float(elapsed) / interval * (to - from);
+			cur = from + elapsed / interval * (to - from);
 		}
 		
 		return cur;
@@ -155,19 +163,24 @@ struct KeySetting {
 
 struct TrackKey {
 	
-	size_t start; // Start time (after last key)
-	size_t n_start; // Next time to play sample (when delayed)
+	PlatformDuration start; // Start time (after last key)
+	PlatformDuration n_start; // Next time to play sample (when delayed)
 	size_t loop; // Play count
-	unsigned delay_min, delay_max; // Min and max delay before each sample loop
-	unsigned delay; // Current delay
+	PlatformDuration delay_min, delay_max; // Min and max delay before each sample loop
+	PlatformDuration delay; // Current delay
 	KeySetting volume; // Volume settings
 	KeySetting pitch; // Pitch settings
 	KeySetting pan; // Pan settings
 	KeySetting x, y, z; // Positon settings
 	
-	TrackKey() : start(0), n_start(0), loop(0),
-	             delay_min(0), delay_max(0), delay(0) {
-	}
+	TrackKey()
+		: start(0)
+		, n_start(0)
+		, loop(0)
+		, delay_min(0)
+		, delay_max(0)
+		, delay(0)
+	{ }
 	
 	bool load(PakFileHandle * file) {
 		
@@ -186,8 +199,8 @@ struct TrackKey {
 		   !z.load(file)) {
 			return false;
 		}
-		start = _start, loop = _loop + 1;
-		delay_min = _delay_min, delay_max = _delay_max;
+		start = PlatformDurationMs(_start), loop = _loop + 1;
+		delay_min = PlatformDurationMs(_delay_min), delay_max = PlatformDurationMs(_delay_max);
 		
 		return true;
 	}
@@ -195,7 +208,7 @@ struct TrackKey {
 	void updateSynch() {
 		if(delay_min != delay_max) {
 			delay = delay_max - delay;
-			delay += Random::get(delay_min, delay_max);
+			delay += PlatformDurationUs(Random::get(toUs(delay_min), toUs(delay_max)));
 		} else {
 			delay = delay_min;
 		}
@@ -207,7 +220,7 @@ struct TrackKey {
 
 namespace audio {
 
-static const size_t KEY_CONTINUE = (size_t)-1;
+static const PlatformDuration KEY_CONTINUE = PlatformDurationUs(std::numeric_limits<s64>::max());
 
 struct Ambiance::Track : public Source::Callback {
 	
@@ -225,14 +238,14 @@ struct Ambiance::Track : public Source::Callback {
 				source->stop();
 			}
 			SampleId sid = Backend::getSampleId(s_id);
-			arx_assert(_sample.isValid(sid));
-			_sample[sid]->dereference();
+			arx_assert(g_samples.isValid(sid));
+			g_samples[sid]->dereference();
 		}
 	}
 	
 	bool operator==(const std::string & str) const {
 		return (name == str
-		        || _sample[Backend::getSampleId(s_id)]->getName() == str);
+		        || g_samples[Backend::getSampleId(s_id)]->getName() == str);
 	}
 	
 private:
@@ -270,7 +283,7 @@ private:
 		}
 	}
 	
-	void update(size_t time, size_t diff);
+	void update(PlatformDuration time, PlatformDuration diff);
 	
 	aalError load(PakFileHandle * file, u32 version);
 	
@@ -314,14 +327,14 @@ void Ambiance::Track::keyPlay() {
 			return;
 		}
 		
-		source->addCallback(this, 0, UNIT_BYTES);
-		source->addCallback(this, source->getSample()->getLength(), UNIT_BYTES);
+		source->addCallback(this, 0);
+		source->addCallback(this, source->getSample()->getLength());
 		
 		s_id = source->getId();
 	}
 	
 	if(queued < loopc) {
-		if(!key_i->delay_min && !key_i->delay_max) {
+		if(key_i->delay_min == 0 && key_i->delay_max == 0) {
 			size_t toqueue = loopc - queued;
 			queued += toqueue;
 			LogDebug("ambiance " << ambiance->getName() << ": playing "
@@ -362,8 +375,7 @@ void Ambiance::Track::onSampleStart(Source & source) {
 		if(keyPrefetch == keys.end()) {
 			keyPrefetch = keys.begin();
 		}
-		if(!keyPrefetch->start && !keyPrefetch->delay_min
-		   && !keyPrefetch->delay_max) {
+		if(keyPrefetch->start == 0 && keyPrefetch->delay_min == 0 && keyPrefetch->delay_max == 0) {
 			LogDebug("ambiance " << ambiance->getName() << ": prefetching "
 			         << source.getSample()->getName() << " " << keyPrefetch->loop);
 			queued += keyPrefetch->loop;
@@ -412,7 +424,7 @@ void Ambiance::Track::onSampleEnd(Source & source) {
 		key_i->delay = key_i->delay_max;
 		key_i->updateSynch();
 		key_i->n_start = key_i->start + key_i->delay;
-		key_i->pitch.tupdate -= ambiance->time;
+		key_i->pitch.tupdate -= ambiance->m_time;
 		
 		if(++key_i == keys.end()) {
 			//Track end
@@ -423,7 +435,7 @@ void Ambiance::Track::onSampleEnd(Source & source) {
 			
 			if(flags & Track::MASTER) {
 				//Ambiance end
-				ambiance->time = 0;
+				ambiance->m_time = 0;
 				
 				LogDebug("ambiance " << ambiance->getName() << ": master track ended");
 				
@@ -444,16 +456,16 @@ void Ambiance::Track::onSampleEnd(Source & source) {
 			loopc += key_i->loop;
 		}
 		
-	} else if(key_i->delay_min || key_i->delay_max) {
+	} else if(key_i->delay_min != 0 || key_i->delay_max != 0) {
 		key_i->updateSynch();
 		key_i->n_start = key_i->delay;
 	}
 	
 }
 
-void Ambiance::Track::update(size_t time, size_t diff) {
+void Ambiance::Track::update(PlatformDuration time, PlatformDuration diff) {
 	
-	if(!_sample.isValid(Backend::getSampleId(s_id))) {
+	if(!g_samples.isValid(Backend::getSampleId(s_id))) {
 		return;
 	}
 	
@@ -474,7 +486,7 @@ void Ambiance::Track::update(size_t time, size_t diff) {
 		return;
 	}
 	
-	if(key_i->volume.interval) {
+	if(key_i->volume.interval != 0) {
 		float value = key_i->volume.update(time);
 		if(ambiance->channel.flags & FLAG_VOLUME) {
 			value *= ambiance->channel.volume;
@@ -483,14 +495,14 @@ void Ambiance::Track::update(size_t time, size_t diff) {
 	} else {
 		source->setVolume(key_i->volume.cur * ambiance->channel.volume);
 	}
-	if(key_i->pitch.interval) {
+	if(key_i->pitch.interval != 0) {
 		source->setPitch(key_i->pitch.update(time));
 	}
 	if(flags & Track::POSITION) {
 		Vec3f position;
-		position.x = key_i->x.interval ? key_i->x.update(time) : key_i->x.cur;
-		position.y = key_i->y.interval ? key_i->y.update(time) : key_i->y.cur;
-		position.z = key_i->z.interval ? key_i->z.update(time) : key_i->z.cur;
+		position.x = key_i->x.interval != 0 ? key_i->x.update(time) : key_i->x.cur;
+		position.y = key_i->y.interval != 0 ? key_i->y.update(time) : key_i->y.cur;
+		position.z = key_i->z.interval != 0 ? key_i->z.update(time) : key_i->z.cur;
 		if(ambiance->channel.flags & FLAG_POSITION) {
 			position += ambiance->channel.position;
 		}
@@ -524,7 +536,7 @@ aalError Ambiance::Track::load(PakFileHandle * file, u32 version) {
 		return error;
 	}
 	Sample * sample = new Sample(res::path::load(sampleName));
-	if(sample->load() || (s_id = _sample.add(sample)) == INVALID_ID) {
+	if(sample->load() || (s_id = g_samples.add(sample)) == INVALID_ID) {
 		LogError << "Ambiance \"" << ambiance->name
 		         << "\": missing sample \"" << sampleName << '"';
 		delete sample;
@@ -576,13 +588,13 @@ Ambiance::Ambiance(const res::path & _name)
 	: status(Idle)
 	, loop(false)
 	, fade(None)
-	, fade_time(0.f)
-	, fade_interval(0.f)
+	, fade_time(0)
+	, fade_interval(0)
 	, fade_max(0.f)
 	, start(0)
-	, time(0)
+	, m_time(0)
 	, name(_name)
-	, data(NULL)
+	, m_type(PLAYING_AMBIANCE_MENU)
 {
 	channel.flags = 0;
 }
@@ -654,8 +666,7 @@ aalError Ambiance::setVolume(float volume) {
 	return AAL_OK;
 }
 
-aalError Ambiance::play(const Channel & _channel, bool _loop,
-                        size_t _fade_interval) {
+aalError Ambiance::play(const Channel & _channel, bool _loop, PlatformDuration _fade_interval) {
 	
 	channel = _channel;
 	
@@ -665,12 +676,12 @@ aalError Ambiance::play(const Channel & _channel, bool _loop,
 	
 	loop = _loop;
 	
-	fade_interval = (float)_fade_interval;
-	if(fade_interval) {
+	fade_interval = _fade_interval;
+	if(fade_interval != 0) {
 		fade = FadeUp;
 		fade_max = channel.volume;
-		channel.volume = 0.0F;
-		fade_time = 0.0F;
+		channel.volume = 0.f;
+		fade_time = 0;
 	} else {
 		fade = None;
 	}
@@ -705,7 +716,7 @@ aalError Ambiance::play(const Channel & _channel, bool _loop,
 	status = Playing;
 	start = session_time;
 	
-	const Mixer * mixer = _mixer[channel.mixer.handleData()];
+	const Mixer * mixer = g_mixers[channel.mixer.handleData()];
 	if(mixer && mixer->isPaused()) {
 		status = Paused;
 	}
@@ -713,21 +724,21 @@ aalError Ambiance::play(const Channel & _channel, bool _loop,
 	return AAL_OK;
 }
 
-aalError Ambiance::stop(size_t _fade_interval) {
+aalError Ambiance::stop(PlatformDuration _fade_interval) {
 	
 	if(isIdle()) {
 		return AAL_OK;
 	}
 	
-	fade_interval = static_cast<float>(_fade_interval);
-	if(fade_interval) {
+	fade_interval = _fade_interval;
+	if(fade_interval != 0) {
 		fade = FadeDown;
 		fade_time = 0;
 		return AAL_OK;
 	}
 	
 	status = Idle;
-	time = 0;
+	m_time = 0;
 	
 	TrackList::iterator track = tracks.begin();
 	for(; track != tracks.end(); ++track) {
@@ -747,7 +758,7 @@ aalError Ambiance::pause() {
 	}
 	
 	status = Paused;
-	time = session_time;
+	m_time = session_time - start;
 	
 	TrackList::iterator track = tracks.begin();
 	for(; track != tracks.end(); ++track) {
@@ -777,8 +788,7 @@ aalError Ambiance::resume() {
 	}
 	
 	status = Playing;
-	start += session_time - time;
-	time = session_time - start;
+	start = session_time - m_time;
 	
 	return AAL_OK;
 }
@@ -789,22 +799,22 @@ aalError Ambiance::update() {
 		return AAL_OK;
 	}
 	
-	size_t interval = session_time - start - time;
-	time += interval;
+	PlatformDuration interval = session_time - (start + m_time);
+	m_time += interval;
 	
-	LogDebug("ambiance \"" << name << "\": update to time=" << time);
+	LogDebug("ambiance \"" << name << "\": update to time=" << toMs(m_time));
 	
 	// Fading
-	if(fade_interval && fade != None) {
+	if(fade_interval != 0 && fade != None) {
 		fade_time += interval;
 		if(fade == FadeUp) {
-			channel.volume = fade_max * fade_time / fade_interval;
+			channel.volume = fade_max * (fade_time / fade_interval);
 			if(channel.volume >= fade_max) {
 				channel.volume = fade_max;
-				fade_interval = 0.f;
+				fade_interval = 0;
 			}
 		} else {
-			channel.volume = fade_max - fade_max * fade_time / fade_interval;
+			channel.volume = fade_max - fade_max * (fade_time / fade_interval);
 			if(channel.volume <= 0.f) {
 				stop();
 				return AAL_OK;
@@ -816,7 +826,7 @@ aalError Ambiance::update() {
 	// Update tracks
 	TrackList::iterator track = tracks.begin();
 	for(; track != tracks.end(); ++track) {
-		track->update(time, interval);
+		track->update(m_time, interval);
 	}
 	
 	return AAL_OK;

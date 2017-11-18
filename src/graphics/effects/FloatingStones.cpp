@@ -39,13 +39,13 @@ void FloatingStones::Init(float radius) {
 	}
 }
 
-void FloatingStones::Update(float timeDelta, Vec3f pos) {
+void FloatingStones::Update(GameDuration timeDelta, Vec3f pos) {
 	
 	m_timestone -= timeDelta;
 	m_currframetime = timeDelta;
 	
 	if(m_timestone <= 0) {
-		m_timestone = Random::get(50, 150);
+		m_timestone = GameDurationMs(Random::get(50, 150));
 		
 		AddStone(pos + arx::randomOffsetXZ(m_baseRadius));
 	}
@@ -53,7 +53,7 @@ void FloatingStones::Update(float timeDelta, Vec3f pos) {
 
 void FloatingStones::AddStone(const Vec3f & pos) {
 	
-	if(arxtime.is_paused() || m_nbstone > 255) {
+	if(g_gameTime.isPaused() || m_nbstone > 255) {
 		return;
 	}
 	
@@ -70,7 +70,7 @@ void FloatingStones::AddStone(const Vec3f & pos) {
 			s.ang = Anglef(Random::getf(), Random::getf(), Random::getf()) * Anglef(360.f, 360.f, 360.f);
 			s.angvel = Anglef(Random::getf(), Random::getf(), Random::getf()) * Anglef(5.f, 6.f, 3.f);
 			s.scale = Vec3f(Random::getf(0.2f, 0.5f));
-			s.time = Random::get(2000, 2500);
+			s.time = GameDurationMs(Random::get(2000, 2500));
 			s.currtime = 0;
 			break;
 		}
@@ -88,7 +88,7 @@ void FloatingStones::DrawStone()
 		T_STONE & s = m_tstone[nb];
 		
 		if(s.actif) {
-			float a = (float)s.currtime / (float)s.time;
+			float a = s.currtime / s.time;
 			
 			if(a > 1.f) {
 				a = 1.f;
@@ -105,14 +105,14 @@ void FloatingStones::DrawStone()
 				pd->move = Vec3f(0.f, Random::getf(0.f, 3.f), 0.f);
 				pd->siz = Random::getf(3.f, 6.f);
 				pd->tolive = 1000;
-				pd->timcreation = -(toMs(arxtime.now()) + 1000l); // TODO WTF
+				pd->timcreation = -(toMsi(g_gameTime.now()) + 1000l); // TODO WTF
 				pd->m_flags = FIRE_TO_SMOKE | FADE_IN_AND_OUT | ROTATING | DISSIPATING;
 				pd->m_rotation = 0.0000001f;
 			}
 			
 			//update mvt
-			if(!arxtime.is_paused()) {
-				a = (((float)m_currframetime) * 100.f) / (float)s.time;
+			if(!g_gameTime.isPaused()) {
+				a = (m_currframetime * 100) / s.time;
 				s.pos.y += s.yvel * a;
 				s.ang += s.angvel * a;
 				

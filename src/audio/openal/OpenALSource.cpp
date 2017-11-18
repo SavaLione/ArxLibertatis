@@ -111,11 +111,11 @@ OpenALSource::~OpenALSource() {
 	if(alIsSource(source)) {
 		
 		alSourceStop(source);
-		AL_CHECK_ERROR_N("stopping source",)
+		AL_CHECK_ERROR_N("stopping source")
 		
 		alDeleteSources(1, &source);
 		nbsources--;
-		AL_CHECK_ERROR_N("deleting source",)
+		AL_CHECK_ERROR_N("deleting source")
 		
 		source = 0;
 	} else {
@@ -128,7 +128,7 @@ OpenALSource::~OpenALSource() {
 				TraceAL("deleting buffer " << buffers[i]);
 				alDeleteBuffers(1, &buffers[i]);
 				nbbuffers--;
-				AL_CHECK_ERROR_N("deleting buffer",)
+				AL_CHECK_ERROR_N("deleting buffer")
 				buffers[i] = 0;
 			}
 		}
@@ -141,7 +141,7 @@ OpenALSource::~OpenALSource() {
 				TraceAL("deleting buffer " << buffers[0]);
 				alDeleteBuffers(1, &buffers[0]);
 				nbbuffers--;
-				AL_CHECK_ERROR_N("deleting buffer",)
+				AL_CHECK_ERROR_N("deleting buffer")
 			}
 		} else {
 			arx_assert(!refcount);
@@ -278,7 +278,7 @@ aalError OpenALSource::fillAllBuffers() {
 
 /*!
  * Convert a stereo buffer to mono in-place.
- * \param T The type of one (mono) sound sample.
+ * \tparam T The type of one (mono) sound sample.
  * \return the size of the converted buffer
  */
 template <class T>
@@ -300,7 +300,7 @@ aalError OpenALSource::fillBuffer(size_t i, size_t size) {
 	
 	arx_assert(loadCount > 0);
 	
-	size_t left = std::min(size, (size_t)sample->getLength() - written);
+	size_t left = std::min(size, sample->getLength() - written);
 	if(loadCount == 1) {
 		size = left;
 	}
@@ -373,7 +373,7 @@ aalError OpenALSource::updateVolume() {
 		return AAL_ERROR_INIT;
 	}
 	
-	const Mixer * mixer = _mixer[channel.mixer.handleData()];
+	const Mixer * mixer = g_mixers[channel.mixer.handleData()];
 	float volume = mixer ? mixer->getFinalVolume() : 1.f;
 	
 	if(volume > 0.f && (channel.flags & FLAG_VOLUME)) {
@@ -630,7 +630,7 @@ bool OpenALSource::updateCulling() {
 		listener_pos = Vec3f_ZERO;
 	} else {
 		alGetListener3f(AL_POSITION, &listener_pos.x, &listener_pos.y, &listener_pos.z);
-		AL_CHECK_ERROR_N("getting listener position", return tooFar;)
+		AL_CHECK_ERROR_C("getting listener position", return tooFar;)
 	}
 	
 	float d = glm::distance(channel.position, listener_pos);

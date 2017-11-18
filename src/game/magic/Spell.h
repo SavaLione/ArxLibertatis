@@ -166,17 +166,18 @@ public:
 	
 	SpellType m_type;
 	
-	ArxInstant m_timcreation;
+	GameInstant m_timcreation;
 	
 	bool m_hasDuration;
-	ArxDuration m_duration;
+	GameDuration m_duration;
+	GameDuration m_elapsed;
 	
 	float m_fManaCostPerSecond;
 	
 	SpellcastFlags m_flags;
 	audio::SourceId m_snd_loop;
 	
-	ArxDuration m_launchDuration;
+	GameDuration m_launchDuration;
 
 	
 	std::vector<EntityHandle> m_targets;

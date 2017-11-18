@@ -219,12 +219,12 @@ public:
 		
 		EERIE_SCRIPT * script = context.getMaster();
 		if(start) {
-			script->timers[t] = arxtime.now();
-			if(script->timers[t] == ArxInstant_ZERO) {
-				script->timers[t] = ArxInstantMs(1);
+			script->timers[t] = g_gameTime.now();
+			if(script->timers[t] == 0) {
+				script->timers[t] = GameInstantMs(1);
 			}
 		} else {
-			script->timers[t] = ArxInstant_ZERO;
+			script->timers[t] = 0;
 		}
 		
 		return Success;
@@ -284,7 +284,7 @@ public:
 		if(!group && !zone && !radius) {
 			target = context.getStringVar(context.getWord());
 			
-			// TODO(broken-scripts) work around broken scripts 
+			// TODO(broken-scripts) work around broken scripts
 			for(size_t i = 0; i < SM_MAXCMD; i++) {
 				if(target == AS_EVENT[i].name.c_str() + 3) {
 					std::swap(target, event);
@@ -897,10 +897,10 @@ void timerCommand(const std::string & timer, Context & context) {
 	scr_timer[num].es = context.getScript();
 	scr_timer[num].exist = 1;
 	scr_timer[num].io = io;
-	scr_timer[num].interval = ArxDurationMs(interval);
+	scr_timer[num].interval = GameDurationMs(interval);
 	scr_timer[num].name = timername;
 	scr_timer[num].pos = pos;
-	scr_timer[num].start = arxtime.now();
+	scr_timer[num].start = g_gameTime.now();
 	scr_timer[num].count = count;
 	
 	scr_timer[num].flags = (idle && io) ? 1 : 0;

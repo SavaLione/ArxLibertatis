@@ -45,7 +45,7 @@ struct Projectile {
 	float damages;
 	EERIE_3DOBJ * obj;
 	EntityHandle source;
-	ArxInstant creation_time;
+	GameInstant creation_time;
 	float poisonous;
 	Trail * m_trail;
 };
@@ -53,7 +53,7 @@ struct Projectile {
 void ARX_THROWN_OBJECT_Throw(EntityHandle source, const Vec3f & position, const Vec3f & vect, const glm::quat & quat, float velocity, float damages, float poisonous);
 
 void ARX_THROWN_OBJECT_KillAll();
-void ARX_THROWN_OBJECT_Manage(float time_offset);
+void ARX_THROWN_OBJECT_Manage(GameDuration time_offset);
 void ARX_THROWN_OBJECT_Render();
 
 #endif // ARX_PHYSICS_PROJECTILE_H

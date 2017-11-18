@@ -295,17 +295,14 @@ static bool sampleColorKey(const u8 * src, int w, int h, int x, int y, u8 * dst,
 	return false;
 }
 
-void Image::ApplyColorKeyToAlpha(Color key, bool antialias) {
+void Image::applyColorKeyToAlpha(Color key, bool antialias) {
 	
-	arx_assert_msg(!IsCompressed(), "ApplyColorKeyToAlpha Not supported for compressed textures!");
-	arx_assert_msg(!IsVolume(), "ApplyColorKeyToAlpha Not supported for 3d textures!");
-	
-	if(mFormat != Format_R8G8B8 && mFormat != Format_B8G8R8) {
-		arx_assert_msg(false, "ApplyColorKeyToAlpha not supported for format %d", mFormat);
+	if(getFormat() != Format_R8G8B8 && getFormat() != Format_B8G8R8) {
+		arx_assert_msg(false, "applyColorKeyToAlpha() not supported for format %d", int(getFormat()));
 		return;
 	}
 	
-	if(mFormat == Format_B8G8R8) {
+	if(getFormat() == Format_B8G8R8) {
 		std::swap(key.r, key.b);
 	}
 	
@@ -313,9 +310,9 @@ void Image::ApplyColorKeyToAlpha(Color key, bool antialias) {
 	// then create it if it's the case
 	
 	// Check if we've got pixels matching the color key
-	const u8 * img = mData;
+	const u8 * img = getData();
 	bool needsAlphaChannel = false;
-	for(size_t i = 0; i < (mHeight * mHeight); i++, img += 3) {
+	for(size_t i = 0; i < (getHeight() * getHeight()); i++, img += 3) {
 		if(img[0] == key.r && img[1] == key.g && img[2] == key.b) {
 			needsAlphaChannel = true;
 			break;
@@ -328,14 +325,14 @@ void Image::ApplyColorKeyToAlpha(Color key, bool antialias) {
 	// If we need to add an alpha channel
 	
 	// Create a temp buffer
-	size_t dataSize = GetSizeWithMipmaps(Format_R8G8B8A8, mWidth, mHeight, mDepth, mNumMipmaps);
+	size_t dataSize = getSize(Format_R8G8B8A8, getWidth(), getHeight());
 	u8 * dataTemp = new unsigned char[dataSize];
 	
 	// Fill temp image and apply color key to alpha channel
 	u8 * dst = dataTemp;
-	img = mData;
-	for(size_t y = 0; y < mHeight; y++) {
-		for(size_t x = 0; x < mWidth; x++) {
+	img = getData();
+	for(size_t y = 0; y < getHeight(); y++) {
+		for(size_t x = 0; x < getWidth(); x++) {
 			
 			dst[3] = (img[0] == key.r && img[1] == key.g && img[2] == key.b) ? 0 : 0xff;
 			
@@ -349,14 +346,14 @@ void Image::ApplyColorKeyToAlpha(Color key, bool antialias) {
 				// For transparent pixels, use the color of an opaque bordering pixel,
 				// so that linear filtering won't produce black borders.
 				// TODO with premultiplied alpha this wouldn't be needed
-				if(   !sampleColorKey(mData, mWidth, mHeight, int(x)    , int(y) - 1, dst, key)
-				   && !sampleColorKey(mData, mWidth, mHeight, int(x) + 1, int(y)    , dst, key)
-				   && !sampleColorKey(mData, mWidth, mHeight, int(x)    , int(y) + 1, dst, key)
-				   && !sampleColorKey(mData, mWidth, mHeight, int(x) - 1, int(y)    , dst, key)
-				   && !sampleColorKey(mData, mWidth, mHeight, int(x) - 1, int(y) - 1, dst, key)
-				   && !sampleColorKey(mData, mWidth, mHeight, int(x) + 1, int(y) - 1, dst, key)
-				   && !sampleColorKey(mData, mWidth, mHeight, int(x) + 1, int(y) + 1, dst, key)
-				   && !sampleColorKey(mData, mWidth, mHeight, int(x) - 1, int(y) + 1, dst, key)) {
+				if(   !sampleColorKey(getData(), getWidth(), getHeight(), int(x)    , int(y) - 1, dst, key)
+				   && !sampleColorKey(getData(), getWidth(), getHeight(), int(x) + 1, int(y)    , dst, key)
+				   && !sampleColorKey(getData(), getWidth(), getHeight(), int(x)    , int(y) + 1, dst, key)
+				   && !sampleColorKey(getData(), getWidth(), getHeight(), int(x) - 1, int(y)    , dst, key)
+				   && !sampleColorKey(getData(), getWidth(), getHeight(), int(x) - 1, int(y) - 1, dst, key)
+				   && !sampleColorKey(getData(), getWidth(), getHeight(), int(x) + 1, int(y) - 1, dst, key)
+				   && !sampleColorKey(getData(), getWidth(), getHeight(), int(x) + 1, int(y) + 1, dst, key)
+				   && !sampleColorKey(getData(), getWidth(), getHeight(), int(x) - 1, int(y) + 1, dst, key)) {
 					dst[0] = dst[1] = dst[2] = 0;
 				}
 			}
@@ -366,13 +363,13 @@ void Image::ApplyColorKeyToAlpha(Color key, bool antialias) {
 		}
 	}
 	
-	if(antialias && mWidth > 1 && mHeight > 1) {
-		BlackWhiteAntialiaser<4, 3 /* alpha */>::process(dataTemp, mWidth, mHeight);
+	if(antialias && getWidth() > 1 && getHeight() > 1) {
+		BlackWhiteAntialiaser<4, 3 /* alpha */>::process(dataTemp, getWidth(), getHeight());
 	}
 	
 	// Swap data with temp data and ajust internal state
-	delete[] mData;
-	mData = dataTemp;
-	mDataSize = dataSize;
-	mFormat = (mFormat == Format_R8G8B8) ? Format_R8G8B8A8 : Format_B8G8R8A8;
+	delete[] m_data;
+	m_data = dataTemp;
+	m_format = (getFormat() == Format_R8G8B8) ? Format_R8G8B8A8 : Format_B8G8R8A8;
+	
 }

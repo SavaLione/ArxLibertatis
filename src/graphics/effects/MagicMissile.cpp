@@ -80,8 +80,8 @@ CMagicMissile::CMagicMissile()
 	, fTrail()
 	, snd_loop()
 {
-	SetDuration(ArxDurationMs(2000));
-	m_elapsed = m_duration + ArxDurationMs(1);
+	SetDuration(GameDurationMs(2000));
+	m_elapsed = m_duration + GameDurationMs(1);
 	
 	m_trailColor = Color3f(0.9f, 0.9f, 0.7f) + Color3f(0.1f, 0.1f, 0.3f) * randomColor3f();
 	m_projectileColor = Color3f(0.3f, 0.3f, 0.5f);
@@ -128,9 +128,9 @@ void CMagicMissile::Create(const Vec3f & startPos, const Anglef & angles)
 	snd_loop = ARX_SOUND_PlaySFX(SND_SPELL_MM_LOOP, &eCurPos, 1.0F, ARX_SOUND_PLAY_LOOPED);
 }
 
-void CMagicMissile::SetTTL(ArxDuration aulTTL)
+void CMagicMissile::SetTTL(GameDuration aulTTL)
 {
-	ArxDuration t = m_elapsed;
+	GameDuration t = m_elapsed;
 	m_duration = std::min(m_elapsed + aulTTL, m_duration);
 	SetDuration(m_duration);
 	m_elapsed = t;
@@ -138,7 +138,7 @@ void CMagicMissile::SetTTL(ArxDuration aulTTL)
 	lLightId = LightHandle();
 }
 
-void CMagicMissile::Update(ArxDuration timeDelta)
+void CMagicMissile::Update(GameDuration timeDelta)
 {
 	ARX_SOUND_RefreshPosition(snd_loop, eCurPos);
 
@@ -150,8 +150,8 @@ void CMagicMissile::Update(ArxDuration timeDelta)
 		lightIntensityFactor = Random::getf(0.5f, 1.0f);
 }
 
-void CMagicMissile::Render()
-{ 
+void CMagicMissile::Render() {
+	
 	Vec3f lastpos, newpos;
 	
 	if(m_elapsed >= m_duration)
@@ -166,8 +166,7 @@ void CMagicMissile::Render()
 		mat.setTexture(tex_mm);
 	
 	if(bMove) {
-		float fOneOnDuration = 1.f / toMs(m_duration);
-		fTrail = (toMs(m_elapsed) * fOneOnDuration) * (iBezierPrecision + 2) * 5;
+		fTrail = (m_elapsed / m_duration) * (iBezierPrecision + 2) * 5;
 	}
 	
 	newpos = lastpos = pathways[0];

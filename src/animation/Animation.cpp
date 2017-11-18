@@ -102,10 +102,10 @@ short ANIM_GetAltIdx(ANIM_HANDLE * ah, long old) {
 
 	while(1) {
 		for(short i = 0; i < ah->alt_nb; i++) {
-			float r = Random::getf() * tot;
-
-			if(r < anim_power[std::min((int)i,14)] && i != old)
+			long r = Random::get(0l, tot);
+			if(r < anim_power[std::min((int)i, 14)] && i != old) {
 				return i;
+			}
 		}
 	}
 }
@@ -121,7 +121,7 @@ void ANIM_Set(AnimLayer & layer, ANIM_HANDLE *anim)
 	if(layer.altidx_cur > layer.cur_anim->alt_nb)
 		layer.altidx_cur = 0;
 
-	layer.ctime = AnimationDuration_ZERO;
+	layer.ctime = 0;
 	layer.lastframe = -1;
 	layer.flags &= ~EA_PAUSED;
 	layer.flags &= ~EA_ANIMEND;
@@ -227,7 +227,7 @@ static float GetTimeBetweenKeyFrames(EERIE_ANIM * ea, long f1, long f2) {
 	if(!ea || f1 < 0 || f1 > ea->nb_key_frames - 1 || f2 < 0 || f2 > ea->nb_key_frames - 1)
 		return 0;
 
-	AnimationDuration time = AnimationDuration_ZERO;
+	AnimationDuration time = 0;
 
 	for(long kk = f1 + 1; kk <= f2; kk++) {
 		time += ea->frames[kk].time;
@@ -265,7 +265,7 @@ static EERIE_ANIM * TheaToEerie(const char * adr, size_t size, const res::path &
 	eerie->groups = allocStructZero<EERIE_GROUP>(th->nb_key_frames * th->nb_groups);
 	eerie->voidgroups = allocStructZero<unsigned char>(th->nb_groups);
 
-	eerie->anim_time = AnimationDuration_ZERO;
+	eerie->anim_time = 0;
 
 	// Go For Keyframes read
 	for(long i = 0; i < th->nb_key_frames; i++) {
@@ -467,7 +467,7 @@ static bool EERIE_ANIMMANAGER_AddAltAnim(ANIM_HANDLE & ah, const res::path & pat
 	}
 	
 	size_t FileSize;
-	char * adr = resources->readAlloc(path, FileSize);
+	char * adr = g_resources->readAlloc(path, FileSize);
 	if(!adr) {
 		return false;
 	}
@@ -511,7 +511,7 @@ ANIM_HANDLE * EERIE_ANIMMANAGER_Load_NoWarning(const res::path & path) {
 		}
 		
 		size_t FileSize;
-		char * adr = resources->readAlloc(path, FileSize);
+		char * adr = g_resources->readAlloc(path, FileSize);
 		if(!adr) {
 			return NULL;
 		}
@@ -559,8 +559,6 @@ Vec3f GetAnimTotalTranslate(ANIM_HANDLE * eanim, long alt_idx) {
 /*!
  * \brief Main Procedure to draw an animated object
  *
- * \param eobj main object data
- * \param eanim Animation data
  * \param time Time increment to current animation in Ms
  * \param io Referrence to Interactive Object (NULL if no IO)
  */
@@ -569,10 +567,10 @@ void PrepareAnim(AnimLayer & layer, AnimationDuration time, Entity *io) {
 	arx_assert(layer.cur_anim);
 	
 	if(layer.flags & EA_PAUSED)
-		time = AnimationDuration_ZERO;
+		time = 0;
 
 	if(io && (io->ioflags & IO_FREEZESCRIPT))
-		time = AnimationDuration_ZERO;
+		time = 0;
 
 	if(layer.altidx_cur >= layer.cur_anim->alt_nb)
 		layer.altidx_cur = 0;
@@ -634,7 +632,7 @@ void PrepareAnim(AnimLayer & layer, AnimationDuration time, Entity *io) {
 			
 			// Frame Sound Management
 			if(!(layer.flags & EA_ANIMEND)
-			   && time != AnimationDuration_ZERO
+			   && time != 0
 			   && (anim->frames[fr].sample != -1)
 			   && (layer.lastframe != fr)) {
 
@@ -650,7 +648,7 @@ void PrepareAnim(AnimLayer & layer, AnimationDuration time, Entity *io) {
 
 			// Frame Flags Management
 			if(!(layer.flags & EA_ANIMEND)
-			   && time != AnimationDuration_ZERO
+			   && time != 0
 			   && (anim->frames[fr].stepSound)
 			   && (layer.lastframe != fr)) {
 				
@@ -678,7 +676,7 @@ void PrepareAnim(AnimLayer & layer, AnimationDuration time, Entity *io) {
 
 void ResetAnim(AnimLayer & layer) {
 	
-	layer.ctime = AnimationDuration_ZERO;
+	layer.ctime = 0;
 	layer.lastframe=-1;
 	layer.flags&=~EA_PAUSED;
 	layer.flags&=~EA_ANIMEND;
@@ -721,8 +719,7 @@ void AcquireLastAnim(Entity * io)
 		return;
 
 	// Stores Frametime and number of vertex for later interpolation
-	// TODO Mixing of now() and get_frame_time()
-	io->animBlend.lastanimtime = ArxInstantMs(arxtime.get_frame_time());
+	io->animBlend.lastanimtime = g_gameTime.now();
 	io->animBlend.m_active = true;
 }
 

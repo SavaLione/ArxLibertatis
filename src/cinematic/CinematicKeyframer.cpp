@@ -396,7 +396,7 @@ static CinematicFadeOut getFadeOut(const Cinematic & c, const CinematicKeyframe 
 	// Project the bitmap corners onto a 640x480 screen.
 	Vec3f s = key.posgrille - Vec3f(bitmap->m_size.x, bitmap->m_size.y, 0) * 0.5f;
 	Vec3f e = key.posgrille + Vec3f(bitmap->m_size.x, bitmap->m_size.y, 0) * 0.5f;
-	float fFOV = glm::radians(69.75);
+	float fFOV = glm::radians(69.75f);
 	float k = glm::cos(fFOV / 2) / glm::sin(fFOV / 2) * 0.5f;
 	s -= key.pos;
 	s.x = s.x * 0.75f * k * 640 / s.z;
@@ -649,7 +649,7 @@ consequences on light :
 	if(play) {
 	
 	c->flTime = c->flTime + frameDuration;
-	CKTrack->currframe = (float(toMs(c->flTime)) / 1000.f) * ((float)(GetEndFrame() - GetStartFrame())) / (float)GetTimeKeyFramer();
+	CKTrack->currframe = toMs(c->flTime) / 1000.f * float(GetEndFrame() - GetStartFrame()) / GetTimeKeyFramer();
 	
 	// TODO this assert fails if you pause the gametime before a cinematic starts and unpause after
 	arx_assert(CKTrack->currframe >= 0);
@@ -657,7 +657,7 @@ consequences on light :
 	if(CKTrack->currframe > (float)CKTrack->endframe) {
 		CKTrack->currframe = (float)CKTrack->startframe;
 		c->key = NULL;
-		c->flTime = PlatformDuration_ZERO;
+		c->flTime = 0;
 	}
 	}
 }
@@ -668,7 +668,7 @@ void PlayTrack(Cinematic * c)
 		return;
 
 	CKTrack->pause = false;
-	c->flTime = PlatformDuration_ZERO;
+	c->flTime = 0;
 }
 
 float GetTimeKeyFramer()

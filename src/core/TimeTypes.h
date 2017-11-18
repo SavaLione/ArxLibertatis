@@ -26,6 +26,8 @@
 #include <boost/operators.hpp>
 #include <boost/type_traits.hpp>
 
+#include <glm/gtc/constants.hpp>
+
 #include "platform/Platform.h"
 
 
@@ -35,130 +37,157 @@ struct DurationType
 	, boost::additive1<DurationType<TAG, T>
 	> >
 {
+	
 	T t;
 	
-	DurationType()
-		: t()
-	{ }
-
-	DurationType(const DurationType<TAG, T> & t_)
-		: t(t_.t)
-	{ }
-	bool operator==(const DurationType<TAG, T> & rhs) const {
+	bool operator==(const DurationType & rhs) const {
 		return t == rhs.t;
 	}
-	bool operator<(const DurationType<TAG, T> & rhs) const {
+	
+	bool operator<(const DurationType & rhs) const {
 		return t < rhs.t;
 	}
-	DurationType<TAG, T> & operator=(const DurationType<TAG, T> & rhs) {
-		t = rhs.t;
-		return *this;
-	}
-	DurationType<TAG, T> & operator+=(const DurationType<TAG, T> & rhs) {
-		this->t += rhs.t;
-		return *this;
-	}
-	DurationType<TAG, T> & operator-=(const DurationType<TAG, T> & rhs) {
-		this->t -= rhs.t;
+	
+	DurationType & operator+=(const DurationType & rhs) {
+		t += rhs.t;
 		return *this;
 	}
 	
-	static inline DurationType ofRaw(T value) {
-		return DurationType(value);
+	DurationType & operator-=(const DurationType & rhs) {
+		t -= rhs.t;
+		return *this;
+	}
+	
+	static DurationType ofRaw(T value) {
+		return DurationType(value, 0);
 	}
 	
 private:
-	explicit DurationType(const T t_)
-		: t(t_)
-	{ }
+	
+	explicit DurationType(const T t_, int /* disambiguate */) : t(t_) { }
+	
+	class ZeroType;
+	typedef ZeroType ** Zero;
+	
+public:
+	
+	/* implicit */ DurationType(Zero = 0) : t(0) { }
+	
 };
 
 template <typename TAG, typename T>
 struct InstantType
 	: boost::totally_ordered1<InstantType<TAG, T>
-	>
+	, boost::additive2<InstantType<TAG, T>, DurationType<TAG, T>
+	> >
 {
+	
 	T t;
 	
-	InstantType()
-		: t()
-	{ }
-
-	InstantType(const InstantType<TAG, T> & t_)
-		: t(t_.t)
-	{ }
-	bool operator==(const InstantType<TAG, T> & rhs) const {
+	bool operator==(const InstantType & rhs) const {
 		return t == rhs.t;
 	}
-	bool operator<(const InstantType<TAG, T> & rhs) const {
+	bool operator<(const InstantType & rhs) const {
 		return t < rhs.t;
 	}
-	InstantType<TAG, T> & operator=(const InstantType<TAG, T> & rhs) {
-		t = rhs.t;
+	
+	InstantType & operator+=(DurationType<TAG, T> rhs) {
+		t += rhs.t;
 		return *this;
 	}
 	
-	static inline InstantType ofRaw(T value) {
-		return InstantType(value);
+	InstantType & operator-=(DurationType<TAG, T> rhs) {
+		t -= rhs.t;
+		return *this;
+	}
+	
+	static InstantType ofRaw(T value) {
+		return InstantType(value, 0);
 	}
 	
 private:
-	explicit InstantType(const T t_)
-		: t(t_)
-	{ }
+	
+	explicit InstantType(const T t_, int /* disambiguate */) : t(t_) { }
+	
+	class ZeroType;
+	typedef ZeroType ** Zero;
+	
+public:
+	
+	/* implicit */ InstantType(Zero = 0) : t(0) { }
+	
 };
 
 template <typename TAG, typename T>
-inline DurationType<TAG, T> operator -(InstantType<TAG, T> a, InstantType<TAG, T> b) {
+inline DurationType<TAG, T> operator-(InstantType<TAG, T> a, InstantType<TAG, T> b) {
 	return DurationType<TAG, T>::ofRaw(a.t - b.t);
 }
+
 template <typename TAG, typename T, class IntType>
-inline DurationType<TAG, T> operator *(DurationType<TAG, T> a, IntType b) {
+inline DurationType<TAG, T> operator*(DurationType<TAG, T> a, IntType b) {
 	ARX_STATIC_ASSERT(boost::is_integral<IntType>::value, "factor must be int type");
 	return DurationType<TAG, T>::ofRaw(a.t * T(b));
 }
 
 template <typename TAG, typename T>
-inline InstantType<TAG, T> operator +(InstantType<TAG, T> a, DurationType<TAG, T> b) {
-	return InstantType<TAG, T>::ofRaw(a.t + b.t);
-}
-template <typename TAG, typename T>
-inline InstantType<TAG, T> operator -(InstantType<TAG, T> a, DurationType<TAG, T> b) {
-	return InstantType<TAG, T>::ofRaw(a.t - b.t);
-}
-
-template <typename TAG, typename T>
-inline InstantType<TAG, T> & operator +=(InstantType<TAG, T> & a, DurationType<TAG, T> b) {
-	a.t += b.t;
-	return a;
-}
-
-template <typename TAG, typename T>
-inline float operator /(DurationType<TAG, T> a, DurationType<TAG, T> b) {
+inline float operator/(DurationType<TAG, T> a, DurationType<TAG, T> b) {
 	return float(a.t) / float(b.t);
 }
 
 
+template <typename TAG, typename T>
+inline float timeWaveSaw(InstantType<TAG, T> t, DurationType<TAG, T> period) {
+	return float(t.t % period.t) / float(period.t);
+}
+template <typename TAG, typename T>
+inline float timeWaveSin(InstantType<TAG, T> t, DurationType<TAG, T> period) {
+	return std::sin(timeWaveSaw(t, period) * 2.f * glm::pi<float>());
+}
+template <typename TAG, typename T>
+inline float timeWaveCos(InstantType<TAG, T> t, DurationType<TAG, T> period) {
+	return std::cos(timeWaveSaw(t, period) * 2.f * glm::pi<float>());
+}
+
 // ArxTime
-// in ms
-typedef InstantType <struct ArxTime_TAG, s64> ArxInstant;
-typedef DurationType<struct ArxTime_TAG, s64> ArxDuration;
+// in microseconds
+typedef InstantType <struct ArxTime_TAG, s64> GameInstant;
+typedef DurationType<struct ArxTime_TAG, s64> GameDuration;
 
-const ArxInstant  ArxInstant_ZERO  = ArxInstant::ofRaw(0);
-const ArxDuration ArxDuration_ZERO = ArxDuration::ofRaw(0);
-
-inline ArxInstant ArxInstantMs(s64 val) {
-	return ArxInstant::ofRaw(val);
+inline GameInstant GameInstantUs(s64 val) {
+	return GameInstant::ofRaw(val);
 }
-inline ArxDuration ArxDurationMs(s64 val) {
-	return ArxDuration::ofRaw(val);
+inline GameInstant GameInstantMs(s64 val) {
+	return GameInstant::ofRaw(val * 1000);
 }
 
-inline s64 toMs(ArxInstant val) {
+inline GameDuration GameDurationUs(s64 val) {
+	return GameDuration::ofRaw(val);
+}
+inline GameDuration GameDurationMs(s64 val) {
+	return GameDuration::ofRaw(val * 1000);
+}
+inline GameDuration GameDurationMsf(float val) {
+	return GameDuration::ofRaw(s64(val * 1000.f));
+}
+
+inline s64 toUs(GameInstant val) {
 	return val.t;
 }
-inline s64 toMs(ArxDuration val) {
+inline s64 toMsi(GameInstant val) {
+	return val.t / 1000;
+}
+inline float toMsf(GameInstant val) {
+	return float(val.t) / 1000.f;
+}
+
+inline s64 toUs(GameDuration val) {
 	return val.t;
+}
+inline s64 toMsi(GameDuration val) {
+	return val.t / 1000;
+}
+inline float toMsf(GameDuration val) {
+	return float(val.t) / 1000.f;
 }
 
 // PlatformTime
@@ -166,9 +195,9 @@ inline s64 toMs(ArxDuration val) {
 typedef InstantType <struct PlatformTime_TAG, s64> PlatformInstant;
 typedef DurationType<struct PlatformTime_TAG, s64> PlatformDuration;
 
-const PlatformInstant  PlatformInstant_ZERO  = PlatformInstant::ofRaw(0);
-const PlatformDuration PlatformDuration_ZERO = PlatformDuration::ofRaw(0);
-
+inline PlatformInstant PlatformInstantUs(s64 val) {
+	return PlatformInstant::ofRaw(val);
+}
 inline PlatformInstant PlatformInstantMs(s64 val) {
 	return PlatformInstant::ofRaw(val * 1000);
 }
@@ -179,7 +208,23 @@ inline PlatformDuration PlatformDurationUs(s64 val) {
 inline PlatformDuration PlatformDurationMs(s64 val) {
 	return PlatformDuration::ofRaw(val * 1000);
 }
+inline PlatformDuration PlatformDurationMsf(float val) {
+	return PlatformDuration::ofRaw(s64(val * 1000.f));
+}
 
+inline s64 toUs(PlatformInstant val) {
+	return val.t;
+}
+inline s64 toMsi(PlatformInstant val) {
+	return val.t / 1000;
+}
+
+inline s64 toUs(PlatformDuration val) {
+	return val.t;
+}
+inline s64 toMsi(PlatformDuration val) {
+	return val.t / 1000;
+}
 inline float toMs(PlatformDuration val) {
 	return float(val.t) / (1000.f);
 }
@@ -190,7 +235,6 @@ inline float toS(PlatformDuration val) {
 // AnimationTime
 // in microseconds
 typedef DurationType<struct AnimationTime_TAG, s64> AnimationDuration;
-const AnimationDuration AnimationDuration_ZERO = AnimationDuration::ofRaw(0);
 
 inline AnimationDuration operator*(AnimationDuration v, float scalar) {
 	return AnimationDuration::ofRaw(s64(float(v.t) * scalar));
@@ -201,6 +245,9 @@ inline AnimationDuration AnimationDurationUs(s64 val) {
 }
 inline AnimationDuration AnimationDurationMs(s64 val) {
 	return AnimationDuration::ofRaw(val * 1000);
+}
+inline AnimationDuration AnimationDurationMsf(float val) {
+	return AnimationDuration::ofRaw(s64(val * 1000.f));
 }
 
 inline s64 toMsi(AnimationDuration val) {
@@ -216,11 +263,14 @@ inline float toS(AnimationDuration val) {
 inline AnimationDuration toAnimationDuration(PlatformDuration val) {
 	return AnimationDuration::ofRaw(val.t);
 }
-inline AnimationDuration toAnimationDuration(ArxDuration val) {
-	return AnimationDuration::ofRaw(val.t * 1000);
+inline AnimationDuration toAnimationDuration(GameDuration val) {
+	return AnimationDuration::ofRaw(val.t);
 }
-inline ArxDuration toArxDuration(AnimationDuration val) {
-	return ArxDuration::ofRaw(val.t / 1000);
+inline GameDuration toGameDuration(AnimationDuration val) {
+	return GameDuration::ofRaw(val.t);
+}
+inline PlatformDuration toPlatformDuration(AnimationDuration val) {
+	return PlatformDuration::ofRaw(val.t);
 }
 
 

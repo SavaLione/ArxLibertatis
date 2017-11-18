@@ -229,13 +229,11 @@ public:
 		
 		if(name == "kill") {
 			cinematicKill();
-			arxtime.resume();
 		} else if(name == "play") {
 			cinematicRequestStart();
-			arxtime.pause();
 		} else {
 			
-			if(resources->getFile(res::path("graph/interface/illustrations") / (name + ".cin"))) {
+			if(g_resources->getFile(res::path("graph/interface/illustrations") / (name + ".cin"))) {
 				cinematicPrepare(name + ".cin", preload);
 			} else {
 				ScriptWarning << "unable to find cinematic \"" << name << '"';

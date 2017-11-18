@@ -43,7 +43,6 @@ public:
 	bool getAbsoluteMouseCoords(int & absX, int & absY) const;
 	void setAbsoluteMouseCoords(int absX, int absY);
 	void getRelativeMouseCoords(int & relX, int & relY, int & wheelDir) const;
-	bool isMouseButtonPressed(int buttonId, int & deltaTime) const;
 	void getMouseButtonClickCount(int buttonId, int & numClick, int & numUnClick) const;
 	
 	// Keyboard
@@ -61,7 +60,6 @@ private:
 	Vec2i cursorAbs;
 	bool cursorInWindow;
 	bool keyStates[Keyboard::KeyCount];
-	bool buttonStates[Mouse::ButtonCount];
 	size_t clickCount[Mouse::ButtonCount];
 	size_t unclickCount[Mouse::ButtonCount];
 	

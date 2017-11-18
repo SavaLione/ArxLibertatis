@@ -91,7 +91,7 @@ Color3f CabalFx::randomizeLightColor() {
 Vec3f CabalFx::update(Vec3f casterPos) {
 
 	float refpos;
-	const float frametime = float(arxtime.get_frame_time());
+	const float frametime = toMsf(g_gameTime.now());
 	float mov = std::sin(frametime * (1.0f / 800)) * m_scaleY;
 
 	Vec3f cabalpos;
@@ -161,10 +161,10 @@ void CabalFx::create(Vec3f casterPos) {
 		light->fallstart = 500.f;
 		light->rgb = m_startLightColor;
 		light->pos = casterPos;
-		light->duration = ArxDurationMs(900);
+		light->duration = GameDurationMs(900);
 	}
 }
 
 void CabalFx::end() {
-	endLightDelayed(m_lightHandle, ArxDurationMs(600));
+	endLightDelayed(m_lightHandle, GameDurationMs(600));
 }

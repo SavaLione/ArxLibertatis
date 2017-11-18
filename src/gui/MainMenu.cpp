@@ -23,9 +23,11 @@
 
 #include <boost/bind.hpp>
 #include <boost/foreach.hpp>
+#include <boost/lexical_cast.hpp>
 
 #include "audio/Audio.h"
 #include "core/Application.h"
+#include "core/Benchmark.h"
 #include "core/Config.h"
 #include "core/Core.h"
 #include "core/Localisation.h"
@@ -38,6 +40,7 @@
 #include "gui/Hud.h"
 #include "gui/Text.h"
 #include "gui/TextManager.h"
+#include "gui/menu/MenuCursor.h"
 #include "gui/menu/MenuFader.h"
 #include "gui/widget/CheckboxWidget.h"
 #include "gui/widget/CycleTextWidget.h"
@@ -53,20 +56,14 @@
 #include "scene/GameSound.h"
 #include "window/RenderWindow.h"
 
-CWindowMenu * pWindowMenu = NULL;
-TextWidget * pDeleteConfirm = NULL;
-TextWidget * pLoadConfirm = NULL;
-TextWidget * pDeleteButton = NULL;
 TextWidget * pMenuElementApply = NULL;
-
-extern MainMenu *mainMenu;
 
 class NewQuestMenuPage : public MenuPage {
 	
 public:
 	
-	NewQuestMenuPage(const Vec2f & pos, const Vec2f & size)
-		: MenuPage(pos, size, NEW_QUEST)
+	NewQuestMenuPage()
+		: MenuPage(Page_NewQuestConfirm)
 	{}
 	
 	~NewQuestMenuPage() { }
@@ -75,29 +72,29 @@ public:
 		
 		{
 			std::string szMenuText = getLocalised("system_menus_main_editquest_confirm");
-			TextWidget * txt = new TextWidget(BUTTON_INVALID, hFontMenu, szMenuText);
+			TextWidget * txt = new TextWidget(hFontMenu, szMenuText);
 			txt->SetCheckOff();
 			addCenter(txt, true);
 		}
 		
 		{
 			std::string szMenuText = getLocalised("system_menus_main_newquest_confirm");
-			TextWidget * txt = new TextWidget(BUTTON_INVALID, hFontMenu, szMenuText);
+			TextWidget * txt = new TextWidget(hFontMenu, szMenuText);
 			txt->SetCheckOff();
 			addCenter(txt, true);
 		}
 		
 		{
 			std::string szMenuText = getLocalised("system_yes");
-			TextWidget * txt = new TextWidget(BUTTON_INVALID, hFontMenu, szMenuText, Vec2f(m_size.x - 40, 380));
+			TextWidget * txt = new TextWidget(hFontMenu, szMenuText, Vec2f(m_size.x - 40, 380));
 			txt->clicked = boost::bind(ARXMenu_NewQuest);
 			add(txt);
 		}
 		
 		{
 			std::string szMenuText = getLocalised("system_no");
-			TextWidget * txt = new TextWidget(BUTTON_INVALID, hFontMenu, szMenuText, Vec2f(10, 380));
-			txt->m_targetMenu = MAIN;
+			TextWidget * txt = new TextWidget(hFontMenu, szMenuText, Vec2f(10, 380));
+			txt->m_targetMenu = Page_None;
 			txt->SetShortCut(Keyboard::Key_Escape);
 			add(txt);
 		}
@@ -105,65 +102,134 @@ public:
 	
 };
 
-class ChooseLoadOrSaveMenuPage : public MenuPage {
+extern bool bNoMenu;
+
+class SaveConfirmMenuPage : public MenuPage {
 	
 public:
 	
-	ChooseLoadOrSaveMenuPage(const Vec2f & pos, const Vec2f & size)
-		: MenuPage(pos, size, EDIT_QUEST)
+	SaveConfirmMenuPage()
+		: MenuPage(Page_SaveConfirm)
+		, m_savegame(SavegameHandle())
+		, m_textbox(NULL)
+		, pDeleteButton(NULL)
 	{}
 	
-	~ChooseLoadOrSaveMenuPage() { }
+	~SaveConfirmMenuPage() { }
 	
 	void init() {
 		
 		{
-			std::string szMenuText = getLocalised("system_menus_main_editquest_load");
-			TextWidget * txt = new TextWidget(BUTTON_INVALID, hFontMenu, szMenuText, Vec2f_ZERO);
-			txt->clicked = boost::bind(&ChooseLoadOrSaveMenuPage::onClickLoad, this);
-			txt->m_targetMenu = EDIT_QUEST_LOAD;
-			txt->m_savegame = SavegameHandle();
-			addCenter(txt, true);
+			ButtonWidget * cb = new ButtonWidget(Vec2f_ZERO, Vec2f(48, 48), "graph/interface/icons/menu_main_save");
+			cb->SetCheckOff();
+			addCenter(cb, true);
 		}
 		
 		{
-			std::string szMenuText = getLocalised( "system_menus_main_editquest_save");
-			TextWidget * txt = new TextWidget(BUTTON_INVALID, hFontMenu, szMenuText, Vec2f_ZERO);
-			txt->m_targetMenu = EDIT_QUEST_SAVE;
-			
-			if(!g_canResumeGame) {
-				txt->SetCheckOff();
-				txt->lColor = Color(127, 127, 127);
-			}
+			std::string szMenuText = getLocalised("system_menu_editquest_newsavegame", "---");
+			TextWidget * txt = new TextWidget(hFontMenu, szMenuText, Vec2f(20, 0));
+			txt->m_savegame = SavegameHandle();
+			txt->eState=EDIT;
+			txt->ePlace=CENTER;
 			addCenter(txt, true);
+			m_textbox = txt;
 		}
 		
+		// Delete button
+		{
+			std::string szMenuText = getLocalised("system_menus_main_editquest_delete");
+			TextWidget * txt = new TextWidget(hFontMenu, szMenuText, Vec2f_ZERO);
+			txt->clicked = boost::bind(&SaveConfirmMenuPage::onClickedSaveDelete, this, _1);
+			txt->m_targetMenu = Page_Save;
+			txt->SetPos(Vec2f(RATIO_X(m_size.x-10)-txt->m_rect.width(), RATIO_Y(5)));
+			txt->lOldColor = txt->lColor;
+			add(txt);
+			pDeleteButton = txt;
+		}
+		
+		// Save button
+		{
+			std::string szMenuText = getLocalised("system_menus_main_editquest_save");
+			TextWidget * txt = new TextWidget(hFontMenu, szMenuText, Vec2f_ZERO);
+			txt->clicked = boost::bind(&SaveConfirmMenuPage::onClickedSaveConfirm, this, _1);
+			txt->m_targetMenu = Page_None;
+			txt->SetPos(Vec2f(RATIO_X(m_size.x-10)-txt->m_rect.width(), RATIO_Y(380)));
+			add(txt);
+		}
+		
+		// Back button
 		{
 			ButtonWidget * cb = new ButtonWidget(Vec2f(20, 380), Vec2f(16, 16), "graph/interface/menus/back");
-			cb->m_targetMenu = MAIN;
+			cb->m_targetMenu = Page_Save;
 			cb->SetShortCut(Keyboard::Key_Escape);
 			add(cb);
 		}
 	}
 	
-private:
+	void setSaveHandle(SavegameHandle savegame) {
+		m_savegame = savegame;
+		m_textbox->m_savegame = savegame;
+		
+		if(savegame != SavegameHandle()) {
+			m_textbox->SetText(savegames[savegame.handleData()].name);
+			pDeleteButton->lColor = pDeleteButton->lOldColor;
+			pDeleteButton->SetCheckOn();
+		} else {
+			pDeleteButton->lColor = Color::grayb(127);
+			pDeleteButton->SetCheckOff();
+			m_textbox->SetText(getLocalised("system_menu_editquest_newsavegame"));
+		}
+		
+		AlignElementCenter(m_textbox);
+	}
 	
-	void onClickLoad() {
-		if(pWindowMenu)
-		for(size_t i = 0; i < pWindowMenu->m_pages.size(); i++) {
-			MenuPage * page = pWindowMenu->m_pages[i];
-			
-			if(page->eMenuState == EDIT_QUEST_LOAD) {
-				page->m_savegame = m_savegame;
-				
-				for(size_t j = 0; j < page->m_children.m_widgets.size(); j++) {
-					Widget * widget = page->m_children.m_widgets[j];
-					
-					if(widget->m_id == BUTTON_MENUEDITQUEST_LOAD) {
-						((TextWidget *)widget)->bSelected = false;
-					}
-				}
+private:
+	SavegameHandle m_savegame;
+	TextWidget * m_textbox;
+	TextWidget * pDeleteButton;
+	
+	void onClickedSaveConfirm(TextWidget * txt) {
+		m_savegame = txt->m_savegame;
+		
+		ARXMenu_SaveQuest(m_textbox->m_text, m_textbox->m_savegame);
+	}
+	
+	void onClickedSaveDelete(TextWidget * txt) {
+		m_savegame = txt->m_savegame;
+		
+		g_mainMenu->bReInitAll = true;
+		savegames.remove(m_textbox->m_savegame);
+		return;
+	}
+};
+
+class SaveSlotWidget : public TextWidget {
+	
+public:
+	SaveSlotWidget(Font * font, const std::string & text, Vec2f pos = Vec2f_ZERO)
+		: TextWidget(font, text, pos)
+	{ }
+	
+	virtual ~SaveSlotWidget() { }
+	
+	void RenderMouseOver() {
+		TextWidget::RenderMouseOver();
+		
+		arx_assert(m_id == BUTTON_MENUEDITQUEST_LOAD || m_id == BUTTON_MENUEDITQUEST_SAVEINFO);
+		
+		if(m_savegame == SavegameHandle()) {
+			g_thumbnailCursor.clear();
+			return;
+		}
+		
+		const res::path & image = savegames[m_savegame.handleData()].thumbnail;
+		if(!image.empty()) {
+			TextureContainer * t = TextureContainer::LoadUI(image, TextureContainer::NoColorKey);
+			if(t != g_thumbnailCursor.m_loadTexture) {
+				delete g_thumbnailCursor.m_loadTexture;
+				g_thumbnailCursor.m_loadTexture = t;
 			}
+			g_thumbnailCursor.m_renderTexture = g_thumbnailCursor.m_loadTexture;
 		}
 	}
 	
@@ -173,8 +239,11 @@ class LoadMenuPage : public MenuPage {
 	
 public:
 	
-	LoadMenuPage(const Vec2f & pos, const Vec2f & size)
-		: MenuPage(pos, size, EDIT_QUEST_LOAD)
+	LoadMenuPage()
+		: MenuPage(Page_Load)
+		, m_selectedSave(SavegameHandle())
+		, pLoadConfirm(NULL)
+		, pDeleteConfirm(NULL)
 	{}
 	
 	~LoadMenuPage() { }
@@ -206,9 +275,13 @@ public:
 			std::ostringstream text;
 			text << quicksaveName << ' ' << ++quicksaveNum << "   " << save.time;
 			
-			TextWidget * txt = new TextWidget(BUTTON_MENUEDITQUEST_LOAD, hFontControls, text.str(), Vec2f(20, 0));
+			SaveSlotWidget * txt = new SaveSlotWidget(hFontControls, text.str(), Vec2f(20, 0));
+			txt->m_id = BUTTON_MENUEDITQUEST_LOAD;
+			txt->clicked = boost::bind(&LoadMenuPage::onClickQuestLoad, this, _1);
+			txt->doubleClicked = boost::bind(&LoadMenuPage::onDoubleClickQuestLoad, this, _1);
 			txt->m_savegame = SavegameHandle(i);
 			addCenter(txt);
+			m_saveSlotWidgets.push_back(txt);
 		}
 		
 		// Show regular saves.
@@ -221,14 +294,18 @@ public:
 			
 			std::string text = save.name +  "   " + save.time;
 			
-			TextWidget * txt = new TextWidget(BUTTON_MENUEDITQUEST_LOAD, hFontControls, text, Vec2f(20, 0));
+			SaveSlotWidget * txt = new SaveSlotWidget(hFontControls, text, Vec2f(20, 0));
+			txt->m_id = BUTTON_MENUEDITQUEST_LOAD;
+			txt->clicked = boost::bind(&LoadMenuPage::onClickQuestLoad, this, _1);
+			txt->doubleClicked = boost::bind(&LoadMenuPage::onDoubleClickQuestLoad, this, _1);
 			txt->m_savegame = SavegameHandle(i);
 			addCenter(txt);
+			m_saveSlotWidgets.push_back(txt);
 		}
 		
 		{
-			TextWidget * txt = new TextWidget(BUTTON_INVALID, hFontControls, std::string(), Vec2f(20, 0));
-			txt->m_targetMenu = EDIT_QUEST_SAVE_CONFIRM;
+			TextWidget * txt = new TextWidget(hFontControls, std::string(), Vec2f(20, 0));
+			txt->m_targetMenu = Page_SaveConfirm;
 			txt->SetCheckOff();
 			txt->m_savegame = SavegameHandle();
 			addCenter(txt);
@@ -238,9 +315,10 @@ public:
 		{
 			std::string szMenuText = getLocalised("system_menus_main_editquest_delete");
 			szMenuText += "   ";
-			TextWidget * txt = new TextWidget(BUTTON_MENUEDITQUEST_DELETE_CONFIRM, hFontMenu, szMenuText, Vec2f_ZERO);
-			txt->m_targetMenu = EDIT_QUEST_LOAD;
-			txt->SetPos(Vec2f(RATIO_X(m_size.x-10)-txt->m_rect.width(), RATIO_Y(54)));
+			TextWidget * txt = new TextWidget(hFontMenu, szMenuText, Vec2f_ZERO);
+			txt->clicked = boost::bind(&LoadMenuPage::onClickQuestDelete, this);
+			txt->m_targetMenu = Page_Load;
+			txt->SetPos(Vec2f(RATIO_X(m_size.x-10)-txt->m_rect.width(), RATIO_Y(14)));
 			txt->SetCheckOff();
 			txt->lOldColor = txt->lColor;
 			txt->lColor = Color::grayb(127);
@@ -252,9 +330,10 @@ public:
 		{
 			std::string szMenuText = getLocalised("system_menus_main_editquest_load");
 			szMenuText += "   ";
-			TextWidget * txt = new TextWidget(BUTTON_MENUEDITQUEST_LOAD_CONFIRM, hFontMenu, szMenuText, Vec2f_ZERO);
-			txt->m_targetMenu = MAIN;
-			txt->SetPos(Vec2f(RATIO_X(m_size.x-10)-txt->m_rect.width(), RATIO_Y(380) + RATIO_Y(40)));
+			TextWidget * txt = new TextWidget(hFontMenu, szMenuText, Vec2f_ZERO);
+			txt->clicked = boost::bind(&LoadMenuPage::onClickQuestLoadConfirm, this);
+			txt->m_targetMenu = Page_None;
+			txt->SetPos(Vec2f(RATIO_X(m_size.x-10)-txt->m_rect.width(), RATIO_Y(380)));
 			txt->SetCheckOff();
 			txt->lOldColor = txt->lColor;
 			txt->lColor = Color::grayb(127);
@@ -264,22 +343,86 @@ public:
 		
 		// Back button
 		{
-			ButtonWidget * cb = new ButtonWidget(Vec2f(20, 420), Vec2f(16, 16), "graph/interface/menus/back");
+			ButtonWidget * cb = new ButtonWidget(Vec2f(20, 380), Vec2f(16, 16), "graph/interface/menus/back");
 			cb->clicked = boost::bind(&LoadMenuPage::onClickBack, this);
-			cb->m_targetMenu = EDIT_QUEST;
+			cb->m_targetMenu = Page_LoadOrSave;
 			cb->SetShortCut(Keyboard::Key_Escape);
 			add(cb);
 		}
 		}
 	}
 	
-private:
+	void resetSelection() {
+		
+		m_selectedSave = SavegameHandle();
+		
+		for(size_t j = 0; j < m_saveSlotWidgets.size(); j++) {
+			SaveSlotWidget * widget = m_saveSlotWidgets[j];
+			widget->bSelected = false;
+		}
+	}
 	
-	void onClickBack() {
+private:
+	std::vector<SaveSlotWidget *> m_saveSlotWidgets;
+	
+	SavegameHandle m_selectedSave;
+	TextWidget * pLoadConfirm;
+	TextWidget * pDeleteConfirm;
+	
+	void enableLoadDeleteButtons() {
+		pLoadConfirm->SetCheckOn();
+		pLoadConfirm->lColor = pLoadConfirm->lOldColor;
+		pDeleteConfirm->SetCheckOn();
+		pDeleteConfirm->lColor = pDeleteConfirm->lOldColor;
+	}
+	
+	void disableLoadDeleteButtons() {
 		pLoadConfirm->SetCheckOff();
 		pLoadConfirm->lColor = Color::grayb(127);
 		pDeleteConfirm->SetCheckOff();
 		pDeleteConfirm->lColor = Color::grayb(127);
+	}
+	
+	void onClickQuestLoad(TextWidget * txt) {
+		resetSelection();
+		enableLoadDeleteButtons();
+		
+		m_selectedSave = txt->m_savegame;
+		txt->bSelected = true;
+	}
+	
+	void onDoubleClickQuestLoad(TextWidget * txt) {
+		txt->OnMouseClick();
+		pLoadConfirm->OnMouseClick();
+	}
+	
+	void onClickQuestLoadConfirm() {
+		
+		if(m_selectedSave != SavegameHandle()) {
+			ARXMenu_LoadQuest(m_selectedSave);
+			
+			bNoMenu = true;
+			
+			if(pTextManage) {
+				pTextManage->Clear();
+			}
+		}
+		
+		disableLoadDeleteButtons();
+	}
+	
+	void onClickQuestDelete() {
+		if(m_selectedSave != SavegameHandle()) {
+			g_mainMenu->bReInitAll = true;
+			savegames.remove(m_selectedSave);
+			return;
+		}
+		
+		disableLoadDeleteButtons();
+	}
+	
+	void onClickBack() {
+		disableLoadDeleteButtons();
 	}
 	
 };
@@ -288,8 +431,8 @@ class SaveMenuPage : public MenuPage {
 	
 public:
 	
-	SaveMenuPage(const Vec2f & pos, const Vec2f & size)
-		: MenuPage(pos, size, EDIT_QUEST_SAVE)
+	SaveMenuPage()
+		: MenuPage(Page_Save)
 	{}
 	
 	~SaveMenuPage() { }
@@ -316,8 +459,10 @@ public:
 			std::ostringstream text;
 			text << quicksaveName << ' ' << ++quicksaveNum << "   " << save.time;
 			
-			TextWidget * txt = new TextWidget(BUTTON_MENUEDITQUEST_SAVEINFO, hFontControls, text.str(), Vec2f(20, 0));
-			txt->m_targetMenu = EDIT_QUEST_SAVE_CONFIRM;
+			SaveSlotWidget * txt = new SaveSlotWidget(hFontControls, text.str(), Vec2f(20, 0));
+			txt->m_id = BUTTON_MENUEDITQUEST_SAVEINFO;
+			txt->clicked = boost::bind(&SaveMenuPage::onClickQuestSaveConfirm, this, _1);
+			txt->m_targetMenu = Page_SaveConfirm;
 			txt->setColor(Color::grayb(127));
 			txt->SetCheckOff();
 			txt->m_savegame = SavegameHandle(i);
@@ -334,8 +479,10 @@ public:
 			
 			std::string text = save.name +  "   " + save.time;
 			
-			TextWidget * txt = new TextWidget(BUTTON_MENUEDITQUEST_SAVEINFO, hFontControls, text, Vec2f(20, 0));
-			txt->m_targetMenu = EDIT_QUEST_SAVE_CONFIRM;
+			SaveSlotWidget * txt = new SaveSlotWidget(hFontControls, text, Vec2f(20, 0));
+			txt->m_id = BUTTON_MENUEDITQUEST_SAVEINFO;
+			txt->clicked = boost::bind(&SaveMenuPage::onClickQuestSaveConfirm, this, _1);
+			txt->m_targetMenu = Page_SaveConfirm;
 			txt->m_savegame = SavegameHandle(i);
 			addCenter(txt);
 		}
@@ -345,87 +492,87 @@ public:
 			std::ostringstream text;
 			text << '-' << std::setfill('0') << std::setw(4) << i << '-';
 			
-			TextWidget * txt = new TextWidget(BUTTON_MENUEDITQUEST_SAVEINFO, hFontControls, text.str(), Vec2f(20, 0));
-			txt->m_targetMenu = EDIT_QUEST_SAVE_CONFIRM;
+			SaveSlotWidget * txt = new SaveSlotWidget(hFontControls, text.str(), Vec2f(20, 0));
+			txt->m_id = BUTTON_MENUEDITQUEST_SAVEINFO;
+			txt->clicked = boost::bind(&SaveMenuPage::onClickQuestSaveConfirm, this, _1);
+			txt->m_targetMenu = Page_SaveConfirm;
 			txt->m_savegame = SavegameHandle();
 			addCenter(txt);
 		}
 	
 		{
-			TextWidget * txt = new TextWidget(BUTTON_INVALID, hFontControls, std::string(), Vec2f(20, 0));
-			txt->m_targetMenu = EDIT_QUEST_SAVE_CONFIRM;
+			TextWidget * txt = new TextWidget(hFontControls, std::string(), Vec2f(20, 0));
+			txt->clicked = boost::bind(&SaveMenuPage::onClickQuestSaveConfirm, this, _1);
+			txt->m_targetMenu = Page_SaveConfirm;
 			txt->m_savegame = SavegameHandle();
 			txt->SetCheckOff();
 			addCenter(txt);
 		}
 		
 		{
-			ButtonWidget * cb = new ButtonWidget(Vec2f(20, 420), Vec2f(16, 16), "graph/interface/menus/back");
-			cb->m_targetMenu = EDIT_QUEST;
+			ButtonWidget * cb = new ButtonWidget(Vec2f(20, 380), Vec2f(16, 16), "graph/interface/menus/back");
+			cb->m_targetMenu = Page_LoadOrSave;
 			cb->SetShortCut(Keyboard::Key_Escape);
 			add(cb);
 		}
 	}
 	
+private:
+	void onClickQuestSaveConfirm(TextWidget * txt) {
+		g_mainMenu->m_window->m_pageSaveConfirm->setSaveHandle(txt->m_savegame);
+	}
 };
 
-class SaveConfirmMenuPage : public MenuPage {
+class ChooseLoadOrSaveMenuPage : public MenuPage {
 	
 public:
 	
-	SaveConfirmMenuPage(const Vec2f & pos, const Vec2f & size)
-		: MenuPage(pos, size, EDIT_QUEST_SAVE_CONFIRM)
+	ChooseLoadOrSaveMenuPage()
+		: MenuPage(Page_LoadOrSave)
 	{}
 	
-	~SaveConfirmMenuPage() { }
+	~ChooseLoadOrSaveMenuPage() { }
 	
 	void init() {
 		
 		{
-			ButtonWidget * cb = new ButtonWidget(Vec2f_ZERO, Vec2f(48, 48), "graph/interface/icons/menu_main_save");
-			cb->SetCheckOff();
-			addCenter(cb, true);
-		}
-		
-		{
-			std::string szMenuText = getLocalised("system_menu_editquest_newsavegame", "---");
-			TextWidget * txt = new TextWidget(BUTTON_INVALID, hFontMenu, szMenuText, Vec2f(20, 0));
+			std::string szMenuText = getLocalised("system_menus_main_editquest_load");
+			TextWidget * txt = new TextWidget(hFontMenu, szMenuText, Vec2f_ZERO);
+			txt->clicked = boost::bind(&ChooseLoadOrSaveMenuPage::onClickLoad, this);
+			txt->m_targetMenu = Page_Load;
 			txt->m_savegame = SavegameHandle();
-			txt->eState=EDIT;
-			txt->ePlace=CENTER;
 			addCenter(txt, true);
 		}
 		
-		// Delete button
 		{
-			std::string szMenuText = getLocalised("system_menus_main_editquest_delete");
-			TextWidget * txt = new TextWidget(BUTTON_MENUEDITQUEST_DELETE, hFontMenu, szMenuText, Vec2f_ZERO);
-			txt->m_targetMenu = EDIT_QUEST_SAVE;
-			txt->SetPos(Vec2f(RATIO_X(m_size.x-10)-txt->m_rect.width(), RATIO_Y(5)));
-			txt->lOldColor = txt->lColor;
-			add(txt);
-			pDeleteButton = txt;
+			std::string szMenuText = getLocalised( "system_menus_main_editquest_save");
+			TextWidget * txt = new TextWidget(hFontMenu, szMenuText, Vec2f_ZERO);
+			txt->m_targetMenu = Page_Save;
+			
+			if(!g_canResumeGame) {
+				txt->SetCheckOff();
+				txt->lColor = Color(127, 127, 127);
+			}
+			addCenter(txt, true);
 		}
 		
-		// Save button
-		{
-			std::string szMenuText = getLocalised("system_menus_main_editquest_save");
-			TextWidget * txt = new TextWidget(BUTTON_MENUEDITQUEST_SAVE, hFontMenu, szMenuText, Vec2f_ZERO);
-			txt->m_targetMenu = MAIN;
-			txt->SetPos(Vec2f(RATIO_X(m_size.x-10)-txt->m_rect.width(), RATIO_Y(380)));
-			add(txt);
-		}
-		
-		// Back button
 		{
 			ButtonWidget * cb = new ButtonWidget(Vec2f(20, 380), Vec2f(16, 16), "graph/interface/menus/back");
-			cb->m_targetMenu = EDIT_QUEST_SAVE;
+			cb->m_targetMenu = Page_None;
 			cb->SetShortCut(Keyboard::Key_Escape);
 			add(cb);
 		}
 	}
 	
+private:
+	
+	void onClickLoad() {
+		g_mainMenu->m_window->m_pageLoad->resetSelection();
+	}
+	
 };
+
+
 
 int newWidth;
 int newHeight;
@@ -435,8 +582,8 @@ class OptionsMenuPage : public MenuPage {
 	
 public:
 	
-	OptionsMenuPage(const Vec2f & pos, const Vec2f & size)
-		: MenuPage(pos, size, OPTIONS)
+	OptionsMenuPage()
+		: MenuPage(Page_Options)
 	{}
 	
 	~OptionsMenuPage() { }
@@ -445,37 +592,43 @@ public:
 		
 		{
 			std::string szMenuText = getLocalised("system_menus_options_video");
-			TextWidget * txt = new TextWidget(BUTTON_INVALID, hFontMenu, szMenuText, Vec2f_ZERO);
+			TextWidget * txt = new TextWidget(hFontMenu, szMenuText, Vec2f_ZERO);
 			txt->clicked = boost::bind(&OptionsMenuPage::onClickedVideo, this);
-			txt->m_targetMenu = OPTIONS_VIDEO;
+			txt->m_targetMenu = Page_OptionsVideo;
 			addCenter(txt, true);
 		}
 		
 		{
-			std::string szMenuText = getLocalised("system_menus_options_interface",
-			                                      "Interface settings");
-			TextWidget * txt = new TextWidget(BUTTON_INVALID, hFontMenu, szMenuText, Vec2f_ZERO);
-			txt->m_targetMenu = OPTIONS_INTERFACE;
+			std::string szMenuText = getLocalised("system_menus_options_render", "Render settings");
+			TextWidget * txt = new TextWidget(hFontMenu, szMenuText, Vec2f_ZERO);
+			txt->m_targetMenu = Page_OptionsRender;
+			addCenter(txt, true);
+		}
+		
+		{
+			std::string szMenuText = getLocalised("system_menus_options_interface", "Interface settings");
+			TextWidget * txt = new TextWidget(hFontMenu, szMenuText, Vec2f_ZERO);
+			txt->m_targetMenu = Page_OptionsInterface;
 			addCenter(txt, true);
 		}
 		
 		{
 			std::string szMenuText = getLocalised("system_menus_options_audio");
-			TextWidget * txt = new TextWidget(BUTTON_INVALID, hFontMenu, szMenuText, Vec2f_ZERO);
-			txt->m_targetMenu = OPTIONS_AUDIO;
+			TextWidget * txt = new TextWidget(hFontMenu, szMenuText, Vec2f_ZERO);
+			txt->m_targetMenu = Page_OptionsAudio;
 			addCenter(txt, true);
 		}
 		
 		{
 			std::string szMenuText = getLocalised("system_menus_options_input");
-			TextWidget * txt = new TextWidget(BUTTON_INVALID, hFontMenu, szMenuText, Vec2f_ZERO);
-			txt->m_targetMenu = OPTIONS_INPUT;
+			TextWidget * txt = new TextWidget(hFontMenu, szMenuText, Vec2f_ZERO);
+			txt->m_targetMenu = Page_OptionsInput;
 			addCenter(txt, true);
 		}
 		
 		{
 			ButtonWidget * cb = new ButtonWidget(Vec2f(20, 380), Vec2f(16, 16), "graph/interface/menus/back");
-			cb->m_targetMenu = MAIN;
+			cb->m_targetMenu = Page_None;
 			cb->SetShortCut(Keyboard::Key_Escape);
 			add(cb);
 		}
@@ -498,8 +651,9 @@ class VideoOptionsMenuPage : public MenuPage {
 	
 public:
 	
-	VideoOptionsMenuPage(const Vec2f & pos, const Vec2f & size)
-		: MenuPage(pos, size, OPTIONS_VIDEO)
+	VideoOptionsMenuPage()
+		: MenuPage(Page_OptionsVideo)
+		, m_gammaSlider(NULL)
 		, m_minimizeOnFocusLostCheckbox(NULL)
 	{
 		fullscreenCheckbox = NULL;
@@ -510,40 +664,10 @@ public:
 	
 	CheckboxWidget * fullscreenCheckbox;
 	CycleTextWidget * pMenuSliderResol;
+	SliderWidget * m_gammaSlider;
 	CheckboxWidget * m_minimizeOnFocusLostCheckbox;
 	
 	void init() {
-		
-		// Renderer selection
-		{
-			PanelWidget * panel = new PanelWidget;
-			std::string szMenuText = getLocalised("system_menus_options_video_renderer", "Renderer");
-			szMenuText += "  ";
-			TextWidget * txt = new TextWidget(BUTTON_INVALID, hFontMenu, szMenuText, Vec2f(20, 0));
-			txt->SetCheckOff();
-			panel->AddElement(txt);
-			CycleTextWidget * slider = new CycleTextWidget;
-			slider->valueChanged = boost::bind(&VideoOptionsMenuPage::onChangedRenderer, this, _1, _2);
-			
-			{
-				TextWidget * txt = new TextWidget(BUTTON_INVALID, hFontMenu, "Auto-Select", Vec2f_ZERO);
-				slider->AddText(txt);
-				slider->selectLast();
-			}
-			
-			{
-				TextWidget * txt = new TextWidget(BUTTON_INVALID, hFontMenu, "OpenGL", Vec2f_ZERO);
-				slider->AddText(txt);
-				if(config.video.renderer == "OpenGL") {
-					slider->selectLast();
-				}
-			}
-			
-			float fRatio    = (RATIO_X(m_size.x-9) - slider->m_rect.width());
-			slider->Move(Vec2f(fRatio, 0));
-			panel->AddElement(slider);
-			addCenter(panel);
-		}
 		
 		{
 			std::string szMenuText = getLocalised("system_menus_options_videos_full_screen");
@@ -553,7 +677,7 @@ public:
 				// for the german version there
 				szMenuText = getLocalised("system_menus_options_video_full_screen");
 			}
-			TextWidget * txt = new TextWidget(BUTTON_INVALID, hFontMenu, szMenuText, Vec2f(20, 0));
+			TextWidget * txt = new TextWidget(hFontMenu, szMenuText, Vec2f(20, 0));
 			txt->SetCheckOff();
 			CheckboxWidget * cb = new CheckboxWidget(txt);
 			cb->stateChanged = boost::bind(&VideoOptionsMenuPage::onChangedFullscreen, this, _1);
@@ -566,7 +690,7 @@ public:
 			PanelWidget * panel = new PanelWidget;
 			std::string szMenuText = getLocalised("system_menus_options_video_resolution");
 			szMenuText += "  ";
-			TextWidget * txt = new TextWidget(BUTTON_INVALID, hFontMenu, szMenuText, Vec2f(20, 0));
+			TextWidget * txt = new TextWidget(hFontMenu, szMenuText, Vec2f(20, 0));
 			txt->SetCheckOff();
 			panel->AddElement(txt);
 			pMenuSliderResol = new CycleTextWidget;
@@ -598,21 +722,20 @@ public:
 					ss << " (" << aspect.x << ':' << aspect.y << ')';
 				}
 				
-				pMenuSliderResol->AddText(new TextWidget(BUTTON_INVALID, hFontMenu, ss.str()));
+				pMenuSliderResol->AddText(new TextWidget(hFontMenu, ss.str()));
 				
 				if(mode.resolution == config.video.resolution) {
 					pMenuSliderResol->selectLast();
 				}
 			}
 			
-			pMenuSliderResol->AddText(new TextWidget(BUTTON_INVALID, hFontMenu, AUTO_RESOLUTION_STRING));
+			pMenuSliderResol->AddText(new TextWidget(hFontMenu, AUTO_RESOLUTION_STRING));
 			
 			if(config.video.resolution == Vec2i_ZERO) {
 				pMenuSliderResol->selectLast();
 			}
 		
-			float fRatio    = (RATIO_X(m_size.x-9) - pMenuSliderResol->m_rect.width()); 
-		
+			float fRatio = RATIO_X(m_size.x - 9) - pMenuSliderResol->m_rect.width();
 			pMenuSliderResol->Move(Vec2f(fRatio, 0));
 			
 			panel->AddElement(pMenuSliderResol);
@@ -620,9 +743,23 @@ public:
 		}
 		
 		{
+			PanelWidget * panel = new PanelWidget;
+			std::string szMenuText = getLocalised("system_menus_options_video_gamma");
+			TextWidget * txt = new TextWidget(hFontMenu, szMenuText, Vec2f(20, 0));
+			txt->SetCheckOff();
+			panel->AddElement(txt);
+			SliderWidget * sld = new SliderWidget(Vec2f(200, 0));
+			sld->valueChanged = boost::bind(&VideoOptionsMenuPage::onChangedGamma, this, _1);
+			setGammaState(sld, config.video.fullscreen);
+			panel->AddElement(sld);
+			addCenter(panel);
+			m_gammaSlider = sld;
+		}
+		
+		{
 			std::string szMenuText = getLocalised("system_menus_options_videos_minimize_on_focus_lost",
 			                                      "Minimize on focus loss");
-			TextWidget * txt = new TextWidget(BUTTON_INVALID, hFontMenu, szMenuText, Vec2f(20, 0));
+			TextWidget * txt = new TextWidget(hFontMenu, szMenuText, Vec2f(20, 0));
 			txt->SetCheckOff();
 			CheckboxWidget * cb = new CheckboxWidget(txt);
 			cb->stateChanged = boost::bind(&VideoOptionsMenuPage::onChangedMinimizeOnFocusLost, this, _1);
@@ -633,73 +770,31 @@ public:
 		
 		{
 			// Add spacing
-			addCenter(new TextWidget(BUTTON_INVALID, hFontMenu, std::string(), Vec2f(20, 0)));
-		}
-		
-		{
-			PanelWidget * panel = new PanelWidget;
-			std::string szMenuText = getLocalised("system_menus_options_detail");
-			szMenuText += " ";
-			TextWidget * txt = new TextWidget(BUTTON_INVALID, hFontMenu, szMenuText, Vec2f(20, 0));
-			txt->SetCheckOff();
-			panel->AddElement(txt);
-			
-			CycleTextWidget * cb = new CycleTextWidget;
-			cb->valueChanged = boost::bind(&VideoOptionsMenuPage::onChangedQuality, this, _1, _2);
-			szMenuText = getLocalised("system_menus_options_video_texture_low");
-			cb->AddText(new TextWidget(BUTTON_INVALID, hFontMenu, szMenuText));
-			szMenuText = getLocalised("system_menus_options_video_texture_med");
-			cb->AddText(new TextWidget(BUTTON_INVALID, hFontMenu, szMenuText));
-			szMenuText = getLocalised("system_menus_options_video_texture_high");
-			cb->AddText(new TextWidget(BUTTON_INVALID, hFontMenu, szMenuText));
-			cb->setValue(config.video.levelOfDetail);
-			
-			cb->Move(Vec2f(RATIO_X(m_size.x-9) - cb->m_rect.width(), 0));
-			panel->AddElement(cb);
-			
-			addCenter(panel);
-		}
-		
-		{
-			PanelWidget * panel = new PanelWidget;
-			std::string szMenuText = getLocalised("system_menus_options_video_brouillard");
-			TextWidget * txt = new TextWidget(BUTTON_INVALID, hFontMenu, szMenuText, Vec2f(20, 0));
-			txt->SetCheckOff();
-			panel->AddElement(txt);
-			SliderWidget * sld = new SliderWidget(Vec2f(200, 0));
-			sld->valueChanged = boost::bind(&VideoOptionsMenuPage::onChangedFogDistance, this, _1);
-			sld->setValue(config.video.fogDistance);
-			panel->AddElement(sld);
-			addCenter(panel);
-		}
-		
-		{
-			std::string szMenuText = getLocalised("system_menus_options_video_antialiasing", "antialiasing");
-			TextWidget * txt = new TextWidget(BUTTON_INVALID, hFontMenu, szMenuText, Vec2f(20, 0));
-			txt->SetCheckOff();
-			CheckboxWidget * cb = new CheckboxWidget(txt);
-			cb->stateChanged = boost::bind(&VideoOptionsMenuPage::onChangedAntialiasing, this, _1);
-			cb->iState = config.video.antialiasing ? 1 : 0;
-			addCenter(cb);
+			addCenter(new TextWidget(hFontMenu, std::string(), Vec2f(20, 0)));
 		}
 		
 		{
 			PanelWidget * panel = new PanelWidget;
 			std::string szMenuText = getLocalised("system_menus_options_video_vsync", "VSync");
 			szMenuText += " ";
-			TextWidget * txt = new TextWidget(BUTTON_INVALID, hFontMenu, szMenuText, Vec2f(20, 0));
+			TextWidget * txt = new TextWidget(hFontMenu, szMenuText, Vec2f(20, 0));
 			txt->SetCheckOff();
 			panel->AddElement(txt);
 			
 			CycleTextWidget * cb = new CycleTextWidget;
 			cb->valueChanged = boost::bind(&VideoOptionsMenuPage::onChangedVSync, this, _1, _2);
-			szMenuText = getLocalised("system_menus_options_video_vsync_off", "Off");
-			cb->AddText(new TextWidget(BUTTON_INVALID, hFontMenu, szMenuText));
-			szMenuText = getLocalised("system_menus_options_video_vsync_on", "On");
-			cb->AddText(new TextWidget(BUTTON_INVALID, hFontMenu, szMenuText));
-			szMenuText = getLocalised("system_menus_options_video_vsync_auto", "Adaptive");
-			cb->AddText(new TextWidget(BUTTON_INVALID, hFontMenu, szMenuText));
-			cb->setValue(config.video.vsync < 0 ? 2 : config.video.vsync);
+			szMenuText = getLocalised("system_menus_options_video_vsync_off", "Disabled");
+			cb->AddText(new TextWidget(hFontMenu, szMenuText));
+			if(benchmark::isEnabled()) {
+				cb->setValue(0);
+				cb->setEnabled(false);
+			} else {
+				szMenuText = getLocalised("system_menus_options_video_vsync_on", "Enabled");
+				cb->AddText(new TextWidget(hFontMenu, szMenuText));
+				szMenuText = getLocalised("system_menus_options_video_vsync_auto", "Adaptive");
+				cb->AddText(new TextWidget(hFontMenu, szMenuText));
+				cb->setValue(config.video.vsync < 0 ? 2 : config.video.vsync);
+			}
 			
 			cb->Move(Vec2f(RATIO_X(m_size.x-9) - cb->m_rect.width(), 0));
 			panel->AddElement(cb);
@@ -709,56 +804,42 @@ public:
 		
 		{
 			PanelWidget * panel = new PanelWidget;
-			std::string szMenuText = getLocalised("system_menus_options_video_texture_filter_anisotropic",
-			                                      "Anisotropic filtering");
+			std::string szMenuText = getLocalised("system_menus_options_video_fps_limit", "FPS Limit ");
 			szMenuText += " ";
-			TextWidget * txt = new TextWidget(BUTTON_INVALID, hFontMenu, szMenuText, Vec2f(20, 0));
+			TextWidget * txt = new TextWidget(hFontMenu, szMenuText, Vec2f(20, 0));
 			txt->SetCheckOff();
 			panel->AddElement(txt);
 			
 			CycleTextWidget * cb = new CycleTextWidget;
-			cb->valueChanged = boost::bind(&VideoOptionsMenuPage::onChangedMaxAnisotropy, this, _1, _2);
-			szMenuText = getLocalised("system_menus_options_video_filter_anisotropic_off", "Off");
-			cb->AddText(new TextWidget(BUTTON_INVALID, hFontMenu, szMenuText));
-			int maxAnisotropy = int(GRenderer->getMaxSupportedAnisotropy());
-			int selected = 0;
-			if(maxAnisotropy > 1) {
-				int i = 1;
-				std::ostringstream oss;
-				for(int anisotropy = 2; ; anisotropy *= 2, i++) {
-					if(anisotropy > maxAnisotropy) {
-						anisotropy = maxAnisotropy;
-					}
-					oss.str(std::string());
-					oss << 'x' << anisotropy;
-					cb->AddText(new TextWidget(BUTTON_INVALID, hFontMenu, oss.str()));
-					if(config.video.maxAnisotropicFiltering == anisotropy) {
-						selected = i;
-					}
-					if(config.video.maxAnisotropicFiltering > anisotropy
-					   && config.video.maxAnisotropicFiltering < anisotropy * 2
-					   && config.video.maxAnisotropicFiltering <= maxAnisotropy) {
-						oss.str(std::string());
-						oss << 'x' << config.video.maxAnisotropicFiltering;
-						cb->AddText(new TextWidget(BUTTON_INVALID, hFontMenu, oss.str()));
-						selected = ++i;
-					}
-					if(anisotropy == maxAnisotropy) {
-						i++;
-						break;
-					}
-				}
-				szMenuText = getLocalised("system_menus_options_video_filter_anisotropic_max", "Unlimited");
-				cb->AddText(new TextWidget(BUTTON_INVALID, hFontMenu, szMenuText));
-				if(config.video.maxAnisotropicFiltering > maxAnisotropy) {
-					selected = i;
-				}
-			}
-			cb->setValue(selected);
-			cb->Move(Vec2f(RATIO_X(m_size.x-9) - cb->m_rect.width(), 0));
-			if(maxAnisotropy <= 1) {
+			cb->valueChanged = boost::bind(&VideoOptionsMenuPage::onChangedFPSLimit, this, _1, _2);
+			szMenuText = getLocalised("system_menus_options_video_vsync_off", "Disabled");
+			cb->AddText(new TextWidget(hFontMenu, szMenuText));
+			if(benchmark::isEnabled()) {
+				cb->setValue(0);
 				cb->setEnabled(false);
+			} else {
+				cb->AddText(new TextWidget(hFontMenu, "60"));
+				cb->AddText(new TextWidget(hFontMenu, "120"));
+				cb->AddText(new TextWidget(hFontMenu, "240"));
+				cb->AddText(new TextWidget(hFontMenu, "480"));
+				if(config.video.fpsLimit == 0) {
+					cb->setValue(0);
+				} else if(config.video.fpsLimit == 60) {
+					cb->setValue(1);
+				} else if(config.video.fpsLimit == 120) {
+					cb->setValue(2);
+				} else if(config.video.fpsLimit == 240) {
+					cb->setValue(3);
+				} else if(config.video.fpsLimit == 480) {
+					cb->setValue(4);
+				} else {
+					std::string text = boost::lexical_cast<std::string>(config.video.fpsLimit);
+					cb->AddText(new TextWidget(hFontMenu, text));
+					cb->setValue(5);
+				}
 			}
+			
+			cb->Move(Vec2f(RATIO_X(m_size.x-9) - cb->m_rect.width(), 0));
 			panel->AddElement(cb);
 			
 			addCenter(panel);
@@ -767,7 +848,7 @@ public:
 		{
 			std::string szMenuText = getLocalised("system_menus_video_apply");
 			szMenuText += "   ";
-			TextWidget * txt = new TextWidget(BUTTON_INVALID, hFontMenu, szMenuText, Vec2f(240, 0));
+			TextWidget * txt = new TextWidget(hFontMenu, szMenuText, Vec2f(240, 0));
 			txt->clicked = boost::bind(&VideoOptionsMenuPage::onClickedApply, this);
 			txt->SetPos(Vec2f(RATIO_X(m_size.x-10)-txt->m_rect.width(), RATIO_Y(380) + RATIO_Y(40)));
 			txt->SetCheckOff();
@@ -776,15 +857,28 @@ public:
 		}
 		
 		{
-			ButtonWidget * cb = new ButtonWidget(Vec2f(20, 420), Vec2f(16, 16), "graph/interface/menus/back");
+			ButtonWidget * cb = new ButtonWidget(Vec2f(20, 380), Vec2f(16, 16), "graph/interface/menus/back");
 			cb->clicked = boost::bind(&VideoOptionsMenuPage::onClickedBack, this);
-			cb->m_targetMenu = OPTIONS;
+			cb->m_targetMenu = Page_Options;
 			cb->SetShortCut(Keyboard::Key_Escape);
 			add(cb);
 		}
 	}
 	
 private:
+	
+	void setGammaState(SliderWidget * sld, bool fullscreen) {
+		
+		if(!fullscreen) {
+			sld->setValue(5);
+			sld->SetCheckOff();
+			return;
+		}
+		
+		sld->setValue(int(config.video.gamma));
+		sld->SetCheckOn();
+		
+	}
 	
 	void setMinimizeOnFocusLostState(CheckboxWidget * cb, bool fullscreen) {
 		
@@ -804,21 +898,12 @@ private:
 		
 	}
 	
-	void onChangedRenderer(int pos, const std::string & str) {
-		ARX_UNUSED(str);
-		
-		switch(pos) {
-			case 0:  config.video.renderer = "auto"; break;
-			case 1:  config.video.renderer = "OpenGL";  break;
-			default: config.video.renderer = "auto"; break;
-		}
-	}
-	
 	void onChangedFullscreen(int state) {
 		newFullscreen = ((state)?true:false);
 		
 		if(pMenuSliderResol) {
 			pMenuSliderResol->setEnabled(newFullscreen);
+			setGammaState(m_gammaSlider, newFullscreen);
 			setMinimizeOnFocusLostState(m_minimizeOnFocusLostCheckbox, newFullscreen);
 		}
 	}
@@ -839,23 +924,13 @@ private:
 		}
 	}
 	
+	void onChangedGamma(int state) {
+		ARXMenu_Options_Video_SetGamma(float(state));
+	}
+	
 	void onChangedMinimizeOnFocusLost(int state) {
 		config.window.minimizeOnFocusLost = state ? true : false;
 		mainApp->getWindow()->setMinimizeOnFocusLost(config.window.minimizeOnFocusLost);
-	}
-	
-	void onChangedQuality(int pos, const std::string & str) {
-		ARX_UNUSED(str);
-		
-		ARXMenu_Options_Video_SetDetailsQuality(pos);
-	}
-	
-	void onChangedFogDistance(int value) {
-		ARXMenu_Options_Video_SetFogDistance(value);
-	}
-	
-	void onChangedAntialiasing(int state) {
-		config.video.antialiasing = state ? true : false;
 	}
 	
 	void onChangedVSync(int pos, const std::string & str) {
@@ -864,21 +939,13 @@ private:
 		mainApp->getWindow()->setVSync(config.video.vsync);
 	}
 	
-	void onChangedMaxAnisotropy(int pos, const std::string & str) {
+	void onChangedFPSLimit(int pos, const std::string & str) {
 		ARX_UNUSED(str);
-		
-		int anisotropy = 1;
-		if(pos > 0) {
-			if(!str.empty() && str[0] == 'x') {
-				std::stringstream ss(str.substr(1));
-				ss >> anisotropy;
-			} else {
-				anisotropy = 9001;
-			}
+		if(pos == 0) {
+			config.video.fpsLimit = 0;
+		} else {
+			config.video.fpsLimit = boost::lexical_cast<int>(str);
 		}
-		
-		config.video.maxAnisotropicFiltering = anisotropy;
-		GRenderer->setMaxAnisotropy(anisotropy);
 	}
 	
 	void onClickedBack() {
@@ -905,16 +972,295 @@ private:
 			pMenuSliderResol->setOldValue(-1);
 			fullscreenCheckbox->iOldState = -1;
 		}
-		mainMenu->bReInitAll=true;
+		g_mainMenu->bReInitAll=true;
 	}
+	
+};
+
+class RenderOptionsMenuPage : public MenuPage {
+	
+public:
+	
+	RenderOptionsMenuPage()
+		: MenuPage(Page_OptionsRender)
+		, m_alphaCutoutAntialiasingCycleText(NULL)
+	{ }
+	
+	~RenderOptionsMenuPage() { }
+	
+	CycleTextWidget * m_alphaCutoutAntialiasingCycleText;
+	
+	void init() {
+		
+		// Renderer selection
+		{
+			PanelWidget * panel = new PanelWidget;
+			std::string szMenuText = getLocalised("system_menus_options_video_renderer", "Renderer");
+			szMenuText += "  ";
+			TextWidget * txt = new TextWidget(hFontMenu, szMenuText, Vec2f(20, 0));
+			txt->SetCheckOff();
+			panel->AddElement(txt);
+			CycleTextWidget * slider = new CycleTextWidget;
+			slider->valueChanged = boost::bind(&RenderOptionsMenuPage::onChangedRenderer, this, _1, _2);
+			
+			{
+				TextWidget * txt = new TextWidget(hFontMenu, "Auto-Select", Vec2f_ZERO);
+				slider->AddText(txt);
+				slider->selectLast();
+			}
+			
+			{
+				TextWidget * txt = new TextWidget(hFontMenu, "OpenGL", Vec2f_ZERO);
+				slider->AddText(txt);
+				if(config.video.renderer == "OpenGL") {
+					slider->selectLast();
+				}
+			}
+			
+			float fRatio    = (RATIO_X(m_size.x-9) - slider->m_rect.width());
+			slider->Move(Vec2f(fRatio, 0));
+			panel->AddElement(slider);
+			addCenter(panel);
+		}
+		
+		{
+			// Add spacing
+			addCenter(new TextWidget(hFontMenu, std::string(), Vec2f(20, 0)));
+		}
+		
+		{
+			PanelWidget * panel = new PanelWidget;
+			std::string szMenuText = getLocalised("system_menus_options_detail");
+			szMenuText += " ";
+			TextWidget * txt = new TextWidget(hFontMenu, szMenuText, Vec2f(20, 0));
+			txt->SetCheckOff();
+			panel->AddElement(txt);
+			
+			CycleTextWidget * cb = new CycleTextWidget;
+			cb->valueChanged = boost::bind(&RenderOptionsMenuPage::onChangedQuality, this, _1, _2);
+			szMenuText = getLocalised("system_menus_options_video_texture_low");
+			cb->AddText(new TextWidget(hFontMenu, szMenuText));
+			szMenuText = getLocalised("system_menus_options_video_texture_med");
+			cb->AddText(new TextWidget(hFontMenu, szMenuText));
+			szMenuText = getLocalised("system_menus_options_video_texture_high");
+			cb->AddText(new TextWidget(hFontMenu, szMenuText));
+			cb->setValue(config.video.levelOfDetail);
+			
+			cb->Move(Vec2f(RATIO_X(m_size.x-9) - cb->m_rect.width(), 0));
+			panel->AddElement(cb);
+			
+			addCenter(panel);
+		}
+		
+		{
+			PanelWidget * panel = new PanelWidget;
+			std::string szMenuText = getLocalised("system_menus_options_video_brouillard");
+			TextWidget * txt = new TextWidget(hFontMenu, szMenuText, Vec2f(20, 0));
+			txt->SetCheckOff();
+			panel->AddElement(txt);
+			SliderWidget * sld = new SliderWidget(Vec2f(200, 0));
+			sld->valueChanged = boost::bind(&RenderOptionsMenuPage::onChangedFogDistance, this, _1);
+			sld->setValue(int(config.video.fogDistance));
+			panel->AddElement(sld);
+			addCenter(panel);
+		}
+		
+		{
+			std::string szMenuText = getLocalised("system_menus_options_video_antialiasing", "antialiasing");
+			TextWidget * txt = new TextWidget(hFontMenu, szMenuText, Vec2f(20, 0));
+			txt->SetCheckOff();
+			CheckboxWidget * cb = new CheckboxWidget(txt);
+			cb->stateChanged = boost::bind(&RenderOptionsMenuPage::onChangedAntialiasing, this, _1);
+			cb->iState = config.video.antialiasing ? 1 : 0;
+			addCenter(cb);
+		}
+		
+		{
+			std::string szMenuText = getLocalised("system_menus_options_video_colorkey_antialiasing", "Color Key AA");
+			TextWidget * txt = new TextWidget(hFontMenu, szMenuText, Vec2f(20, 0));
+			txt->SetCheckOff();
+			CheckboxWidget * cb = new CheckboxWidget(txt);
+			cb->stateChanged = boost::bind(&RenderOptionsMenuPage::onChangedColorkeyAntialiasing, this, _1);
+			cb->iState = config.video.colorkeyAntialiasing ? 1 : 0;
+			addCenter(cb);
+		}
+		
+		{
+			PanelWidget * panel = new PanelWidget;
+			std::string szMenuText = getLocalised("system_menus_options_video_alpha_cutout_antialising", "Alpha Cutout AA");
+			szMenuText += " ";
+			TextWidget * txt = new TextWidget(hFontMenu, szMenuText, Vec2f(20, 0));
+			txt->SetCheckOff();
+			panel->AddElement(txt);
+			
+			CycleTextWidget * cb = new CycleTextWidget;
+			cb->valueChanged = boost::bind(&RenderOptionsMenuPage::onChangedAlphaCutoutAntialiasing, this, _1, _2);
+			szMenuText = getLocalised("system_menus_options_video_alpha_cutout_antialising_off", "Disabled");
+			cb->AddText(new TextWidget(hFontMenu, szMenuText));
+			Renderer::AlphaCutoutAntialising maxAA = GRenderer->getMaxSupportedAlphaCutoutAntialiasing();
+			if(maxAA >= Renderer::FuzzyAlphaCutoutAA) {
+				szMenuText = getLocalised("system_menus_options_video_alpha_cutout_antialising_fuzzy", "Fuzzy");
+				cb->AddText(new TextWidget(hFontMenu, szMenuText));
+			}
+			if(maxAA >= Renderer::CrispAlphaCutoutAA) {
+				szMenuText = getLocalised("system_menus_options_video_alpha_cutout_antialising_crisp", "Crisp");
+				cb->AddText(new TextWidget(hFontMenu, szMenuText));
+			}
+			m_alphaCutoutAntialiasingCycleText = cb;
+			setAlphaCutoutAntialisingState();
+			
+			cb->Move(Vec2f(RATIO_X(m_size.x-9) - cb->m_rect.width(), 0));
+			panel->AddElement(cb);
+			
+			addCenter(panel);
+		}
+		
+		{
+			PanelWidget * panel = new PanelWidget;
+			std::string szMenuText = getLocalised("system_menus_options_video_texture_filter_anisotropic",
+			                                      "Anisotropic filtering");
+			szMenuText += " ";
+			TextWidget * txt = new TextWidget(hFontMenu, szMenuText, Vec2f(20, 0));
+			txt->SetCheckOff();
+			panel->AddElement(txt);
+			
+			CycleTextWidget * cb = new CycleTextWidget;
+			cb->valueChanged = boost::bind(&RenderOptionsMenuPage::onChangedMaxAnisotropy, this, _1, _2);
+			szMenuText = getLocalised("system_menus_options_video_filter_anisotropic_off", "Disabled");
+			cb->AddText(new TextWidget(hFontMenu, szMenuText));
+			int maxAnisotropy = int(GRenderer->getMaxSupportedAnisotropy());
+			int selected = 0;
+			if(maxAnisotropy > 1) {
+				int i = 1;
+				std::ostringstream oss;
+				for(int anisotropy = 2; ; anisotropy *= 2, i++) {
+					if(anisotropy > maxAnisotropy) {
+						anisotropy = maxAnisotropy;
+					}
+					oss.str(std::string());
+					oss << 'x' << anisotropy;
+					cb->AddText(new TextWidget(hFontMenu, oss.str()));
+					if(config.video.maxAnisotropicFiltering == anisotropy) {
+						selected = i;
+					}
+					if(config.video.maxAnisotropicFiltering > anisotropy
+					   && config.video.maxAnisotropicFiltering < anisotropy * 2
+					   && config.video.maxAnisotropicFiltering <= maxAnisotropy) {
+						oss.str(std::string());
+						oss << 'x' << config.video.maxAnisotropicFiltering;
+						cb->AddText(new TextWidget(hFontMenu, oss.str()));
+						selected = ++i;
+					}
+					if(anisotropy == maxAnisotropy) {
+						i++;
+						break;
+					}
+				}
+				szMenuText = getLocalised("system_menus_options_video_filter_anisotropic_max", "Unlimited");
+				cb->AddText(new TextWidget(hFontMenu, szMenuText));
+				if(config.video.maxAnisotropicFiltering > maxAnisotropy) {
+					selected = i;
+				}
+			}
+			cb->setValue(selected);
+			cb->Move(Vec2f(RATIO_X(m_size.x-9) - cb->m_rect.width(), 0));
+			if(maxAnisotropy <= 1) {
+				cb->setEnabled(false);
+			}
+			panel->AddElement(cb);
+			
+			addCenter(panel);
+		}
+		
+		{
+			ButtonWidget * cb = new ButtonWidget(Vec2f(20, 380), Vec2f(16, 16), "graph/interface/menus/back");
+			cb->m_targetMenu = Page_Options;
+			cb->SetShortCut(Keyboard::Key_Escape);
+			add(cb);
+		}
+	}
+	
+private:
+	
+	void setAlphaCutoutAntialisingState() {
+		
+		CycleTextWidget * cb = m_alphaCutoutAntialiasingCycleText;
+		
+		int maxAA = int(GRenderer->getMaxSupportedAlphaCutoutAntialiasing());
+		if(config.video.antialiasing || maxAA == int(Renderer::NoAlphaCutoutAA)) {
+			int value = config.video.alphaCutoutAntialiasing;
+			if(value > maxAA) {
+				value = int(Renderer::NoAlphaCutoutAA);
+			}
+			cb->setValue(value);
+			cb->setEnabled(true);
+		} else {
+			cb->setValue(0);
+			cb->setEnabled(false);
+		}
+		
+	}
+	
+	void onChangedRenderer(int pos, const std::string & str) {
+		ARX_UNUSED(str);
+		
+		switch(pos) {
+			case 0:  config.video.renderer = "auto"; break;
+			case 1:  config.video.renderer = "OpenGL";  break;
+			default: config.video.renderer = "auto"; break;
+		}
+	}
+	
+	void onChangedQuality(int pos, const std::string & str) {
+		ARX_UNUSED(str);
+		
+		ARXMenu_Options_Video_SetDetailsQuality(pos);
+	}
+	
+	void onChangedFogDistance(int value) {
+		ARXMenu_Options_Video_SetFogDistance(value);
+	}
+	
+	void onChangedAntialiasing(int state) {
+		config.video.antialiasing = state ? true : false;
+		setAlphaCutoutAntialisingState();
+	}
+	
+	void onChangedColorkeyAntialiasing(int state) {
+		config.video.colorkeyAntialiasing = state ? true : false;
+		GRenderer->reloadColorKeyTextures();
+	}
+	
+	void onChangedAlphaCutoutAntialiasing(int pos, const std::string & str) {
+		ARX_UNUSED(str);
+		config.video.alphaCutoutAntialiasing = pos;
+	}
+	
+	void onChangedMaxAnisotropy(int pos, const std::string & str) {
+		ARX_UNUSED(str);
+		
+		int anisotropy = 1;
+		if(pos > 0) {
+			if(!str.empty() && str[0] == 'x') {
+				std::stringstream ss(str.substr(1));
+				ss >> anisotropy;
+			} else {
+				anisotropy = 9001;
+			}
+		}
+		
+		config.video.maxAnisotropicFiltering = anisotropy;
+		GRenderer->setMaxAnisotropy(anisotropy);
+	}
+	
 };
 
 class InterfaceOptionsMenuPage : public MenuPage {
 	
 public:
 	
-	InterfaceOptionsMenuPage(const Vec2f & pos, const Vec2f & size)
-		: MenuPage(pos, size, OPTIONS_INTERFACE)
+	InterfaceOptionsMenuPage()
+		: MenuPage(Page_OptionsInterface)
 	{ }
 	
 	~InterfaceOptionsMenuPage() { }
@@ -925,7 +1271,7 @@ public:
 			std::string szMenuText = getLocalised("system_menus_options_video_crosshair",
 			                         "Cross hair cursor");
 			szMenuText = getLocalised("system_menus_options_interface_crosshair", szMenuText);
-			TextWidget * txt = new TextWidget(BUTTON_INVALID, hFontMenu, szMenuText, Vec2f(20, 0));
+			TextWidget * txt = new TextWidget(hFontMenu, szMenuText, Vec2f(20, 0));
 			txt->SetCheckOff();
 			CheckboxWidget * cb = new CheckboxWidget(txt);
 			cb->stateChanged = boost::bind(&InterfaceOptionsMenuPage::onChangedCrosshair, this, _1);
@@ -936,7 +1282,7 @@ public:
 		{
 			std::string szMenuText = getLocalised("system_menus_options_interface_limit_speech_width",
 			                         "Limit speech text width");
-			TextWidget * txt = new TextWidget(BUTTON_INVALID, hFontMenu, szMenuText, Vec2f(20, 0));
+			TextWidget * txt = new TextWidget(hFontMenu, szMenuText, Vec2f(20, 0));
 			txt->SetCheckOff();
 			CheckboxWidget * cb = new CheckboxWidget(txt);
 			cb->stateChanged = boost::bind(&InterfaceOptionsMenuPage::onChangedSpeechWidth, this, _1);
@@ -949,18 +1295,18 @@ public:
 			std::string szMenuText = getLocalised("system_menus_options_interface_cinematic_widescreen_mode",
 			                                      "Cinematics mode");
 			szMenuText += " ";
-			TextWidget * txt = new TextWidget(BUTTON_INVALID, hFontMenu, szMenuText, Vec2f(20, 0));
+			TextWidget * txt = new TextWidget(hFontMenu, szMenuText, Vec2f(20, 0));
 			txt->SetCheckOff();
 			panel->AddElement(txt);
 			
 			CycleTextWidget * cb = new CycleTextWidget;
 			cb->valueChanged = boost::bind(&InterfaceOptionsMenuPage::onChangedCinematicMode, this, _1, _2);
 			szMenuText = getLocalised("system_menus_options_interface_letterbox", "Letterbox");
-			cb->AddText(new TextWidget(BUTTON_INVALID, hFontMenu, szMenuText));
+			cb->AddText(new TextWidget(hFontMenu, szMenuText));
 			szMenuText = getLocalised("system_menus_options_interface_hard_edges", "Hard Edges");
-			cb->AddText(new TextWidget(BUTTON_INVALID, hFontMenu, szMenuText));
+			cb->AddText(new TextWidget(hFontMenu, szMenuText));
 			szMenuText = getLocalised("system_menus_options_interface_fade_edges", "Fade Edges");
-			cb->AddText(new TextWidget(BUTTON_INVALID, hFontMenu, szMenuText));
+			cb->AddText(new TextWidget(hFontMenu, szMenuText));
 			cb->setValue(config.interface.cinematicWidescreenMode);
 			
 			cb->Move(Vec2f(RATIO_X(m_size.x-9) - cb->m_rect.width(), 0));
@@ -973,12 +1319,12 @@ public:
 			PanelWidget * panel = new PanelWidget;
 			std::string szMenuText = getLocalised("system_menus_options_interface_hud_scale",
 			                                      "HUD size");
-			TextWidget * txt = new TextWidget(BUTTON_INVALID, hFontMenu, szMenuText, Vec2f(20, 0));
+			TextWidget * txt = new TextWidget(hFontMenu, szMenuText, Vec2f(20, 0));
 			txt->SetCheckOff();
 			panel->AddElement(txt);
 			SliderWidget * sld = new SliderWidget(Vec2f(200, 0));
 			sld->valueChanged = boost::bind(&InterfaceOptionsMenuPage::onChangedHudScale, this, _1);
-			sld->setValue(config.interface.hudScale * 10.f);
+			sld->setValue(int(config.interface.hudScale * 10.f));
 			panel->AddElement(sld);
 			addCenter(panel);
 		}
@@ -986,7 +1332,7 @@ public:
 		{
 			std::string szMenuText = getLocalised("system_menus_options_interface_hud_scale_integer",
 			                                      "Round HUD scale factor");
-			TextWidget * txt = new TextWidget(BUTTON_INVALID, hFontMenu, szMenuText, Vec2f(20, 0));
+			TextWidget * txt = new TextWidget(hFontMenu, szMenuText, Vec2f(20, 0));
 			txt->SetCheckOff();
 			CheckboxWidget * cb = new CheckboxWidget(txt);
 			cb->stateChanged = boost::bind(&InterfaceOptionsMenuPage::onChangedHudScaleInteger, this, _1);
@@ -997,7 +1343,7 @@ public:
 		{
 			std::string szMenuText = getLocalised("system_menus_options_interface_scale_cursor_with_hud",
 												  "Scale cursor with HUD");
-			TextWidget * txt = new TextWidget(BUTTON_INVALID, hFontMenu, szMenuText, Vec2f(20, 0));
+			TextWidget * txt = new TextWidget(hFontMenu, szMenuText, Vec2f(20, 0));
 			txt->SetCheckOff();
 			CheckboxWidget * cb = new CheckboxWidget(txt);
 			cb->stateChanged = boost::bind(&InterfaceOptionsMenuPage::onChangedScaleCursorWithHud, this, _1);
@@ -1010,16 +1356,16 @@ public:
 			std::string szMenuText = getLocalised("system_menus_options_interface_hud_scale_filter",
 			                                      "HUD scale filter");
 			szMenuText += " ";
-			TextWidget * txt = new TextWidget(BUTTON_INVALID, hFontMenu, szMenuText, Vec2f(20, 0));
+			TextWidget * txt = new TextWidget(hFontMenu, szMenuText, Vec2f(20, 0));
 			txt->SetCheckOff();
 			panel->AddElement(txt);
 			
 			CycleTextWidget * cb = new CycleTextWidget;
 			cb->valueChanged = boost::bind(&InterfaceOptionsMenuPage::onChangedHudScaleFilter, this, _1, _2);
 			szMenuText = getLocalised("system_menus_options_video_filter_nearest", "Nearest");
-			cb->AddText(new TextWidget(BUTTON_INVALID, hFontMenu, szMenuText));
+			cb->AddText(new TextWidget(hFontMenu, szMenuText));
 			szMenuText = getLocalised("system_menus_options_video_filter_bilinear", "Bilinear");
-			cb->AddText(new TextWidget(BUTTON_INVALID, hFontMenu, szMenuText));
+			cb->AddText(new TextWidget(hFontMenu, szMenuText));
 			cb->setValue(config.interface.hudScaleFilter);
 			
 			cb->Move(Vec2f(RATIO_X(m_size.x-9) - cb->m_rect.width(), 0));
@@ -1029,8 +1375,8 @@ public:
 		}
 		
 		{
-			ButtonWidget * cb = new ButtonWidget(Vec2f(20, 420), Vec2f(16, 16), "graph/interface/menus/back");
-			cb->m_targetMenu = OPTIONS;
+			ButtonWidget * cb = new ButtonWidget(Vec2f(20, 380), Vec2f(16, 16), "graph/interface/menus/back");
+			cb->m_targetMenu = Page_Options;
 			cb->SetShortCut(Keyboard::Key_Escape);
 			add(cb);
 		}
@@ -1079,8 +1425,8 @@ class AudioOptionsMenuPage : public MenuPage {
 	
 public:
 	
-	AudioOptionsMenuPage(const Vec2f & pos, const Vec2f & size)
-		: MenuPage(pos, size, OPTIONS_AUDIO)
+	AudioOptionsMenuPage()
+		: MenuPage(Page_OptionsAudio)
 	{}
 	
 	~AudioOptionsMenuPage() { }
@@ -1093,7 +1439,7 @@ public:
 			PanelWidget * panel = new PanelWidget;
 			std::string szMenuText = getLocalised("system_menus_options_audio_device", "Device");
 			szMenuText += "  ";
-			TextWidget * txt = new TextWidget(BUTTON_INVALID, hFontMenu, szMenuText, Vec2f(20, 0));
+			TextWidget * txt = new TextWidget(hFontMenu, szMenuText, Vec2f(20, 0));
 			txt->SetCheckOff();
 			panel->AddElement(txt);
 			CycleTextWidget * slider = new CycleTextWidget;
@@ -1101,11 +1447,11 @@ public:
 			
 			float maxwidth = RATIO_X(m_size.x - 28) - txt->m_rect.width() - slider->m_rect.width();
 			
-			slider->AddText(new TextWidget(BUTTON_INVALID, hFontControls, "Default"));
+			slider->AddText(new TextWidget(hFontControls, "Default"));
 			slider->selectLast();
 			
 			BOOST_FOREACH(const std::string & device, audio::getDevices()) {
-				TextWidget * txt = new TextWidget(BUTTON_INVALID, hFontControls, device);
+				TextWidget * txt = new TextWidget(hFontControls, device);
 				if(txt->m_rect.width() > maxwidth) {
 					txt->m_rect.right = txt->m_rect.left + maxwidth;
 				}
@@ -1125,7 +1471,7 @@ public:
 		{
 			PanelWidget * panel = new PanelWidget;
 			std::string szMenuText = getLocalised("system_menus_options_audio_master_volume");
-			TextWidget * txt = new TextWidget(BUTTON_INVALID, hFontMenu, szMenuText, Vec2f(20, 0));
+			TextWidget * txt = new TextWidget(hFontMenu, szMenuText, Vec2f(20, 0));
 			txt->SetCheckOff();
 			panel->AddElement(txt);
 			SliderWidget * sld = new SliderWidget(Vec2f(200, 0));
@@ -1138,7 +1484,7 @@ public:
 		{
 			PanelWidget * panel = new PanelWidget;
 			std::string szMenuText = getLocalised("system_menus_options_audio_effects_volume");
-			TextWidget * txt = new TextWidget(BUTTON_INVALID, hFontMenu, szMenuText, Vec2f(20, 0));
+			TextWidget * txt = new TextWidget(hFontMenu, szMenuText, Vec2f(20, 0));
 			txt->SetCheckOff();
 			panel->AddElement(txt);
 			SliderWidget * sld = new SliderWidget(Vec2f(200, 0));
@@ -1151,7 +1497,7 @@ public:
 		{
 			PanelWidget * panel = new PanelWidget;
 			std::string szMenuText = getLocalised("system_menus_options_audio_speech_volume");
-			TextWidget * txt = new TextWidget(BUTTON_INVALID, hFontMenu, szMenuText, Vec2f(20, 0));
+			TextWidget * txt = new TextWidget(hFontMenu, szMenuText, Vec2f(20, 0));
 			txt->SetCheckOff();
 			panel->AddElement(txt);
 			SliderWidget * sld = new SliderWidget(Vec2f(200, 0));
@@ -1164,7 +1510,7 @@ public:
 		{
 			PanelWidget * panel = new PanelWidget;
 			std::string szMenuText = getLocalised("system_menus_options_audio_ambiance_volume");
-			TextWidget * txt = new TextWidget(BUTTON_INVALID, hFontMenu, szMenuText, Vec2f(20, 0));
+			TextWidget * txt = new TextWidget(hFontMenu, szMenuText, Vec2f(20, 0));
 			txt->SetCheckOff();
 			panel->AddElement(txt);
 			SliderWidget * sld = new SliderWidget(Vec2f(200, 0));
@@ -1176,7 +1522,7 @@ public:
 		
 		{
 			std::string szMenuText = getLocalised("system_menus_options_audio_mute_on_focus_lost", "Mute when not focused");
-			TextWidget * txt = new TextWidget(BUTTON_INVALID, hFontMenu, szMenuText, Vec2f(20, 0));
+			TextWidget * txt = new TextWidget(hFontMenu, szMenuText, Vec2f(20, 0));
 			CheckboxWidget * cb = new CheckboxWidget(txt);
 			cb->stateChanged = boost::bind(&AudioOptionsMenuPage::onChangedMuteOnFocusLost, this, _1);
 			cb->iState = config.audio.muteOnFocusLost ? 1 : 0;
@@ -1185,7 +1531,7 @@ public:
 		
 		{
 			std::string szMenuText = getLocalised("system_menus_options_audio_eax", "EAX");
-			TextWidget * txt = new TextWidget(BUTTON_INVALID, hFontMenu, szMenuText, Vec2f(20, 0));
+			TextWidget * txt = new TextWidget(hFontMenu, szMenuText, Vec2f(20, 0));
 			CheckboxWidget * cb = new CheckboxWidget(txt);
 			cb->stateChanged = boost::bind(&AudioOptionsMenuPage::onChangedEax, this, _1);
 			if(audio::isReverbSupported()) {
@@ -1202,37 +1548,30 @@ public:
 			PanelWidget * panel = new PanelWidget;
 			std::string szMenuText = getLocalised("system_menus_options_audio_hrtf", "Virtual surround");
 			szMenuText += "  ";
-			TextWidget * txt = new TextWidget(BUTTON_INVALID, hFontMenu, szMenuText, Vec2f(20, 0));
+			TextWidget * txt = new TextWidget(hFontMenu, szMenuText, Vec2f(20, 0));
 			txt->SetCheckOff();
 			panel->AddElement(txt);
 			
-			Widget * value;
-			if(hrtf == audio::HRTFRequired) {
-				value = new TextWidget(BUTTON_INVALID, hFontMenu, "Enabled");
-				value->SetCheckOff();
-			} else if(hrtf == audio::HRTFForbidden) {
-				value = new TextWidget(BUTTON_INVALID, hFontMenu, "Disabled");
-				value->SetCheckOff();
-			} else {
-				CycleTextWidget * slider = new CycleTextWidget;
-				slider->valueChanged = boost::bind(&AudioOptionsMenuPage::onChangedHRTF, this, _1, _2);
-				slider->AddText(new TextWidget(BUTTON_INVALID, hFontMenu, "Disabled"));
-				if(config.audio.hrtf == audio::HRTFDisable) {
-					slider->selectLast();
-				}
-				slider->AddText(new TextWidget(BUTTON_INVALID, hFontMenu, "Automatic"));
-				if(config.audio.hrtf == audio::HRTFDefault) {
-					slider->selectLast();
-				}
-				slider->AddText(new TextWidget(BUTTON_INVALID, hFontMenu, "Enabled"));
-				if(config.audio.hrtf == audio::HRTFEnable) {
-					slider->selectLast();
-				}
-				value = slider;
+			CycleTextWidget * slider = new CycleTextWidget;
+			slider->valueChanged = boost::bind(&AudioOptionsMenuPage::onChangedHRTF, this, _1, _2);
+			slider->AddText(new TextWidget(hFontMenu, "Disabled"));
+			if(config.audio.hrtf == audio::HRTFDisable || hrtf == audio::HRTFForbidden) {
+				slider->selectLast();
 			}
-			float fRatio    = (RATIO_X(m_size.x-9) - value->m_rect.width());
-			value->Move(Vec2f(fRatio, 0));
-			panel->AddElement(value);
+			slider->AddText(new TextWidget(hFontMenu, "Automatic"));
+			if(config.audio.hrtf == audio::HRTFDefault) {
+				slider->selectLast();
+			}
+			slider->AddText(new TextWidget(hFontMenu, "Enabled"));
+			if(config.audio.hrtf == audio::HRTFEnable || hrtf == audio::HRTFRequired) {
+				slider->selectLast();
+			}
+			if(hrtf == audio::HRTFRequired || hrtf == audio::HRTFForbidden) {
+				slider->setEnabled(false);
+			}
+			float fRatio    = (RATIO_X(m_size.x-9) - slider->m_rect.width());
+			slider->Move(Vec2f(fRatio, 0));
+			panel->AddElement(slider);
 			
 			addCenter(panel);
 			
@@ -1240,7 +1579,7 @@ public:
 		
 		{
 			ButtonWidget * cb = new ButtonWidget(Vec2f(20, 380), Vec2f(16, 16), "graph/interface/menus/back");
-			cb->m_targetMenu = OPTIONS;
+			cb->m_targetMenu = Page_Options;
 			cb->SetShortCut(Keyboard::Key_Escape);
 			add(cb);
 		}
@@ -1301,8 +1640,8 @@ class InputOptionsMenuPage : public MenuPage {
 	
 public:
 	
-	InputOptionsMenuPage(const Vec2f & pos, const Vec2f & size)
-		: MenuPage(pos, size, OPTIONS_INPUT)
+	InputOptionsMenuPage()
+		: MenuPage(Page_OptionsInput)
 	{}
 	
 	~InputOptionsMenuPage() { }
@@ -1311,14 +1650,14 @@ public:
 		
 		{
 			std::string szMenuText = getLocalised("system_menus_options_input_customize_controls");
-			TextWidget * txt = new TextWidget(BUTTON_INVALID, hFontMenu, szMenuText, Vec2f(20, 0));
-			txt->m_targetMenu = OPTIONS_INPUT_CUSTOMIZE_KEYS_1;
+			TextWidget * txt = new TextWidget(hFontMenu, szMenuText, Vec2f(20, 0));
+			txt->m_targetMenu = Page_OptionsInputCustomizeKeys1;
 			addCenter(txt);
 		}
 		
 		{
 			std::string szMenuText = getLocalised("system_menus_options_input_invert_mouse");
-			TextWidget * txt = new TextWidget(BUTTON_INVALID, hFontMenu, szMenuText, Vec2f(20, 0));
+			TextWidget * txt = new TextWidget(hFontMenu, szMenuText, Vec2f(20, 0));
 			CheckboxWidget * cb = new CheckboxWidget(txt);
 			cb->stateChanged = boost::bind(&InputOptionsMenuPage::onChangedInvertMouse, this, _1);
 			cb->iState = config.input.invertMouse ? 1 : 0;
@@ -1326,17 +1665,32 @@ public:
 		}
 		
 		{
+			PanelWidget * panel = new PanelWidget;
 			std::string szMenuText = getLocalised("system_menus_options_auto_ready_weapon");
-			TextWidget * txt = new TextWidget(BUTTON_INVALID, hFontMenu, szMenuText, Vec2f(20, 0));
-			CheckboxWidget * cb = new CheckboxWidget(txt);
-			cb->stateChanged = boost::bind(&InputOptionsMenuPage::onChangedAutoReadyWeapon, this, _1);
-			cb->iState = config.input.autoReadyWeapon ? 1 : 0;
-			addCenter(cb);
+			szMenuText += " ";
+			TextWidget * txt = new TextWidget(hFontMenu, szMenuText, Vec2f(20, 0));
+			txt->SetCheckOff();
+			panel->AddElement(txt);
+			
+			CycleTextWidget * cb = new CycleTextWidget;
+			cb->valueChanged = boost::bind(&InputOptionsMenuPage::onChangedAutoReadyWeapon, this, _1, _2);
+			szMenuText = getLocalised("system_menus_options_auto_ready_weapon_off", "Disabled");
+			cb->AddText(new TextWidget(hFontMenu, szMenuText));
+			szMenuText = getLocalised("system_menus_options_auto_ready_weapon_enemies", "Enemies");
+			cb->AddText(new TextWidget(hFontMenu, szMenuText));
+			szMenuText = getLocalised("system_menus_options_auto_ready_weapon_always", "Always");
+			cb->AddText(new TextWidget(hFontMenu, szMenuText));
+			cb->setValue(int(config.input.autoReadyWeapon));
+			
+			cb->Move(Vec2f(RATIO_X(m_size.x-9) - cb->m_rect.width(), 0));
+			panel->AddElement(cb);
+			
+			addCenter(panel);
 		}
 		
 		{
 			std::string szMenuText = getLocalised("system_menus_options_input_mouse_look_toggle");
-			TextWidget * txt = new TextWidget(BUTTON_INVALID, hFontMenu, szMenuText, Vec2f(20, 0));
+			TextWidget * txt = new TextWidget(hFontMenu, szMenuText, Vec2f(20, 0));
 			CheckboxWidget * cb = new CheckboxWidget(txt);
 			cb->stateChanged = boost::bind(&InputOptionsMenuPage::onChangedToggleMouselook, this, _1);
 			cb->iState = config.input.mouseLookToggle ? 1 : 0;
@@ -1346,7 +1700,7 @@ public:
 		{
 			PanelWidget * panel = new PanelWidget;
 			std::string szMenuText = getLocalised("system_menus_options_input_mouse_sensitivity");
-			TextWidget * txt = new TextWidget(BUTTON_INVALID, hFontMenu, szMenuText, Vec2f(20, 0));
+			TextWidget * txt = new TextWidget(hFontMenu, szMenuText, Vec2f(20, 0));
 			txt->SetCheckOff();
 			panel->AddElement(txt);
 			SliderWidget * sld = new SliderWidget(Vec2f(200, 0));
@@ -1359,7 +1713,7 @@ public:
 		{
 			PanelWidget * panel = new PanelWidget;
 			std::string szMenuText = getLocalised("system_menus_options_input_mouse_acceleration", "Mouse acceleration");
-			TextWidget * txt = new TextWidget(BUTTON_INVALID, hFontMenu, szMenuText, Vec2f(20, 0));
+			TextWidget * txt = new TextWidget(hFontMenu, szMenuText, Vec2f(20, 0));
 			txt->SetCheckOff();
 			panel->AddElement(txt);
 			SliderWidget * sld = new SliderWidget(Vec2f(200, 0));
@@ -1371,7 +1725,7 @@ public:
 		
 		{
 			std::string szMenuText = getLocalised("system_menus_options_raw_mouse_input", "Raw mouse input");
-			TextWidget * txt = new TextWidget(BUTTON_INVALID, hFontMenu, szMenuText, Vec2f(20, 0));
+			TextWidget * txt = new TextWidget(hFontMenu, szMenuText, Vec2f(20, 0));
 			CheckboxWidget * cb = new CheckboxWidget(txt);
 			cb->stateChanged = boost::bind(&InputOptionsMenuPage::onChangedRawMouseInput, this, _1);
 			cb->iState = config.input.rawMouseInput ? 1 : 0;
@@ -1380,7 +1734,7 @@ public:
 		
 		{
 			std::string szMenuText = getLocalised("system_menus_autodescription", "auto_description");
-			TextWidget * txt = new TextWidget(BUTTON_INVALID, hFontMenu, szMenuText, Vec2f(20, 0));
+			TextWidget * txt = new TextWidget(hFontMenu, szMenuText, Vec2f(20, 0));
 			CheckboxWidget * cb = new CheckboxWidget(txt);
 			cb->stateChanged = boost::bind(&InputOptionsMenuPage::onChangedAutoDescription, this, _1);
 			cb->iState = config.input.autoDescription ? 1 : 0;
@@ -1390,7 +1744,7 @@ public:
 		{
 			PanelWidget * panel = new PanelWidget;
 			std::string szMenuText = getLocalised("system_menus_options_misc_quicksave_slots", "Quicksave slots");
-			TextWidget * txt = new TextWidget(BUTTON_INVALID, hFontMenu, szMenuText, Vec2f(20, 0));
+			TextWidget * txt = new TextWidget(hFontMenu, szMenuText, Vec2f(20, 0));
 			txt->SetCheckOff();
 			panel->AddElement(txt);
 			SliderWidget * sld = new SliderWidget(Vec2f(200, 0));
@@ -1403,7 +1757,7 @@ public:
 		
 		{
 			std::string szMenuText = getLocalised("system_menus_border_turning", "Border turning");
-			TextWidget * txt = new TextWidget(BUTTON_INVALID, hFontMenu, szMenuText, Vec2f(20, 0));
+			TextWidget * txt = new TextWidget(hFontMenu, szMenuText, Vec2f(20, 0));
 			CheckboxWidget * cb = new CheckboxWidget(txt);
 			cb->stateChanged = boost::bind(&InputOptionsMenuPage::onChangedBorderTurning, this, _1);
 			cb->iState = config.input.borderTurning ? 1 : 0;
@@ -1411,8 +1765,8 @@ public:
 		}
 		
 		{
-			std::string szMenuText = getLocalised("system_menus_alt_rune_recognition", "Alternate rune recognition");
-			TextWidget * txt = new TextWidget(BUTTON_INVALID, hFontMenu, szMenuText, Vec2f(20, 0));
+			std::string szMenuText = getLocalised("system_menus_alt_rune_recognition", "Improved rune recognition");
+			TextWidget * txt = new TextWidget(hFontMenu, szMenuText, Vec2f(20, 0));
 			CheckboxWidget * cb = new CheckboxWidget(txt);
 			cb->stateChanged = boost::bind(&InputOptionsMenuPage::onChangedAltRuneRecognition, this, _1);
 			cb->iState = config.input.useAltRuneRecognition ? 1 : 0;
@@ -1420,8 +1774,32 @@ public:
 		}
 		
 		{
+			PanelWidget * panel = new PanelWidget;
+			std::string szMenuText = getLocalised("system_menus_quick_level_transition", "Quick level transition");
+			szMenuText += " ";
+			TextWidget * txt = new TextWidget(hFontMenu, szMenuText, Vec2f(20, 0));
+			txt->SetCheckOff();
+			panel->AddElement(txt);
+			
+			CycleTextWidget * cb = new CycleTextWidget;
+			cb->valueChanged = boost::bind(&InputOptionsMenuPage::onChangedQuickLevelTransition, this, _1, _2);
+			szMenuText = getLocalised("system_menus_quick_level_transition_off", "Disabled");
+			cb->AddText(new TextWidget(hFontMenu, szMenuText));
+			szMenuText = getLocalised("system_menus_quick_level_transition_jump", "Jump");
+			cb->AddText(new TextWidget(hFontMenu, szMenuText));
+			szMenuText = getLocalised("system_menus_quick_level_transition_immediate", "Immediate");
+			cb->AddText(new TextWidget(hFontMenu, szMenuText));
+			cb->setValue(int(config.input.quickLevelTransition));
+			
+			cb->Move(Vec2f(RATIO_X(m_size.x-9) - cb->m_rect.width(), 0));
+			panel->AddElement(cb);
+			
+			addCenter(panel);
+		}
+		
+		{
 			ButtonWidget * cb = new ButtonWidget(Vec2f(20, 380), Vec2f(16, 16), "graph/interface/menus/back");
-			cb->m_targetMenu = OPTIONS;
+			cb->m_targetMenu = Page_Options;
 			cb->SetShortCut(Keyboard::Key_Escape);
 			add(cb);
 		}
@@ -1434,8 +1812,9 @@ private:
 		GInput->setInvertMouseY(config.input.invertMouse);
 	}
 	
-	void onChangedAutoReadyWeapon(int state) {
-		config.input.autoReadyWeapon = (state) ? true : false;
+	void onChangedAutoReadyWeapon(int pos, const std::string & str) {
+		ARX_UNUSED(str);
+		config.input.autoReadyWeapon = AutoReadyWeapon(pos);
 	}
 	
 	void onChangedToggleMouselook(int state) {
@@ -1473,6 +1852,11 @@ private:
 		config.input.useAltRuneRecognition = (value) ? true : false;
 	}
 	
+	void onChangedQuickLevelTransition(int pos, const std::string & str) {
+		ARX_UNUSED(str);
+		config.input.quickLevelTransition = QuickLevelTransition(pos);
+	}
+	
 };
 
 
@@ -1480,8 +1864,8 @@ class ControlOptionsPage : public MenuPage {
 	
 public:
 	
-	ControlOptionsPage(const Vec2f & pos, const Vec2f & size, MENUSTATE state)
-		: MenuPage(pos, size, state)
+	ControlOptionsPage(MENUSTATE state)
+		: MenuPage(state)
 	{}
 	
 protected:
@@ -1496,13 +1880,13 @@ protected:
 		{
 		std::string szMenuText = getLocalised(a, defaultText);
 		szMenuText += specialSuffix;
-		TextWidget * txt = new TextWidget(BUTTON_INVALID, hFontControls, szMenuText, Vec2f(20, 0));
+		TextWidget * txt = new TextWidget(hFontControls, szMenuText, Vec2f(20, 0));
 		txt->SetCheckOff();
 		panel->AddElement(txt);
 		}
 		
 		{
-		TextWidget * txt = new TextWidget(BUTTON_INVALID, hFontControls, "---", Vec2f(150, 0));
+		TextWidget * txt = new TextWidget(hFontControls, "---", Vec2f(150, 0));
 		
 		txt->m_isKeybind = true;
 		txt->m_keybindAction = controlAction;
@@ -1513,7 +1897,7 @@ protected:
 		}
 		
 		{
-		TextWidget * txt = new TextWidget(BUTTON_INVALID, hFontControls, "---", Vec2f(245, 0));
+		TextWidget * txt = new TextWidget(hFontControls, "---", Vec2f(245, 0));
 		
 		txt->m_isKeybind = true;
 		txt->m_keybindAction = controlAction;
@@ -1525,9 +1909,15 @@ protected:
 		
 		panel->Move(Vec2f(0, y));
 		add(panel);
-		y += panel->m_rect.height() + RATIO_Y(3.f);
+		y = long(y + panel->m_rect.height() + RATIO_Y(3.f));
 	}
 	
+protected:
+	void resetActionKeys() {
+		config.setDefaultActionKeys();
+		ReInitActionKey();
+		bMouseAttack=false;
+	}
 };
 
 
@@ -1535,8 +1925,8 @@ class ControlOptionsMenuPage1 : public ControlOptionsPage {
 	
 public:
 	
-	ControlOptionsMenuPage1(const Vec2f & pos, const Vec2f & size)
-		: ControlOptionsPage(pos, size, OPTIONS_INPUT_CUSTOMIZE_KEYS_1)
+	ControlOptionsMenuPage1()
+		: ControlOptionsPage(Page_OptionsInputCustomizeKeys1)
 	{}
 	
 	~ControlOptionsMenuPage1() { }
@@ -1570,10 +1960,10 @@ public:
 		addControlRow(y, CONTROLS_CUST_LOOKDOWN,     "system_menus_options_input_customize_controls_look_down");
 		
 		addControlRow(y, CONTROLS_CUST_MINIMAP,      "system_menus_options_input_customize_controls_bookmap", "?", "2");
-
+		
 		{
 			ButtonWidget * cb = new ButtonWidget(Vec2f(20, 380), Vec2f(16, 16), "graph/interface/menus/back");
-			cb->m_targetMenu = OPTIONS_INPUT;
+			cb->m_targetMenu = Page_OptionsInput;
 			cb->SetShortCut(Keyboard::Key_Escape);
 			cb->clicked = boost::bind(&ControlOptionsMenuPage1::onClickedBack, this);
 			add(cb);
@@ -1581,14 +1971,15 @@ public:
 		
 		{
 			std::string szMenuText = getLocalised( "system_menus_options_input_customize_default" );
-			TextWidget * txt = new TextWidget(BUTTON_MENUOPTIONS_CONTROLS_CUST_DEFAULT, hFontMenu, szMenuText);
+			TextWidget * txt = new TextWidget(hFontMenu, szMenuText);
+			txt->clicked = boost::bind(&ControlOptionsMenuPage1::onClickedDefault, this);
 			txt->SetPos(Vec2f((RATIO_X(m_size.x) - txt->m_rect.width())*0.5f, RATIO_Y(380)));
 			add(txt);
 		}
 		
 		{
 			ButtonWidget * cb = new ButtonWidget(Vec2f(280, 380), Vec2f(16, 16), "graph/interface/menus/next");
-			cb->m_targetMenu = OPTIONS_INPUT_CUSTOMIZE_KEYS_2;
+			cb->m_targetMenu = Page_OptionsInputCustomizeKeys2;
 			add(cb);
 		}
 	
@@ -1601,14 +1992,18 @@ private:
 		config.save();
 	}
 	
+	void onClickedDefault() {
+		resetActionKeys();
+	}
+	
 };
 
 class ControlOptionsMenuPage2 : public ControlOptionsPage {
 	
 public:
 	
-	ControlOptionsMenuPage2(const Vec2f & pos, const Vec2f & size)
-		: ControlOptionsPage(pos, size, OPTIONS_INPUT_CUSTOMIZE_KEYS_2)
+	ControlOptionsMenuPage2()
+		: ControlOptionsPage(Page_OptionsInputCustomizeKeys2)
 	{}
 	
 	~ControlOptionsMenuPage2() { }
@@ -1650,14 +2045,15 @@ public:
 		
 		{
 			ButtonWidget * cb = new ButtonWidget(Vec2f(20, 380), Vec2f(16, 16), "graph/interface/menus/back");
-			cb->m_targetMenu = OPTIONS_INPUT_CUSTOMIZE_KEYS_1;
+			cb->m_targetMenu = Page_OptionsInputCustomizeKeys1;
 			cb->SetShortCut(Keyboard::Key_Escape);
 			add(cb);
 		}
 		
 		{
 			std::string szMenuText = getLocalised( "system_menus_options_input_customize_default" );
-			TextWidget * txt = new TextWidget(BUTTON_MENUOPTIONS_CONTROLS_CUST_DEFAULT, hFontMenu, szMenuText);
+			TextWidget * txt = new TextWidget(hFontMenu, szMenuText);
+			txt->clicked = boost::bind(&ControlOptionsMenuPage2::onClickedDefault, this);
 			txt->SetPos(Vec2f((RATIO_X(m_size.x) - txt->m_rect.width())*0.5f, RATIO_Y(380)));
 			add(txt);
 		}
@@ -1665,14 +2061,18 @@ public:
 		ReInitActionKey();
 	}
 	
+private:
+	void onClickedDefault() {
+		resetActionKeys();
+	}
 };
 
 class QuitConfirmMenuPage : public MenuPage {
 	
 public:
 	
-	QuitConfirmMenuPage(const Vec2f & pos, const Vec2f & size)
-		: MenuPage(pos, size, QUIT)
+	QuitConfirmMenuPage()
+		: MenuPage(Page_QuitConfirm)
 	{}
 	
 	~QuitConfirmMenuPage() { }
@@ -1680,26 +2080,26 @@ public:
 	void init() {
 		
 		{
-			TextWidget * txt = new TextWidget(BUTTON_INVALID, hFontMenu, getLocalised("system_menus_main_quit"));
+			TextWidget * txt = new TextWidget(hFontMenu, getLocalised("system_menus_main_quit"));
 			txt->SetCheckOff();
 			addCenter(txt, true);
 		}
 		
 		{
-			TextWidget * txt = new TextWidget(BUTTON_INVALID, hFontMenu, getLocalised("system_menus_main_editquest_confirm"));
+			TextWidget * txt = new TextWidget(hFontMenu, getLocalised("system_menus_main_editquest_confirm"));
 			txt->SetCheckOff();
 			addCenter(txt, true);
 		}
 		
 		{
-			TextWidget * yes = new TextWidget(BUTTON_INVALID, hFontMenu, getLocalised("system_yes"), Vec2f(m_size.x - 40, 380));
+			TextWidget * yes = new TextWidget(hFontMenu, getLocalised("system_yes"), Vec2f(m_size.x - 40, 380));
 			yes->clicked = boost::bind(&QuitConfirmMenuPage::onClickedYes, this);
 			add(yes);
 		}
 		
 		{
-			TextWidget * no = new TextWidget(BUTTON_INVALID, hFontMenu, getLocalised("system_no"), Vec2f(10, 380));
-			no->m_targetMenu = MAIN;
+			TextWidget * no = new TextWidget(hFontMenu, getLocalised("system_no"), Vec2f(10, 380));
+			no->m_targetMenu = Page_None;
 			no->SetShortCut(Keyboard::Key_Escape);
 			add(no);
 		}
@@ -1708,7 +2108,7 @@ public:
 private:
 	
 	void onClickedYes() {
-		MenuFader_start(true, true, AMCM_OFF);
+		MenuFader_start(Fade_In, Mode_InGame);
 	}
 };
 
@@ -1716,102 +2116,99 @@ private:
 
 
 
-void MainMenuLeftCreate(MENUSTATE eMenuState)
+void MainMenu::initWindowPages()
 {
-	mainMenu->eOldMenuState=eMenuState;
 	
-	delete pWindowMenu, pWindowMenu = NULL;
+	delete m_window, m_window = NULL;
 	
-	Vec2f windowMenuPos = Vec2f(20, 25);
-	Vec2f windowMenuSize = Vec2f(321, 430);
-	
-	pWindowMenu = new CWindowMenu(windowMenuPos, windowMenuSize);
-	
-	Vec2f offset = Vec2f_ZERO;
-	Vec2f size = windowMenuSize - offset;
-	
-	pWindowMenu->m_currentPageId = eMenuState;
+	m_window = new MenuWindow();
 	
 	{
-		NewQuestMenuPage * page = new NewQuestMenuPage(offset, size);
-		page->init();
-		pWindowMenu->add(page);
+	NewQuestMenuPage * page = new NewQuestMenuPage();
+	page->init();
+	m_window->add(page);
 	}
 
 	{
-	ChooseLoadOrSaveMenuPage * page = new ChooseLoadOrSaveMenuPage(offset, size);
+	ChooseLoadOrSaveMenuPage * page = new ChooseLoadOrSaveMenuPage();
 	page->init();
-	pWindowMenu->add(page);
+	m_window->add(page);
 	}
 	
 	{
-	LoadMenuPage * page = new LoadMenuPage(offset + Vec2f(0, -40), size);
-	page->m_savegame = SavegameHandle();
+	LoadMenuPage * page = new LoadMenuPage();
 	page->m_rowSpacing = 5;
 	page->init();
-	pWindowMenu->add(page);
+	m_window->add(page);
+	m_window->m_pageLoad = page;
 	}
 	
 	{
-	SaveMenuPage * page = new SaveMenuPage(offset + Vec2f(0, -40), size);
+	SaveMenuPage * page = new SaveMenuPage();
 	page->m_rowSpacing = 5;
 	page->init();
-	pWindowMenu->add(page);
+	m_window->add(page);
 	}
 	
 	{
-	SaveConfirmMenuPage * page = new SaveConfirmMenuPage(offset, size);
-	page->m_savegame = SavegameHandle();
+	SaveConfirmMenuPage * page = new SaveConfirmMenuPage();
 	page->init();
-	pWindowMenu->add(page);
+	m_window->add(page);
+	m_window->m_pageSaveConfirm = page;
 	}
 	
 	{
-	OptionsMenuPage * page = new OptionsMenuPage(offset, size);
+	OptionsMenuPage * page = new OptionsMenuPage();
 	page->init();
-	pWindowMenu->add(page);
+	m_window->add(page);
 	}
 	
 	{
-	VideoOptionsMenuPage * page = new VideoOptionsMenuPage(offset + Vec2f(0, -35), size);
+	VideoOptionsMenuPage * page = new VideoOptionsMenuPage();
 	page->init();
-	pWindowMenu->add(page);
+	m_window->add(page);
 	}
 	
 	{
-	InterfaceOptionsMenuPage * page = new InterfaceOptionsMenuPage(offset + Vec2f(0, -35), size);
+	RenderOptionsMenuPage * page = new RenderOptionsMenuPage();
 	page->init();
-	pWindowMenu->add(page);
+	m_window->add(page);
 	}
 	
 	{
-	AudioOptionsMenuPage * page = new AudioOptionsMenuPage(offset, size);
+	InterfaceOptionsMenuPage * page = new InterfaceOptionsMenuPage();
 	page->init();
-	pWindowMenu->add(page);
+	m_window->add(page);
 	}
 	
 	{
-	InputOptionsMenuPage * page = new InputOptionsMenuPage(offset, size);
+	AudioOptionsMenuPage * page = new AudioOptionsMenuPage();
 	page->init();
-	pWindowMenu->add(page);
+	m_window->add(page);
 	}
 	
 	{
-	ControlOptionsMenuPage1 * page = new ControlOptionsMenuPage1(offset, size);
+	InputOptionsMenuPage * page = new InputOptionsMenuPage();
 	page->init();
-	pWindowMenu->add(page);
+	m_window->add(page);
 	}
 	
 	{
-	ControlOptionsMenuPage2 * page = new ControlOptionsMenuPage2(offset, size);
+	ControlOptionsMenuPage1 * page = new ControlOptionsMenuPage1();
 	page->init();
-	pWindowMenu->add(page);
+	m_window->add(page);
 	}
 	
 	{
-	QuitConfirmMenuPage * page = new QuitConfirmMenuPage(offset, size);
+	ControlOptionsMenuPage2 * page = new ControlOptionsMenuPage2();
 	page->init();
-	pWindowMenu->add(page);
+	m_window->add(page);
+	}
+	
+	{
+	QuitConfirmMenuPage * page = new QuitConfirmMenuPage();
+	page->init();
+	m_window->add(page);
 	}
 }
 
@@ -1821,13 +2218,15 @@ MainMenu::MainMenu()
 	: bReInitAll(false)
 	, eOldMenuState(NOP)
 	, eOldMenuWindowState(NOP)
-	, m_selected(NULL)
+	, m_window(NULL)
 	, m_background(NULL)
 	, m_widgets(new WidgetContainer())
 	, m_resumeGame(NULL)
+	, m_selected(NULL)
 {}
 
 MainMenu::~MainMenu() {
+	delete m_window;
 	delete m_widgets;
 	delete m_background;
 }
@@ -1841,7 +2240,7 @@ void MainMenu::init()
 	
 	{
 	std::string szMenuText = getLocalised("system_menus_main_resumegame");
-	TextWidget * txt = new TextWidget(BUTTON_INVALID, hFontMainMenu, szMenuText, pos);
+	TextWidget * txt = new TextWidget(hFontMainMenu, szMenuText, pos);
 	txt->clicked = boost::bind(&MainMenu::onClickedResumeGame, this);
 	txt->m_targetMenu = RESUME_GAME;
 	m_widgets->add(txt);
@@ -1850,29 +2249,29 @@ void MainMenu::init()
 	pos.y += yOffset;
 	{
 	std::string szMenuText = getLocalised("system_menus_main_newquest");
-	TextWidget * txt = new TextWidget(BUTTON_INVALID, hFontMainMenu, szMenuText, pos);
+	TextWidget * txt = new TextWidget(hFontMainMenu, szMenuText, pos);
 	txt->clicked = boost::bind(&MainMenu::onClickedNewQuest, this);
-	txt->m_targetMenu = NEW_QUEST;
+	txt->m_targetMenu = Page_NewQuestConfirm;
 	m_widgets->add(txt);
 	}
 	pos.y += yOffset;
 	{
 	std::string szMenuText = getLocalised("system_menus_main_editquest");
-	TextWidget * txt = new TextWidget(BUTTON_INVALID, hFontMainMenu, szMenuText, pos);
-	txt->m_targetMenu = EDIT_QUEST;
+	TextWidget * txt = new TextWidget(hFontMainMenu, szMenuText, pos);
+	txt->m_targetMenu = Page_LoadOrSave;
 	m_widgets->add(txt);
 	}
 	pos.y += yOffset;
 	{
 	std::string szMenuText = getLocalised("system_menus_main_options");
-	TextWidget * txt = new TextWidget(BUTTON_INVALID, hFontMainMenu, szMenuText, pos);
-	txt->m_targetMenu = OPTIONS;
+	TextWidget * txt = new TextWidget(hFontMainMenu, szMenuText, pos);
+	txt->m_targetMenu = Page_Options;
 	m_widgets->add(txt);
 	}
 	pos.y += yOffset;
 	{
 	std::string szMenuText = getLocalised("system_menus_main_credits");
-	TextWidget * txt = new TextWidget(BUTTON_INVALID, hFontMainMenu, szMenuText, pos);
+	TextWidget * txt = new TextWidget(hFontMainMenu, szMenuText, pos);
 	txt->clicked = boost::bind(&MainMenu::onClickedCredits, this);
 	txt->m_targetMenu = CREDITS;
 	m_widgets->add(txt);
@@ -1880,8 +2279,8 @@ void MainMenu::init()
 	pos.y += yOffset;
 	{
 	std::string szMenuText = getLocalised("system_menus_main_quit");
-	TextWidget * txt = new TextWidget(BUTTON_INVALID, hFontMainMenu, szMenuText, pos);
-	txt->m_targetMenu = QUIT;
+	TextWidget * txt = new TextWidget(hFontMainMenu, szMenuText, pos);
+	txt->m_targetMenu = Page_QuitConfirm;
 	m_widgets->add(txt);
 	}
 	pos.y += yOffset;
@@ -1894,10 +2293,10 @@ void MainMenu::init()
 	}
 
 	float verPosX = g_size.right - 20 * g_sizeRatio.x - hFontControls->getTextSize(version).width();
-	TextWidget * txt = new TextWidget(BUTTON_INVALID, hFontControls, version, Vec2f(verPosX / g_sizeRatio.x, 80));
+	TextWidget * txt = new TextWidget(hFontControls, version, Vec2f(verPosX / g_sizeRatio.x, 80));
 	
 	txt->SetCheckOff();
-	txt->lColor=Color(127,127,127);
+	txt->lColor = Color(127, 127, 127);
 	m_widgets->add(txt);
 }
 
@@ -1917,11 +2316,11 @@ void MainMenu::onClickedNewQuest() {
 }
 
 void MainMenu::onClickedCredits() {
-	MenuFader_start(true, true, AMCM_CREDITS);
+	MenuFader_start(Fade_In, Mode_Credits);
 }
 
 
-MENUSTATE MainMenu::Update() {
+void MainMenu::Update() {
 	
 	if(m_resumeGame) {
 		if(g_canResumeGame) {
@@ -1934,13 +2333,6 @@ MENUSTATE MainMenu::Update() {
 	}
 	
 	m_selected = m_widgets->getAtPos(Vec2f(GInput->getMousePosition()));
-	
-	if(m_selected && GInput->getMouseButton(Mouse::Button_0)) {
-		m_selected->OnMouseClick();
-		return m_selected->m_targetMenu;
-	}
-	
-	return NOP;
 }
 
 // TODO remove this
@@ -1956,10 +2348,10 @@ void MainMenu::Render() {
 		EERIEDrawBitmap(Rectf(Vec2f(0, 0), g_size.width(), g_size.height()), 0.999f, m_background, Color::white);
 	}
 	
-	{Widget * w; BOOST_FOREACH(w, m_widgets->m_widgets) {
+	BOOST_FOREACH(Widget * w, m_widgets->m_widgets) {
 		w->Update();
 		w->Render();
-	}}
+	}
 
 	//HIGHLIGHT
 	if(m_selected) {
@@ -1970,3 +2362,5 @@ void MainMenu::Render() {
 	GRenderer->ResetTexture(0);
 	m_widgets->drawDebug();
 }
+
+MainMenu * g_mainMenu;

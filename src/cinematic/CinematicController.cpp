@@ -69,8 +69,8 @@ void cinematicPrepare(const std::string & name, bool preload) {
 }
 
 void cinematicRequestStart() {
-
 	PLAY_LOADED_CINEMATIC = Cinematic_StartRequested;
+	g_gameTime.pause(GameTime::PauseCinematic);
 }
 
 void cinematicKill() {
@@ -78,11 +78,12 @@ void cinematicKill() {
 		ControlCinematique->projectload = false;
 		ControlCinematique->OneTimeSceneReInit();
 		PLAY_LOADED_CINEMATIC = Cinematic_Stopped;
+		g_gameTime.resume(GameTime::PauseCinematic);
 		CINE_PRELOAD = false;
 	}
 }
 
-Vec3f ePos;
+static Vec3f g_originalCameraPosition;
 
 void cinematicLaunchWaiting() {
 
@@ -94,14 +95,14 @@ void cinematicLaunchWaiting() {
 	LogDebug("LaunchWaitingCine " << CINE_PRELOAD);
 
 	if(ACTIVECAM) {
-		ePos = ACTIVECAM->orgTrans.pos;
+		g_originalCameraPosition = ACTIVECAM->orgTrans.pos;
 	}
 
 	cinematicKill();
 
 	res::path cinematic = res::path("graph/interface/illustrations") / WILL_LAUNCH_CINE;
 
-	if(resources->getFile(cinematic)) {
+	if(g_resources->getFile(cinematic)) {
 
 		ControlCinematique->OneTimeSceneReInit();
 
@@ -112,8 +113,7 @@ void cinematicLaunchWaiting() {
 				PLAY_LOADED_CINEMATIC = Cinematic_Stopped;
 			} else {
 				LogDebug("starting cinematic");
-				PLAY_LOADED_CINEMATIC = Cinematic_StartRequested;
-				arxtime.pause();
+				cinematicRequestStart();
 			}
 
 			LAST_LAUNCHED_CINE = WILL_LAUNCH_CINE;
@@ -146,7 +146,7 @@ void cinematicRender() {
 
 	if(PLAY_LOADED_CINEMATIC == Cinematic_StartRequested) {
 		LogDebug("really starting cinematic now");
-		diff = PlatformDuration_ZERO;
+		diff = 0;
 		PLAY_LOADED_CINEMATIC = Cinematic_Started;
 	}
 
@@ -158,11 +158,8 @@ void cinematicRender() {
 	if(   !ControlCinematique->key
 	   || GInput->isKeyPressedNowUnPressed(Keyboard::Key_Escape)
 	) {
-		ControlCinematique->projectload=false;
 		StopSoundKeyFramer();
-		ControlCinematique->OneTimeSceneReInit();
-		arxtime.resume();
-		PLAY_LOADED_CINEMATIC = Cinematic_Stopped;
+		cinematicKill();
 
 		bool bWasBlocked = false;
 		if(BLOCK_PLAYER_CONTROLS) {
@@ -171,8 +168,8 @@ void cinematicRender() {
 
 		// !! avant le cine end
 		if(ACTIVECAM) {
-			arx_assert(isallfinite(ePos));
-			ACTIVECAM->orgTrans.pos = ePos;
+			arx_assert(isallfinite(g_originalCameraPosition));
+			ACTIVECAM->orgTrans.pos = g_originalCameraPosition;
 		}
 
 		if(bWasBlocked) {

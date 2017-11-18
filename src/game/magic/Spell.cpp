@@ -28,12 +28,13 @@ SpellBase::SpellBase()
 	: m_level(1.f)
 	, m_hand_group()
 	, m_type(SPELL_NONE)
-	, m_timcreation(ArxInstant_ZERO)
+	, m_timcreation(0)
 	, m_hasDuration(false)
-	, m_duration(ArxDuration_ZERO)
+	, m_duration(0)
+	, m_elapsed(0)
 	, m_fManaCostPerSecond(0.f)
 	, m_snd_loop(audio::INVALID_ID)
-	, m_launchDuration(ArxDuration::ofRaw(-1))
+	, m_launchDuration(GameDuration::ofRaw(-1))
 {
 	
 	m_targets.clear();

@@ -23,7 +23,7 @@
 #include "core/GameTime.h"
 #include "game/Player.h"
 #include "graphics/Draw.h"
-#include "graphics/GraphicsModes.h"
+#include "graphics/GlobalFog.h"
 #include "graphics/Raycast.h"
 #include "graphics/Renderer.h"
 #include "graphics/effects/Fade.h"
@@ -65,7 +65,7 @@ void update2DFX() {
 			
 			el->m_flareFader -= temp_increase;
 
-			if(!(player.Interface & INTER_COMBATMODE) && (player.Interface & INTER_MAP))
+			if(!(player.Interface & INTER_COMBATMODE) && (player.Interface & INTER_PLAYERBOOK))
 				continue;
 
 			if(p.w > 0.f &&

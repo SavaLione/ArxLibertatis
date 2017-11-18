@@ -90,7 +90,7 @@ void ARX_THROWN_OBJECT_KillAll() {
 
 static long ARX_THROWN_OBJECT_GetFree() {
 	
-	ArxInstant latest_time = arxtime.now();
+	GameInstant latest_time = g_gameTime.now();
 	long latest_obj = -1;
 
 	for(size_t i = 0; i < MAX_THROWN_OBJECTS; i++) {
@@ -137,9 +137,9 @@ void ARX_THROWN_OBJECT_Throw(EntityHandle source, const Vec3f & position, const 
 	
 	projectile.m_trail = new ArrowTrail();
 	projectile.m_trail->SetNextPosition(projectile.position);
-	projectile.m_trail->Update(g_framedelay);
+	projectile.m_trail->Update(g_gameTime.lastFrameDuration());
 	
-	projectile.creation_time = arxtime.now();
+	projectile.creation_time = g_gameTime.now();
 	projectile.flags |= ATO_EXIST | ATO_MOVING;
 	
 	if(source == EntityHandle_Player) {
@@ -180,8 +180,8 @@ static float ARX_THROWN_ComputeDamages(const Projectile & projectile, EntityHand
 	if(source == EntityHandle_Player) {
 		attack = projectile.damages;
 
-		if(Random::getf(0.f, 100.f) <= float(player.m_attributeFull.dexterity - 9) * 2.f
-						   + float(player.m_skillFull.projectile * 0.2f)) {
+		if(Random::getf(0.f, 100.f) <= (player.m_attributeFull.dexterity - 9.f) * 2.f
+		                               + player.m_skillFull.projectile * 0.2f) {
 			if(SendIOScriptEvent(io_source, SM_CRITICAL, "bow") != REFUSE)
 				critical = true;
 		}
@@ -323,21 +323,19 @@ static void CheckExp(const Projectile & projectile) {
 		ARX_NPC_SpawnAudibleSound(pos, entities.player());
 		
 		EERIE_LIGHT * light = dynLightCreate();
-		if(light && g_framedelay > 0) {
+		if(light && g_gameTime.lastFrameDuration() > 0) {
 			light->intensity = 3.9f;
 			light->fallstart = 400.f;
 			light->fallend   = 440.f;
 			light->rgb = Color3f(1.f, .8f, .6f) - randomColor3f() * Color3f(.2f, .2f, .2f);
 			light->pos = pos;
 			light->ex_flaresize = 40.f;
-			light->duration = ArxDurationMs(1500);
+			light->duration = GameDurationMs(1500);
 		}
 	}
 }
 
 void ARX_THROWN_OBJECT_Render() {
-	
-	UseRenderState state(render3D());
 	
 	for(size_t i = 0; i < MAX_THROWN_OBJECTS; i++) {
 		Projectile & projectile = g_projectiles[i];
@@ -356,8 +354,10 @@ void ARX_THROWN_OBJECT_Render() {
 	}
 }
 
-void ARX_THROWN_OBJECT_Manage(float time_offset)
+void ARX_THROWN_OBJECT_Manage(GameDuration timeDelta)
 {
+	float timeDeltaMs = toMsf(timeDelta);
+	
 	for(size_t i = 0; i < MAX_THROWN_OBJECTS; i++) {
 		Projectile & projectile = g_projectiles[i];
 		if(!(projectile.flags & ATO_EXIST))
@@ -384,7 +384,7 @@ void ARX_THROWN_OBJECT_Manage(float time_offset)
 		   && !(projectile.flags & ATO_UNDERWATER)) {
 
 			EERIE_LIGHT * light = dynLightCreate();
-			if(light && g_framedelay > 0) {
+			if(light && g_gameTime.lastFrameDuration() > 0) {
 				light->intensity = 1.f;
 				light->fallstart = 100.f;
 				light->fallend   = 240.f;
@@ -392,7 +392,7 @@ void ARX_THROWN_OBJECT_Manage(float time_offset)
 				light->pos = projectile.position;
 				light->ex_flaresize = 40.f;
 				light->extras |= EXTRAS_FLARE;
-				light->duration = ArxDurationMs(g_framedelay * 0.5f);
+				light->duration = GameDurationMsf(g_framedelay * 0.5f);
 			}
 			
 			createObjFireParticles(projectile.obj, 6, 2, 180);
@@ -400,19 +400,19 @@ void ARX_THROWN_OBJECT_Manage(float time_offset)
 
 		if(projectile.m_trail) {
 			projectile.m_trail->SetNextPosition(projectile.position);
-			projectile.m_trail->Update(time_offset);
+			projectile.m_trail->Update(timeDelta);
 		}
 
 		if(projectile.flags & ATO_MOVING) {
 			long need_kill = 0;
-			float mod = time_offset * projectile.velocity;
+			float mod = timeDeltaMs * projectile.velocity;
 			Vec3f original_pos = projectile.position;
 			projectile.position.x += projectile.vector.x * mod;
 			float gmod = 1.f - projectile.velocity;
 
 			gmod = glm::clamp(gmod, 0.f, 1.f);
 
-			projectile.position.y += projectile.vector.y * mod + (time_offset * gmod);
+			projectile.position.y += projectile.vector.y * mod + (timeDeltaMs * gmod);
 			projectile.position.z += projectile.vector.z * mod;
 
 			CheckForIgnition(Sphere(original_pos, 10.f), 0, 2);

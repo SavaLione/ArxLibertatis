@@ -140,14 +140,14 @@ struct IO_SPELLCAST_DATA {
 	SpellcastFlags spell_flags;
 	short spell_level;
 	EntityHandle target;
-	ArxDuration duration;
+	GameDuration duration;
 	
 	IO_SPELLCAST_DATA()
 		: castingspell(SPELL_NONE)
 		, spell_flags()
 		, spell_level(0)
 		, target()
-		, duration(ArxDuration_ZERO)
+		, duration(0)
 	{
 		for(unsigned long j(0); j < 4; j++)
 			symb[j] = RUNE_NONE;
@@ -235,7 +235,7 @@ enum EntityVisilibity {
 
 struct AnimationBlendStatus {
 	bool m_active;
-	ArxInstant lastanimtime;
+	GameInstant lastanimtime;
 };
 
 class Entity {
@@ -317,12 +317,12 @@ public:
 	
 	std::set<std::string> groups;
 	Vec2s m_inventorySize;// Inventory Icon size
-	ArxInstant soundtime;
+	GameInstant soundtime;
 	unsigned long soundcount;
 	
-	ArxInstant sfx_time;
-	ArxInstant collide_door_time;
-	ArxInstant ouch_time;
+	GameInstant sfx_time;
+	GameInstant collide_door_time;
+	GameInstant ouch_time;
 	float dmg_sum;
 	
 	IO_SPELLCAST_DATA spellcast_data;

@@ -77,9 +77,10 @@ ZeniMax Media Inc., Suite 120, Rockville, Maryland 20850 USA.
 #include "gui/MiniMap.h"
 #include "gui/Hud.h"
 #include "gui/Interface.h"
+#include "gui/Speech.h"
 #include "gui/hud/SecondaryInventory.h"
 
-#include "graphics/GraphicsModes.h"
+#include "graphics/GlobalFog.h"
 #include "graphics/Math.h"
 
 #include "io/resource/ResourcePath.h"
@@ -107,7 +108,6 @@ ZeniMax Media Inc., Suite 120, Rockville, Maryland 20850 USA.
 
 
 extern bool GLOBAL_MAGIC_MODE;
-ArxInstant FORCE_TIME_RESTORE = ArxInstant_ZERO;
 
 extern bool GMOD_RESET;
 
@@ -115,7 +115,6 @@ extern long HERO_SHOW_1ST;
 extern bool EXTERNALVIEW;
 extern bool LOAD_N_ERASE;
 extern long FORBID_SCRIPT_IO_CREATION;
-extern bool TIME_INIT;
 
 static bool ARX_CHANGELEVEL_Push_Index(long num);
 static bool ARX_CHANGELEVEL_PushLevel(long num, long newnum);
@@ -140,7 +139,6 @@ struct Playthrough {
 	
 };
 
-static ArxInstant ARX_CHANGELEVEL_DesiredTime = ArxInstant_ZERO;
 long DONT_WANT_PLAYER_INZONE = 0;
 static SaveBlock * g_currentSavedGame = NULL;
 static Playthrough g_currentPlathrough;
@@ -261,6 +259,8 @@ bool ARX_CHANGELEVEL_StartNew() {
 	g_currentPlathrough.oldestALVersion = arx_version_number;
 	g_currentPlathrough.newestALVersion = arx_version_number;
 	
+	g_gameTime.reset(0);
+	
 	if(!ARX_Changelevel_CurGame_Clear()) {
 		return false;
 	}
@@ -314,8 +314,6 @@ void ARX_CHANGELEVEL_Change(const std::string & level, const std::string & targe
 	progressBarSetTotal(238);
 	progressBarReset();
 	
-	ARX_CHANGELEVEL_DesiredTime = arxtime.now();
-		
 	long num = GetLevelNumByName("level" + level);
 
 	LoadLevelScreen(num);
@@ -340,7 +338,6 @@ void ARX_CHANGELEVEL_Change(const std::string & level, const std::string & targe
 	
 	ARX_PLAYER_Reset_Fall();
 	
-	arxtime.pause();
 	progressBarAdvance();
 	LoadLevelScreen(num);
 	
@@ -351,8 +348,6 @@ void ARX_CHANGELEVEL_Change(const std::string & level, const std::string & targe
 	LogDebug("Before ARX_CHANGELEVEL_PushLevel");
 	ARX_CHANGELEVEL_PushLevel(CURRENTLEVEL, num);
 	LogDebug("After  ARX_CHANGELEVEL_PushLevel");
-	
-	arxtime.resume();
 	
 	LogDebug("Before ARX_CHANGELEVEL_PopLevel");
 	ARX_CHANGELEVEL_PopLevel(num, true);
@@ -389,7 +384,6 @@ static bool ARX_CHANGELEVEL_PushLevel(long num, long newnum) {
 	// Now we can save our things
 	if(!ARX_CHANGELEVEL_Push_Index(num)) {
 		LogError << "Error Saving Index...";
-		arxtime.resume();
 		return false;
 	}
 	
@@ -397,13 +391,11 @@ static bool ARX_CHANGELEVEL_PushLevel(long num, long newnum) {
 	
 	if(ARX_CHANGELEVEL_Push_Player(newnum) != 1) {
 		LogError << "Error Saving Player...";
-		arxtime.resume();
 		return false;
 	}
 	
 	if(ARX_CHANGELEVEL_Push_AllIO(num) != 1) {
 		LogError << "Error Saving IOs...";
-		arxtime.resume();
 		return false;
 	}
 	
@@ -440,12 +432,12 @@ static bool ARX_CHANGELEVEL_Push_Index(long num) {
 	asi.version       = ARX_GAMESAVE_VERSION;
 	asi.nb_inter      = 0;
 	asi.nb_paths      = nbARXpaths;
-	asi.time          = toMs(arxtime.now());
+	asi.time          = toMsi(g_gameTime.now()); // TODO save/load time
 	asi.nb_lights     = 0;
 	asi.gmods_stacked = GLOBAL_MODS();
 	asi.gmods_stacked.zclip = 6400.f;
-	asi.gmods_desired = desired;
-	asi.gmods_current = current;
+	asi.gmods_desired = g_desiredFogParameters;
+	asi.gmods_current = g_currentFogParameters;
 	
 	for(size_t i = 1; i < entities.size(); i++) {
 		const EntityHandle handle = EntityHandle(i);
@@ -510,7 +502,7 @@ static bool ARX_CHANGELEVEL_Push_Index(long num) {
 	}
 	
 	if(asi.ambiances_data_size > 0) {
-		memcpy((char *)(dat + pos), playlist, asi.ambiances_data_size);
+		memcpy(dat + pos, playlist, asi.ambiances_data_size);
 		pos += asi.ambiances_data_size;
 		free(playlist);
 	}
@@ -564,15 +556,16 @@ static void ARX_CHANGELEVEL_Push_Globals() {
 					
 					count = svar[i].text.size();
 					
-					avs.fval = (float)count; 
+					avs.fval = (float)count;
 					avs.type = TYPE_G_TEXT;
 					memcpy(dat + pos, &avs, sizeof(ARX_CHANGELEVEL_VARIABLE_SAVE));
 					pos += sizeof(ARX_CHANGELEVEL_VARIABLE_SAVE);
-
-					if (count > 0)
-						memcpy(dat + pos, svar[i].text.c_str(), count + 1); 
-
-					pos += (long)avs.fval; 
+					
+					if(count > 0) {
+						memcpy(dat + pos, svar[i].text.c_str(), count + 1);
+					}
+					
+					pos += (long)avs.fval;
 				}
 				else
 					acsg.nb_globals--;
@@ -652,16 +645,13 @@ static long ARX_CHANGELEVEL_Push_Player(long level) {
 
 	memset(asp, 0, sizeof(ARX_CHANGELEVEL_PLAYER));
 
-	asp->AimTime = toMs(player.AimTime);
+	asp->AimTime = 1500;
 	asp->angle = player.angle;
-	asp->armor_class = player.m_misc.armorClass;
 	asp->Attribute_Constitution = player.m_attribute.constitution;
 	asp->Attribute_Dexterity = player.m_attribute.dexterity;
 	asp->Attribute_Mind = player.m_attribute.mind;
 	asp->Attribute_Strength = player.m_attribute.strength;
-	asp->Critical_Hit = player.m_misc.criticalHit;
 	asp->Current_Movement = player.m_currentMovement;
-	asp->damages = player.m_misc.damages;
 	asp->doingmagic = player.doingmagic;
 	asp->Interface = player.Interface;
 	asp->playerflags = player.playerflags;
@@ -670,7 +660,11 @@ static long ARX_CHANGELEVEL_Push_Player(long level) {
 	util::storeString(asp->TELEPORT_TO_POSITION, TELEPORT_TO_POSITION.c_str());
 
 	asp->TELEPORT_TO_ANGLE = TELEPORT_TO_ANGLE;
-	asp->CHANGE_LEVEL_ICON = CHANGE_LEVEL_ICON;
+	switch(CHANGE_LEVEL_ICON) {
+		case NoChangeLevel:      asp->CHANGE_LEVEL_ICON = -1; break;
+		case ConfirmChangeLevel: asp->CHANGE_LEVEL_ICON = 1;  break;
+		case ChangeLevelNow:     asp->CHANGE_LEVEL_ICON = 200; break;
+	}
 	asp->bag = player.bag;
 	storeIdString(asp->equipsecondaryIO, NULL);
 	storeIdString(asp->equipshieldIO, NULL);
@@ -690,18 +684,20 @@ static long ARX_CHANGELEVEL_Push_Player(long level) {
 	for(size_t bag = 0; bag < INVENTORY_BAGS; bag++)
 	for(size_t y = 0; y < INVENTORY_Y; y++)
 	for(size_t x = 0; x < INVENTORY_X; x++) {
-		storeIdString(asp->id_inventory[bag][x][y], inventory[bag][x][y].io);
-		asp->inventory_show[bag][x][y] = inventory[bag][x][y].show;
+		storeIdString(asp->id_inventory[bag][x][y], g_inventory[bag][x][y].io);
+		asp->inventory_show[bag][x][y] = g_inventory[bag][x][y].show;
 	}
 	
-    g_miniMap.save(asp->minimap, SAVED_MAX_MINIMAPS);
-
+	g_miniMap.save(asp->minimap, SAVED_MAX_MINIMAPS);
+	
 	asp->falling = player.falling;
 	asp->gold = player.gold;
 	asp->invisibility = entities.player()->invisibility;
 
 	asp->jumpphase = player.jumpphase;
-	asp->jumpstarttime = static_cast<u32>(toMs(player.jumpstarttime)); // TODO save/load time
+	
+	GameInstant jumpstart = g_gameTime.now() + GameDurationUs(toUs(player.jumpstarttime - g_platformTime.frameStart()));
+	asp->jumpstarttime = static_cast<u32>(toMsi(jumpstart)); // TODO save/load time
 	asp->Last_Movement = player.m_lastMovement;
 	asp->level = player.level;
 	
@@ -747,8 +743,6 @@ static long ARX_CHANGELEVEL_Push_Player(long level) {
 
 
 	asp->pos = player.pos;
-	asp->resist_magic = player.m_misc.resistMagic;
-	asp->resist_poison = player.m_misc.resistPoison;
 	asp->Attribute_Redistribute = player.Attribute_Redistribute;
 	asp->Skill_Redistribute = player.Skill_Redistribute;
 	asp->rune_flags = player.rune_flags;
@@ -791,14 +785,14 @@ static long ARX_CHANGELEVEL_Push_Player(long level) {
 	for(size_t i = 0; i < g_playerQuestLogEntries.size(); i++) {
 		memset(dat + pos, 0, SAVED_QUEST_SLOT_SIZE);
 		assert(g_playerQuestLogEntries[i].length() < SAVED_QUEST_SLOT_SIZE);
-		strcpy((char *)(dat + pos), g_playerQuestLogEntries[i].c_str());
+		strcpy(dat + pos, g_playerQuestLogEntries[i].c_str());
 		pos += SAVED_QUEST_SLOT_SIZE;
 	}
 	
 	for(size_t i = 0; i < g_playerKeyring.size(); i++) {
 		memset(dat + pos, 0, SAVED_KEYRING_SLOT_SIZE);
 		assert(g_playerKeyring[i].length() < SAVED_KEYRING_SLOT_SIZE);
-		strcpy((char *)(dat + pos), g_playerKeyring[i].c_str());
+		strcpy(dat + pos, g_playerKeyring[i].c_str());
 		pos += SAVED_KEYRING_SLOT_SIZE;
 	}
 	
@@ -831,17 +825,11 @@ static long ARX_CHANGELEVEL_Push_AllIO(long level) {
 	for(size_t i = 1; i < entities.size(); i++) {
 		const EntityHandle handle = EntityHandle(i);
 		Entity * e = entities[handle];
-		
-		if ((e != NULL)
-				&&	(!(e->ioflags & IO_NOSAVE))
-				&&	(!IsInPlayerInventory(e))
-				&&	(!IsPlayerEquipedWith(e))
-		   )
-		{
+		if(e && !(e->ioflags & IO_NOSAVE) && !IsInPlayerInventory(e) && !IsPlayerEquipedWith(e)) {
 			ARX_CHANGELEVEL_Push_IO(e, level);
 		}
 	}
-
+	
 	return 1;
 }
 
@@ -987,11 +975,11 @@ static long ARX_CHANGELEVEL_Push_IO(const Entity * io, long level) {
 		
 		ais.usepath_aupflags = aup->aupflags;
 		
-		ais.usepath_curtime = checked_range_cast<u32>(aup->_curtime);
+		ais.usepath_curtime = checked_range_cast<u32>(toMsi(aup->_curtime)); // TODO save/load time
 		
 		ais.usepath_initpos = aup->initpos;
 		ais.usepath_lastWP = aup->lastWP;
-		ais.usepath_starttime = checked_range_cast<u32>(aup->_starttime);
+		ais.usepath_starttime = checked_range_cast<u32>(toMsi(aup->_starttime)); // TODO save/load time
 		
 		util::storeString(ais.usepath_name, aup->path->name.c_str());
 	}
@@ -1121,7 +1109,7 @@ static long ARX_CHANGELEVEL_Push_IO(const Entity * io, long level) {
 	memcpy(dat, &ais, sizeof(ARX_CHANGELEVEL_IO_SAVE));
 	pos += sizeof(ARX_CHANGELEVEL_IO_SAVE);
 
-	const ArxInstant timm = arxtime.now();
+	const GameInstant timm = g_gameTime.now();
 
 	for(int i = 0; i < MAX_TIMER_SCRIPT; i++) {
 		SCR_TIMER & timer = scr_timer[i];
@@ -1130,7 +1118,7 @@ static long ARX_CHANGELEVEL_Push_IO(const Entity * io, long level) {
 				ARX_CHANGELEVEL_TIMERS_SAVE * ats = (ARX_CHANGELEVEL_TIMERS_SAVE *)(dat + pos);
 				memset(ats, 0, sizeof(ARX_CHANGELEVEL_TIMERS_SAVE));
 				ats->longinfo = timer.longinfo;
-				ats->interval = toMs(timer.interval);
+				ats->interval = toMsi(timer.interval); // TODO save/load time
 				util::storeString(ats->name, timer.name.c_str());
 				ats->pos = timer.pos;
 
@@ -1139,8 +1127,8 @@ static long ARX_CHANGELEVEL_Push_IO(const Entity * io, long level) {
 				else
 					ats->script = 1;
 
-				ats->remaining = toMs((timer.start + timer.interval) - timm);
-				arx_assert(ats->remaining <= toMs(timer.interval));
+				ats->remaining = toMsi((timer.start + timer.interval) - timm); // TODO save/load time
+				arx_assert(ats->remaining <= toMsi(timer.interval));
 
 				if(ats->remaining < 0)
 					ats->remaining = 0;
@@ -1299,7 +1287,7 @@ static long ARX_CHANGELEVEL_Push_IO(const Entity * io, long level) {
 			as = (ARX_CHANGELEVEL_NPC_IO_SAVE *)(dat + pos);
 			memset(as, 0, sizeof(ARX_CHANGELEVEL_NPC_IO_SAVE));
 			as->absorb = io->_npcdata->absorb;
-			as->aimtime = static_cast<f32>(toMs(io->_npcdata->aimtime));
+			as->aimtime = static_cast<f32>(toMsi(io->_npcdata->aimtime)); // TODO save/load time
 			as->armor_class = io->_npcdata->armor_class;
 			as->behavior = io->_npcdata->behavior;
 			as->behavior_param = io->_npcdata->behavior_param;
@@ -1352,9 +1340,8 @@ static long ARX_CHANGELEVEL_Push_IO(const Entity * io, long level) {
 			as->resist_poison = io->_npcdata->resist_poison;
 			as->resist_magic = io->_npcdata->resist_magic;
 			as->resist_fire = io->_npcdata->resist_fire;
-			as->strike_time = io->_npcdata->strike_time;
-			as->walk_start_time = io->_npcdata->walk_start_time;
-			as->aiming_start = static_cast<s32>(toMs(io->_npcdata->aiming_start)); // TODO save/load time
+			as->walk_start_time = checked_range_cast<s16>(toMsi(io->_npcdata->walk_start_time)); // TODO save/load time
+			as->aiming_start = static_cast<s32>(toMsi(io->_npcdata->aiming_start)); // TODO save/load time
 			as->npcflags = io->_npcdata->npcflags;
 			as->pathfind = IO_PATHFIND();
 
@@ -1580,20 +1567,19 @@ static long ARX_CHANGELEVEL_Pop_Level(ARX_CHANGELEVEL_INDEX * asi, long num,
 	
 	LOAD_N_ERASE = false;
 	
-	if(!resources->getFile(levelFile)) {
+	if(!g_resources->getFile(levelFile)) {
 		LogError << "Unable To Find " << levelFile;
 		return 0;
 	}
 	
 	LoadLevelScreen(num);
-	SetEditMode(1, false);
+	SetEditMode();
+	ARX_PATH_ComputeAllBoundingBoxes();
 	
 	ARX_CHANGELEVEL_Pop_Globals();
 	
 	DanaeLoadLevel(levelFile, firstTime);
 	CleanScriptLoadedIO();
-	
-	g_requestLevelInit = true;
 	
 	if(firstTime) {
 		
@@ -1613,11 +1599,9 @@ static long ARX_CHANGELEVEL_Pop_Level(ARX_CHANGELEVEL_INDEX * asi, long num,
 	ARX_INTERFACE_Reset();
 	EERIE_ANIMMANAGER_PurgeUnused();
 	
-	desired = asi->gmods_desired;
-	current = asi->gmods_current;
+	g_desiredFogParameters = asi->gmods_desired;
+	g_currentFogParameters = asi->gmods_current;
 	GMOD_RESET = false;
-	arxtime.force_time_restore(ARX_CHANGELEVEL_DesiredTime);
-	FORCE_TIME_RESTORE = ARX_CHANGELEVEL_DesiredTime;
 	
 	return 1;
 }
@@ -1642,19 +1626,14 @@ static long ARX_CHANGELEVEL_Pop_Player() {
 	const ARX_CHANGELEVEL_PLAYER * asp = reinterpret_cast<const ARX_CHANGELEVEL_PLAYER *>(dat + pos);
 	pos += sizeof(ARX_CHANGELEVEL_PLAYER);
 	
-	player.AimTime = PlatformDurationMs(asp->AimTime);
 	player.angle = asp->angle;
 	player.desiredangle = player.angle;
-	
-	player.m_misc.armorClass = checked_range_cast<unsigned char>(asp->armor_class);
 	
 	player.m_attribute.constitution = asp->Attribute_Constitution;
 	player.m_attribute.dexterity = asp->Attribute_Dexterity;
 	player.m_attribute.mind = asp->Attribute_Mind;
 	player.m_attribute.strength = asp->Attribute_Strength;
-	player.m_misc.criticalHit = asp->Critical_Hit;
 	player.m_currentMovement = PlayerMovement::load(asp->Current_Movement); // TODO save/load flags
-	player.m_misc.damages = asp->damages;
 	player.doingmagic = asp->doingmagic;
 	player.playerflags = PlayerFlags::load(asp->playerflags); // TODO save/load flags
 	
@@ -1671,7 +1650,15 @@ static long ARX_CHANGELEVEL_Pop_Player() {
 	}
 	
 	TELEPORT_TO_ANGLE = asp->TELEPORT_TO_ANGLE;
-	CHANGE_LEVEL_ICON = asp->CHANGE_LEVEL_ICON;
+	
+	if(asp->CHANGE_LEVEL_ICON < 0) {
+		CHANGE_LEVEL_ICON = NoChangeLevel;
+	} else if(asp->CHANGE_LEVEL_ICON == 200) {
+		CHANGE_LEVEL_ICON = ChangeLevelNow;
+	} else {
+		CHANGE_LEVEL_ICON = ConfirmChangeLevel;
+	}
+	
 	player.bag = asp->bag;
 	
 	for(size_t i = 0; i < SAVED_MAX_PRECAST; i++) {
@@ -1684,13 +1671,15 @@ static long ARX_CHANGELEVEL_Pop_Player() {
 	}
 	
 	player.Interface = PlayerInterfaceFlags::load(asp->Interface); // TODO save/load flags
-	player.Interface &= ~INTER_MAP;
+	player.Interface &= ~INTER_PLAYERBOOK;
 	player.falling = (asp->falling != 0);
 	player.gold = asp->gold;
 	entities.player()->invisibility = asp->invisibility;
 	player.inzone = ARX_PATH_GetAddressByName(boost::to_lower_copy(util::loadString(asp->inzone)));
 	player.jumpphase = JumpPhase(asp->jumpphase); // TODO save/load enum
-	player.jumpstarttime = ArxInstantMs(asp->jumpstarttime); // TODO save/load time
+	PlatformInstant jumpstart = g_platformTime.frameStart()
+	                            + PlatformDurationUs(toUs(GameInstantMs(asp->jumpstarttime) - g_gameTime.now()));
+	player.jumpstarttime = jumpstart; // TODO save/load time
 	player.m_lastMovement = PlayerMovement::load(asp->Last_Movement); // TODO save/load flags
 	
 	player.level = checked_range_cast<short>(asp->level);
@@ -1743,11 +1732,8 @@ static long ARX_CHANGELEVEL_Pop_Player() {
 	WILL_RESTORE_PLAYER_POSITION = asp->pos.toVec3();
 	WILL_RESTORE_PLAYER_POSITION_FLAG = true;
 	
-	player.m_misc.resistMagic = checked_range_cast<unsigned char>(asp->resist_magic);
-	player.m_misc.resistPoison = checked_range_cast<unsigned char>(asp->resist_poison);
-	
-	player.Attribute_Redistribute = checked_range_cast<unsigned char>(asp->Attribute_Redistribute);
-	player.Skill_Redistribute = checked_range_cast<unsigned char>(asp->Skill_Redistribute);
+	player.Attribute_Redistribute = glm::clamp(asp->Attribute_Redistribute, s16(0), s16(std::numeric_limits<unsigned char>::max()));
+	player.Skill_Redistribute = glm::clamp(asp->Skill_Redistribute, s16(0), s16(std::numeric_limits<unsigned char>::max()));
 	
 	player.rune_flags = RuneFlags::load(asp->rune_flags); // TODO save/load flags
 	player.size = asp->size.toVec3();
@@ -1788,8 +1774,8 @@ static long ARX_CHANGELEVEL_Pop_Player() {
 	for(size_t bag = 0; bag < SAVED_INVENTORY_BAGS; bag++)
 	for(size_t y = 0; y < SAVED_INVENTORY_Y; y++)
 	for(size_t x = 0; x < SAVED_INVENTORY_X; x++) {
-		inventory[bag][x][y].io = ConvertToValidIO(asp->id_inventory[bag][x][y]);
-		inventory[bag][x][y].show = asp->inventory_show[bag][x][y] != 0;
+		g_inventory[bag][x][y].io = ConvertToValidIO(asp->id_inventory[bag][x][y]);
+		g_inventory[bag][x][y].show = asp->inventory_show[bag][x][y] != 0;
 	}
 	
 	if(size < pos + (asp->nb_PlayerQuest * SAVED_QUEST_SLOT_SIZE)) {
@@ -2057,10 +2043,10 @@ static Entity * ARX_CHANGELEVEL_Pop_IO(const std::string & idString, EntityInsta
 		if(ais->system_flags & SYSTEM_FLAG_USEPATH) {
 			ARX_USE_PATH * aup = io->usepath = (ARX_USE_PATH *)malloc(sizeof(ARX_USE_PATH));
 			aup->aupflags = UsePathFlags::load(ais->usepath_aupflags); // TODO save/load flags
-			aup->_curtime = static_cast<float>(ais->usepath_curtime);
+			aup->_curtime = GameInstantMs(ais->usepath_curtime); // TODO save/load time
 			aup->initpos = ais->usepath_initpos.toVec3();
 			aup->lastWP = ais->usepath_lastWP;
-			aup->_starttime = static_cast<float>(ais->usepath_starttime);
+			aup->_starttime = GameInstantMs(ais->usepath_starttime); // TODO save/load time
 			aup->path = ARX_PATH_GetAddressByName(boost::to_lower_copy(util::loadString(ais->usepath_name)));
 		}
 		
@@ -2161,20 +2147,20 @@ static Entity * ARX_CHANGELEVEL_Pop_IO(const std::string & idString, EntityInsta
 			scr_timer[num].flags = sFlags;
 			scr_timer[num].exist = 1;
 			scr_timer[num].io = io;
-			scr_timer[num].interval = ArxDurationMs(ats->interval); // TODO save/load time
+			scr_timer[num].interval = GameDurationMs(ats->interval); // TODO save/load time
 			scr_timer[num].name = boost::to_lower_copy(util::loadString(ats->name));
 			scr_timer[num].pos = ats->pos;
 			// TODO if the script has changed since the last save, this position may be invalid
 			
-			ArxDuration remaining = ArxDurationMs(ats->remaining);
-			if(remaining > ArxDurationMs(ats->interval)) {
+			GameDuration remaining = GameDurationMs(ats->remaining);
+			if(remaining > GameDurationMs(ats->interval)) {
 				LogWarning << "Found bad script timer " << scr_timer[num].name
 				           << " for entity " << io->idString() << " in save file: remaining time ("
-				           << toMs(remaining) << "ms) > interval (" << ats->interval << "ms) " << ats->flags;
-				remaining = ArxDurationMs(ats->interval);
+				           << toMsi(remaining) << "ms) > interval (" << ats->interval << "ms) " << ats->flags;
+				remaining = GameDurationMs(ats->interval);
 			}
 			
-			const ArxInstant tt = (ARX_CHANGELEVEL_DesiredTime + remaining) - ArxDurationMs(ats->interval);
+			const GameInstant tt = (g_gameTime.now() + remaining) - GameDurationMs(ats->interval);
 			scr_timer[num].start = tt;
 			
 			scr_timer[num].count = ats->count;
@@ -2197,7 +2183,7 @@ static Entity * ARX_CHANGELEVEL_Pop_IO(const std::string & idString, EntityInsta
 				pos += sizeof(ARX_CHANGELEVEL_NPC_IO_SAVE);
 				
 				io->_npcdata->absorb = as->absorb;
-				io->_npcdata->aimtime = ArxDurationMs(as->aimtime);
+				io->_npcdata->aimtime = GameDurationMsf(as->aimtime);
 				io->_npcdata->armor_class = as->armor_class;
 				io->_npcdata->behavior = Behaviour::load(as->behavior); // TODO save/load flags
 				io->_npcdata->behavior_param = as->behavior_param;
@@ -2243,9 +2229,8 @@ static Entity * ARX_CHANGELEVEL_Pop_IO(const std::string & idString, EntityInsta
 				io->_npcdata->resist_poison = as->resist_poison;
 				io->_npcdata->resist_magic = as->resist_magic;
 				io->_npcdata->resist_fire = as->resist_fire;
-				io->_npcdata->strike_time = as->strike_time;
-				io->_npcdata->walk_start_time = as->walk_start_time;
-				io->_npcdata->aiming_start = ArxInstantMs(as->aiming_start); // TODO save/load time
+				io->_npcdata->walk_start_time = GameDurationMs(as->walk_start_time); // TODO save/load time
+				io->_npcdata->aiming_start = GameInstantMs(as->aiming_start); // TODO save/load time
 				io->_npcdata->npcflags = NPCFlags::load(as->npcflags); // TODO save/load flags
 				io->_npcdata->fDetect = as->fDetect;
 				io->_npcdata->cuts = DismembermentFlags::load(as->cuts); // TODO save/load flags
@@ -2444,7 +2429,9 @@ static void ARX_CHANGELEVEL_PopAllIO(ARX_CHANGELEVEL_INDEX * asi, ARX_CHANGELEVE
 
 static void ARX_CHANGELEVEL_PopAllIO_FINISH(bool reloadflag, bool firstTime) {
 	
-	for(size_t i = 0; i < entities.size(); i++) {
+	bool movedOOBItems = false;
+	
+	for(size_t i = 1; i < entities.size(); i++) {
 		const EntityHandle handle = EntityHandle(i);
 		Entity * entity = entities[handle];
 		
@@ -2456,11 +2443,16 @@ static void ARX_CHANGELEVEL_PopAllIO_FINISH(bool reloadflag, bool firstTime) {
 			LogWarning << "Found entity " << entity->idString() << " outside the world";
 			if((entity->ioflags & (IO_ITEM |IO_MOVABLE)) && (entity->gameFlags & GFLAG_INTERACTIVITY)) {
 				PutInFrontOfPlayer(entity);
+				movedOOBItems = true;
 			} else {
 				entity->pos = entity->initpos;
 			}
 		}
 		
+	}
+	
+	if(movedOOBItems) {
+		ARX_SPEECH_Add("Found out of bounds items and dropped them in front of the player.");
 	}
 	
 	if(reloadflag) {
@@ -2577,8 +2569,6 @@ static void ARX_CHANGELEVEL_Pop_Globals() {
 
 static void ARX_CHANGELEVEL_PopLevel_Abort(ARX_CHANGELEVEL_IO_INDEX * idx_io) {
 	
-	arxtime.resume();
-	
 	delete[] idx_io;
 	
 	FORBID_SCRIPT_IO_CREATION = 0;
@@ -2596,10 +2586,6 @@ static bool ARX_CHANGELEVEL_PopLevel(long instance, bool reloadflag) {
 	LogDebug("Before DANAE ClearAll");
 	DanaeClearLevel();
 	LogDebug("After  DANAE ClearAll");
-	
-	arxtime.pause();
-	arxtime.force_time_restore(ARX_CHANGELEVEL_DesiredTime);
-	FORCE_TIME_RESTORE = ARX_CHANGELEVEL_DesiredTime;
 	
 	// Now we can load our things...
 	std::ostringstream loadfile;
@@ -2653,10 +2639,9 @@ static bool ARX_CHANGELEVEL_PopLevel(long instance, bool reloadflag) {
 	LoadLevelScreen(instance);
 	
 	if(firstTime) {
-		ArxInstant ulDTime = ARX_CHANGELEVEL_DesiredTime;
 		for(long i = 0; i < MAX_TIMER_SCRIPT; i++) {
 			if(scr_timer[i].exist) {
-				scr_timer[i].start = ulDTime;
+				scr_timer[i].start = g_gameTime.now();
 			}
 		}
 	} else {
@@ -2702,15 +2687,11 @@ static bool ARX_CHANGELEVEL_PopLevel(long instance, bool reloadflag) {
 	progressBarAdvance();
 	LoadLevelScreen();
 	
-	arxtime.force_time_restore(ARX_CHANGELEVEL_DesiredTime);
-	TIME_INIT = false;
-	FORCE_TIME_RESTORE = ARX_CHANGELEVEL_DesiredTime;
 	LogDebug("After  Player Misc Init");
 	
 	LogDebug("Before Memory Release");
 	delete[] idx_io;
 	FORBID_SCRIPT_IO_CREATION = 0;
-	TIME_INIT = false;
 	LogDebug("After  Memory Release");
 	
 	LogDebug("Before Final Inits");
@@ -2744,8 +2725,6 @@ bool ARX_CHANGELEVEL_Save(const std::string & name, const fs::path & savefile) {
 	
 	LogDebug("ARX_CHANGELEVEL_Save " << savefile << " " << name);
 	
-	arxtime.pause();
-	
 	if(CURRENTLEVEL == -1) {
 		LogWarning << "Internal Non-Fatal Error";
 		return false;
@@ -2769,7 +2748,7 @@ bool ARX_CHANGELEVEL_Save(const std::string & name, const fs::path & savefile) {
 	pld.level = CURRENTLEVEL;
 	util::storeString(pld.name, name.c_str());
 	pld.version = ARX_GAMESAVE_VERSION;
-	pld.time = toMs(arxtime.now());
+	pld.time = toMsi(g_gameTime.now()); // TODO save/load time
 	pld.playthroughStart = s64(g_currentPlathrough.startTime);
 	pld.playthroughId = g_currentPlathrough.uniqueId;
 	pld.oldestALVersion = std::min(g_currentPlathrough.oldestALVersion, arx_version_number);
@@ -2787,8 +2766,6 @@ bool ARX_CHANGELEVEL_Save(const std::string & name, const fs::path & savefile) {
 		LogError << "Could not complete the save";
 		return false;
 	}
-	
-	arxtime.resume();
 	
 	// Copy the savegame and screenshot to the final destination, overwriting previous files
 	if(!fs::copy_file(CURRENT_GAME_FILE, savefile, true)) {
@@ -2829,7 +2806,7 @@ static bool ARX_CHANGELEVEL_Get_Player_LevelData(ARX_CHANGELEVEL_PLAYER_LEVEL_DA
 	return true;
 }
 
-long ARX_CHANGELEVEL_Load(const fs::path & savefile) {
+void ARX_CHANGELEVEL_Load(const fs::path & savefile) {
 	arx_assert(entities.player());
 	
 	LogInfo << "Loading save " << savefile;
@@ -2839,10 +2816,8 @@ long ARX_CHANGELEVEL_Load(const fs::path & savefile) {
 	progressBarSetTotal(238);
 	progressBarReset();
 	
-	arxtime.pause();
-	
 	if(!ARX_Changelevel_CurGame_Clear()) {
-		return -1;
+		return;
 	}
 	
 	assert(!CURRENT_GAME_FILE.empty());
@@ -2850,7 +2825,7 @@ long ARX_CHANGELEVEL_Load(const fs::path & savefile) {
 	// Copy SavePath to Current Game
 	if(!fs::copy_file(savefile, CURRENT_GAME_FILE)) {
 		LogWarning << "Failed to create copy savegame " << savefile << " to " << CURRENT_GAME_FILE;
-		return -1;
+		return;
 	}
 	
 	// Retrieves Player LevelData
@@ -2864,20 +2839,16 @@ long ARX_CHANGELEVEL_Load(const fs::path & savefile) {
 		g_currentPlathrough.oldestALVersion = pld.oldestALVersion;
 		g_currentPlathrough.newestALVersion = pld.newestALVersion;
 		
-		const ArxInstant fPldTime = ArxInstantMs(pld.time);
-		DanaeClearLevel();
+		g_gameTime.reset(GameInstantMs(pld.time));
+		
 		progressBarAdvance(2.f);
 		LoadLevelScreen(pld.level);
 		CURRENTLEVEL = pld.level;
-		ARX_CHANGELEVEL_DesiredTime = fPldTime;
 		ARX_CHANGELEVEL_PopLevel(pld.level, false);
-		arxtime.force_time_restore(fPldTime);
-		TIME_INIT = false;
-		FORCE_TIME_RESTORE = fPldTime;
 		
 	} else {
 		LogError << "Error Loading Level...";
-		return -1;
+		return;
 	}
 	
 	BLOCK_PLAYER_CONTROLS = false;
@@ -2889,7 +2860,6 @@ long ARX_CHANGELEVEL_Load(const fs::path & savefile) {
 	JUST_RELOADED = 1;
 	
 	LogDebug("success ARX_CHANGELEVEL_Load");
-	return 1;
 }
 
 long ARX_CHANGELEVEL_GetInfo(const fs::path & savefile, std::string & name, float & version,

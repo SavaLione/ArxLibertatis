@@ -77,6 +77,7 @@ ZeniMax Media Inc., Suite 120, Rockville, Maryland 20850 USA.
 #include "graphics/data/TextureContainer.h"
 #include "graphics/data/FastSceneFormat.h"
 #include "graphics/particle/ParticleEffects.h"
+#include "graphics/texture/Texture.h"
 
 #include "io/resource/ResourcePath.h"
 #include "io/fs/FileStream.h"
@@ -201,8 +202,8 @@ long MakeTopObjString(Entity * io, std::string & dest) {
 
 EERIEPOLY * CheckInPoly(const Vec3f & poss, float * needY)
 {
-	long px = poss.x * ACTIVEBKG->m_mul.x;
-	long pz = poss.z * ACTIVEBKG->m_mul.y;
+	long px = long(poss.x * ACTIVEBKG->m_mul.x);
+	long pz = long(poss.z * ACTIVEBKG->m_mul.y);
 	
 	if(pz <= 0 || pz >= ACTIVEBKG->m_size.y - 1 || px <= 0 || px >= ACTIVEBKG->m_size.x - 1)
 		return NULL;
@@ -288,8 +289,8 @@ EERIEPOLY * CheckInPoly(const Vec3f & poss, float * needY)
 
 BackgroundTileData * getFastBackgroundData(float x, float z) {
 	
-	long px = x * ACTIVEBKG->m_mul.x;
-	long pz = z * ACTIVEBKG->m_mul.y;
+	long px = long(x * ACTIVEBKG->m_mul.x);
+	long pz = long(z * ACTIVEBKG->m_mul.y);
 
 	if(px < 0 || px >= ACTIVEBKG->m_size.x || pz < 0 || pz >= ACTIVEBKG->m_size.y)
 		return NULL;
@@ -910,8 +911,8 @@ void Draw3DObject(EERIE_3DOBJ *eobj, const Anglef & angle, const Vec3f & pos, co
 			mat.setCulling(CullNone);
 		else
 			mat.setCulling(CullCW);
-
-		RenderBatcher::getInstance().add(mat, vert_list);
+		
+		g_renderBatcher.add(mat, vert_list);
 	}
 }
 
@@ -966,7 +967,7 @@ bool FastSceneLoad(const res::path & partial_path) {
 		// Load the whole file
 		LogDebug("Loading " << file);
 		size_t size;
-		scoped_malloc<char> dat(resources->readAlloc(file, size));
+		scoped_malloc<char> dat(g_resources->readAlloc(file, size));
 		data = dat.get(), end = dat.get() + size;
 		// TODO use new[] instead of malloc so we can use (boost::)unique_ptr
 		LogDebug("FTS: read " << size << " bytes");
@@ -1190,7 +1191,7 @@ static bool loadFastScene(const res::path & file, const char * data, const char 
 	EERIE_PORTAL_Release();
 	
 	portals = new EERIE_PORTAL_DATA;
-	portals->rooms.resize(fsh->nb_rooms + 1);	
+	portals->rooms.resize(fsh->nb_rooms + 1);
 	portals->portals.resize(fsh->nb_portals);
 	
 	LogDebug("FTS: loading " << portals->portals.size() << " portals ...");
@@ -1355,6 +1356,14 @@ struct SINFO_TEXTURE_VERTEX {
 };
 
 } // anonymous namespace
+
+struct HasAlphaChannel {
+	
+	bool operator()(TextureContainer * texture) {
+		return !texture || !texture->m_pTexture || !texture->m_pTexture->hasAlpha();
+	}
+	
+};
 
 void ComputePortalVertexBuffer() {
 	
@@ -1543,7 +1552,7 @@ void ComputePortalVertexBuffer() {
 			// Record that the texture is used for this room
 			room->ppTextureContainer.push_back(texture);
 			
-			// Save the 
+			// Save the
 			
 			SMY_ARXMAT & m = texture->m_roomBatches.tMatRoom[i];
 			
@@ -1577,5 +1586,8 @@ void ComputePortalVertexBuffer() {
 		}
 		
 		room->pVertexBuffer->unlock();
+		
+		std::partition(room->ppTextureContainer.begin(), room->ppTextureContainer.end(), HasAlphaChannel());
+		
 	}
 }

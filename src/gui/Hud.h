@@ -87,7 +87,6 @@ public:
 class StealIconGui : public HudIconBase {
 private:
 	Vec2f m_size;
-	Vec2f m_pos;
 	
 public:
 	void init();
@@ -98,7 +97,6 @@ public:
 
 class LevelUpIconGui : public HudIconBase {
 private:
-	Vec2f m_pos;
 	Vec2f m_size;
 	bool m_visible;
 	
@@ -113,7 +111,6 @@ public:
 
 class PurseIconGui : public HudIconBase {
 private:
-	Vec2f m_pos;
 	Vec2f m_size;
 	
 	PlatformDuration m_haloTime;
@@ -167,9 +164,9 @@ public:
 class QuickSaveIconGui {
 private:
 	//! Time in ms to show the icon
-	ArxDuration m_duration;
+	GameDuration m_duration;
 	//! Remaining time for the quick save icon
-	ArxDuration m_remainingTime;
+	GameDuration m_remainingTime;
 	
 public:
 	QuickSaveIconGui();
@@ -235,7 +232,7 @@ private:
 	Vec2f m_iconSize;
 	TextureContainer * m_tex;
 	Color m_color;
-	ArxDuration m_timeToDraw;
+	GameDuration m_timeToDraw;
 	long m_nbToDraw;
 	
 public:

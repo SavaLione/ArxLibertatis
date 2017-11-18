@@ -46,17 +46,15 @@ CycleTextWidget::CycleTextWidget()
 	m_rect.top    = 0;
 	m_rect.right  = pLeftButton->m_rect.width() + pRightButton->m_rect.width();
 	m_rect.bottom = std::max(pLeftButton->m_rect.height(), pRightButton->m_rect.height());
-
-	pRef = this;
 }
 
 CycleTextWidget::~CycleTextWidget() {
 	delete pLeftButton;
 	delete pRightButton;
 	
-	{Widget * w; BOOST_FOREACH(w, vText) {
+	BOOST_FOREACH(Widget * w, vText) {
 		delete w;
-	}}
+	}
 }
 
 void CycleTextWidget::selectLast() {
@@ -80,7 +78,7 @@ void CycleTextWidget::AddText(TextWidget *_pText) {
 	pRightButton->SetPos(Vec2f(m_rect.right - pRightButton->m_rect.width(),
 	                           m_rect.top + m_rect.height() / 2 - pRightButton->m_rect.height() / 2));
 
-	int dx=m_rect.width()-pLeftButton->m_rect.width()-pRightButton->m_rect.width();
+	float dx = m_rect.width() - pLeftButton->m_rect.width() - pRightButton->m_rect.width();
 	//on recentre tout
 	std::vector<TextWidget*>::iterator it;
 
@@ -191,8 +189,6 @@ void CycleTextWidget::setEnabled(bool enable) {
 		vText[i]->setEnabled(enable);
 	}
 }
-
-extern MenuCursor * pMenuCursor;
 
 void CycleTextWidget::RenderMouseOver() {
 

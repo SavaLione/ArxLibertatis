@@ -73,6 +73,7 @@ static TextureContainer * cursorMagic = NULL;
 static TextureContainer * cursorThrowObject = NULL;
 static TextureContainer * cursorRedist = NULL;
 static TextureContainer * cursorCrossHair = NULL; // Animated Hand Cursor TC
+static TextureContainer * cursorReadyWeapon = NULL;
 TextureContainer * cursorMovable = NULL;   // TextureContainer for Movable Items (Red Cross)
 
 TextureContainer *	scursor[8];			// Animated Hand Cursor TC
@@ -88,6 +89,7 @@ void cursorTexturesInit() {
 	cursorRedist         = TextureContainer::LoadUI("graph/interface/cursors/add_points");
 	cursorCrossHair      = TextureContainer::LoadUI("graph/interface/cursors/cruz");
 	cursorMovable        = TextureContainer::LoadUI("graph/interface/cursors/wrong");
+	cursorReadyWeapon    = TextureContainer::LoadUI("graph/interface/icons/equipment_sword");
 	
 	arx_assert(cursorTargetOn);
 	arx_assert(cursorTargetOff);
@@ -280,7 +282,7 @@ bool Manage3DCursor(Entity * io, bool simulate) {
 				movev.z *= 0.0001f;
 				Vec3f viewvector = movev;
 
-				io->soundtime = ArxInstant_ZERO;
+				io->soundtime = 0;
 				io->soundcount = 0;
 				EERIE_PHYSICS_BOX_Launch(io->obj, io->pos, angle, viewvector);
 				ARX_SOUND_PlaySFX(SND_WHOOSH, &pos);
@@ -310,7 +312,7 @@ bool Manage3DCursor(Entity * io, bool simulate) {
 }
 
 extern long LOOKING_FOR_SPELL_TARGET;
-extern ArxInstant LOOKING_FOR_SPELL_TARGET_TIME;
+extern GameInstant LOOKING_FOR_SPELL_TARGET_TIME;
 extern bool PLAYER_INTERFACE_SHOW;
 extern long lCursorRedistValue;
 
@@ -322,8 +324,8 @@ static bool SelectSpellTargetCursorRender() {
 	if(   !SPECIAL_DRAGINTER_RENDER
 	   && LOOKING_FOR_SPELL_TARGET
 	) {
-		ArxDuration elapsed = arxtime.now() - LOOKING_FOR_SPELL_TARGET_TIME;
-		if(elapsed > ArxDurationMs(7000)) {
+		GameDuration elapsed = g_gameTime.now() - LOOKING_FOR_SPELL_TARGET_TIME;
+		if(elapsed > GameDurationMs(7000)) {
 			ARX_SOUND_PlaySFX(SND_MAGIC_FIZZLE, &player.pos);
 			ARX_SPELLS_CancelSpellTarget();
 		}
@@ -373,7 +375,7 @@ private:
 	
 public:
 	CursorAnimatedHand()
-		: m_time(PlatformDuration_ZERO)
+		: m_time(0)
 		, m_frame(0)
 		, m_delay(PlatformDurationMs(70))
 	{}
@@ -439,6 +441,10 @@ static void ARX_INTERFACE_RenderCursorInternal(bool flag) {
 			SpecialCursor = CURSOR_COMBINEOFF;
 	}
 	
+	if(FlyingOverIO && config.input.autoReadyWeapon == AutoReadyWeaponNearEnemies && isEnemy(FlyingOverIO)) {
+		SpecialCursor = CURSOR_READY_WEAPON;
+	}
+	
 	if(!SPECIAL_DRAGINTER_RENDER) {
 		if(FlyingOverIO || DRAGINTER) {
 			fHighLightAng += toMs(g_platformTime.lastFrameDuration()) * 0.5f;
@@ -462,18 +468,12 @@ static void ARX_INTERFACE_RenderCursorInternal(bool flag) {
 		cursorScale = g_hudRoot.getScale();
 	}
 	
-	if(   SpecialCursor
-	   || !PLAYER_MOUSELOOK_ON
-	   || DRAGINTER
-	   ||  (FlyingOverIO
-		 && PLAYER_MOUSELOOK_ON
-		 && !g_cursorOverBook
-		 && (eMouseState != MOUSE_IN_NOTE)
-		 && (FlyingOverIO->ioflags & IO_ITEM)
-		 && (FlyingOverIO->gameFlags & GFLAG_INTERACTIVITY)
-		 && (config.input.autoReadyWeapon == false))
-	   || (MAGICMODE && PLAYER_MOUSELOOK_ON)
-	) {
+	if(SpecialCursor || !PLAYER_MOUSELOOK_ON || DRAGINTER
+	   || (FlyingOverIO && PLAYER_MOUSELOOK_ON && !g_cursorOverBook && eMouseState != MOUSE_IN_NOTE
+	       && (FlyingOverIO->ioflags & IO_ITEM) && (FlyingOverIO->gameFlags & GFLAG_INTERACTIVITY)
+	       && config.input.autoReadyWeapon != AlwaysAutoReadyWeapon)
+	   || (MAGICMODE && PLAYER_MOUSELOOK_ON)) {
+		
 		CANNOT_PUT_IT_HERE = EntityMoveCursor_Ok;
 		float ag=player.angle.getPitch();
 		
@@ -505,7 +505,7 @@ static void ARX_INTERFACE_RenderCursorInternal(bool flag) {
 		
 		if(SpecialCursor && !DRAGINTER) {
 			if((COMBINE && COMBINE->m_icon) || COMBINEGOLD) {
-				if(TRUE_PLAYER_MOUSELOOK_ON && (config.input.autoReadyWeapon)) {
+				if(TRUE_PLAYER_MOUSELOOK_ON && config.input.autoReadyWeapon == AlwaysAutoReadyWeapon) {
 					mousePos = MemoMouse;
 				}
 				
@@ -536,8 +536,7 @@ static void ARX_INTERFACE_RenderCursorInternal(bool flag) {
 					EERIEDrawBitmap(Rectf(mousePos, size.x, size.y), .00001f, tc, Color::white);
 					
 					if(FlyingOverIO && (FlyingOverIO->ioflags & IO_BLACKSMITH)) {
-						float v=ARX_DAMAGES_ComputeRepairPrice(COMBINE,FlyingOverIO);
-						
+						float v = ARX_DAMAGES_ComputeRepairPrice(COMBINE, FlyingOverIO);
 						if(v > 0.f) {
 							long t = long(v);
 							Vec2f nuberOffset = Vec2f(-16, -10) * iconScale;
@@ -574,10 +573,17 @@ static void ARX_INTERFACE_RenderCursorInternal(bool flag) {
 				mousePos = Vec2f(320.f, 280.f) - Vec2f(surf->m_size) * 0.5f;
 				break;
 			}
-			case CURSOR_INTERACTION_ON:
+			case CURSOR_INTERACTION_ON: {
 				cursorAnimatedHand.update1();
 				surf = cursorAnimatedHand.getCurrentTexture();
 				break;
+			}
+			case CURSOR_READY_WEAPON: {
+				surf = cursorReadyWeapon;
+				arx_assert(surf);
+				mousePos -= surf->size() / s32(2);
+				break;
+			}
 			default:
 				cursorAnimatedHand.update2();
 				surf = cursorAnimatedHand.getCurrentTexture();
@@ -607,11 +613,11 @@ static void ARX_INTERFACE_RenderCursorInternal(bool flag) {
 			if(   !(player.m_currentMovement & PLAYER_CROUCH)
 			   && !BLOCK_PLAYER_CONTROLS
 			   && GInput->actionPressed(CONTROLS_CUST_MAGICMODE)
-			   && ARXmenu.currentmode == AMCM_OFF
+			   && ARXmenu.mode() == Mode_InGame
 			) {
 				if(!MAGICMODE) {
-					if(player.Interface & INTER_MAP) {
-						ARX_INTERFACE_BookClose(); // Forced Closing
+					if(player.Interface & INTER_PLAYERBOOK) {
+						g_playerBook.close(); // Forced Closing
 					}
 					MAGICMODE = true;
 				}
@@ -647,7 +653,7 @@ static void ARX_INTERFACE_RenderCursorInternal(bool flag) {
 					
 					Vec2f pos = mousePos;
 					
-					if(TRUE_PLAYER_MOUSELOOK_ON && config.input.autoReadyWeapon) {
+					if(TRUE_PLAYER_MOUSELOOK_ON && config.input.autoReadyWeapon == AlwaysAutoReadyWeapon) {
 						pos = MemoMouse;
 					}
 					
@@ -705,7 +711,7 @@ static void ARX_INTERFACE_RenderCursorInternal(bool flag) {
 		
 		if(   TRUE_PLAYER_MOUSELOOK_ON
 		   && config.interface.showCrosshair
-		   && !(player.Interface & (INTER_COMBATMODE | INTER_NOTE | INTER_MAP))) {
+		   && !(player.Interface & (INTER_COMBATMODE | INTER_NOTE | INTER_PLAYERBOOK))) {
 			
 			cursorAnimatedHand.reset();
 			

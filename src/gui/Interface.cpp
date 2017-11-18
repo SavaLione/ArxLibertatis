@@ -157,7 +157,7 @@ Entity *	STARTED_ACTION_ON_IO=NULL;
 
 INTERFACE_TC g_bookResouces = INTERFACE_TC();
 
-gui::Note openNote;
+Note openNote;
 
 extern PlatformInstant SLID_START;
 
@@ -173,7 +173,7 @@ bool				DRAGGING = false;
 bool				MAGICMODE = false;
 long				SpecialCursor=0;
 
-ArxInstant COMBAT_MODE_ON_START_TIME = ArxInstant_ZERO;
+static PlatformInstant COMBAT_MODE_ON_START_TIME = 0;
 static long SPECIAL_DRAW_WEAPON = 0;
 bool bGCroucheToggle=false;
 
@@ -228,7 +228,7 @@ void ARX_INTERFACE_DrawNumber(const Vec2f & pos, const long num, const int _iNb,
 				v[2].p.y = v[3].p.y = pos.y + (10 * scale);
 				v[0].color = v[1].color = v[2].color = v[3].color = col;
 
-				ttx = ((float)tt * (float)11.f) + 1.5f;
+				ttx = float(tt) * 11.f + 1.5f;
 				v[3].uv.x = v[0].uv.x = ttx * divideX;
 				v[1].uv.x = v[2].uv.x = (ttx + 10.f) * divideX;
 
@@ -342,8 +342,10 @@ void ARX_INTERFACE_HALO_Render(Color3f color,
 							   TextureContainer * haloTexture,
 							   Vec2f pos, Vec2f ratio)
 {
+	float wave = timeWaveSin(g_gameTime.now(), GameDurationMsf(628.319f));
+	
 	float power = 0.9f;
-	power -= std::sin(arxtime.get_frame_time()*0.01f) * 0.3f;
+	power -= wave * 0.3f;
 
 	color.r = glm::clamp(color.r * power, 0.f, 1.f);
 	color.g = glm::clamp(color.g * power, 0.f, 1.f);
@@ -352,7 +354,6 @@ void ARX_INTERFACE_HALO_Render(Color3f color,
 
 	RenderState desiredState = render2D().blendAdditive();
 	if(_lHaloType & HALO_NEGATIVE) {
-		desiredState.setColorKey(true); // TODO this is only needed when drawing the halo in front of items
 		desiredState.setBlend(BlendZero, BlendInvSrcColor);
 	}
 	
@@ -412,7 +413,7 @@ void InventoryOpenClose(unsigned long t) {
 	if(((player.Interface & INTER_INVENTORYALL) || TRUE_PLAYER_MOUSELOOK_ON) && (player.Interface & INTER_NOTE))
 		ARX_INTERFACE_NoteClose();
 
-	if(!g_playerInventoryHud.isClosing() && config.input.autoReadyWeapon == false)
+	if(!g_playerInventoryHud.isClosing() && config.input.autoReadyWeapon != AlwaysAutoReadyWeapon)
 		TRUE_PLAYER_MOUSELOOK_ON = false;
 }
 
@@ -421,13 +422,13 @@ void ARX_INTERFACE_NoteClear() {
 	openNote.clear();
 }
 
-void ARX_INTERFACE_NoteOpen(gui::Note::Type type, const std::string & text) {
+void ARX_INTERFACE_NoteOpen(Note::Type type, const std::string & text) {
 	
 	if(player.Interface & INTER_NOTE) {
 		ARX_INTERFACE_NoteClose();
 	}
 	
-	ARX_INTERFACE_BookClose();
+	g_playerBook.close();
 	
 	openNote.setData(type, getLocalised(text));
 	openNote.setPage(0);
@@ -435,20 +436,20 @@ void ARX_INTERFACE_NoteOpen(gui::Note::Type type, const std::string & text) {
 	player.Interface |= INTER_NOTE;
 	
 	switch(openNote.type()) {
-		case gui::Note::Notice:
+		case Note::Notice:
 			ARX_SOUND_PlayInterface(SND_MENU_CLICK, Random::getf(0.9f, 1.1f));
 			break;
-		case gui::Note::Book:
+		case Note::Book:
 			ARX_SOUND_PlayInterface(SND_BOOK_OPEN, Random::getf(0.9f, 1.1f));
 			break;
-		case gui::Note::SmallNote:
-		case gui::Note::BigNote:
+		case Note::SmallNote:
+		case Note::BigNote:
 			ARX_SOUND_PlayInterface(SND_SCROLL_OPEN, Random::getf(0.9f, 1.1f));
 			break;
 		default: break;
 	}
 	
-	if(TRUE_PLAYER_MOUSELOOK_ON && type == gui::Note::Book) {
+	if(TRUE_PLAYER_MOUSELOOK_ON && type == Note::Book) {
 		TRUE_PLAYER_MOUSELOOK_ON = false;
 	}
 	
@@ -465,15 +466,15 @@ void ARX_INTERFACE_NoteClose() {
 	}
 	
 	switch(openNote.type()) {
-		case gui::Note::Notice: {
+		case Note::Notice: {
 			ARX_SOUND_PlayInterface(SND_MENU_CLICK, Random::getf(0.9f, 1.1f));
 			break;
 		}
-		case gui::Note::Book:
+		case Note::Book:
 			ARX_SOUND_PlayInterface(SND_BOOK_CLOSE, Random::getf(0.9f, 1.1f));
 			break;
-		case gui::Note::SmallNote:
-		case gui::Note::BigNote:
+		case Note::SmallNote:
+		case Note::BigNote:
 			ARX_SOUND_PlayInterface(SND_SCROLL_CLOSE, Random::getf(0.9f, 1.1f));
 			break;
 		default: break;
@@ -488,7 +489,7 @@ void ARX_INTERFACE_NoteManage() {
 		return;
 	}
 	
-	if(gui::manageNoteActions(openNote)) {
+	if(openNote.manageActions()) {
 		ARX_INTERFACE_NoteClose();
 	}
 	
@@ -515,7 +516,7 @@ static void ReleaseInfosCombine() {
 	for(size_t bag = 0; bag < size_t(player.bag); bag++)
 	for(size_t y = 0; y < INVENTORY_Y; y++)
 	for(size_t x = 0; x < INVENTORY_X; x++) {
-		Entity * io = inventory[bag][x][y].io;
+		Entity * io = g_inventory[bag][x][y].io;
 
 		if(io)
 			io->ioflags &= ~IO_CAN_COMBINE;
@@ -536,168 +537,61 @@ static void ReleaseInfosCombine() {
 static char * findParam(char * pcToken, const char * param) {
 	
 	char* pStartString = 0;
-
-	if(strstr(pcToken,"^$param1"))
+	
+	if(strstr(pcToken, "^$param1")) {
 		pStartString = strstr(pcToken, param);
-
+	}
+	
 	return pStartString;
 }
 
-static void GetInfosCombineWithIO(Entity * combine, Entity * _pWithIO) {
-	
-	if(!combine)
-		return;
+static void GetInfosCombineWithIO_Script(Entity * combine, Entity * _pWithIO, const EERIE_SCRIPT & script) {
 	
 	std::string tcIndent = combine->idString();
 	
-	if(_pWithIO && _pWithIO != combine && _pWithIO->script.data) {
-		char* pCopyScript = new char[_pWithIO->script.size + 1];
-		pCopyScript[_pWithIO->script.size] = '\0';
-		memcpy(pCopyScript, _pWithIO->script.data, _pWithIO->script.size);
+	char * pCopyScript = new char[script.size + 1];
+	pCopyScript[script.size] = '\0';
+	memcpy(pCopyScript, script.data, script.size);
+	
+	char * pcFound = strstr(pCopyScript, "on combine");
+	
+	if(pcFound) {
+		unsigned int uiNbOpen = 0;
 		
-		char* pCopyOverScript = NULL;
+		char *pcToken = strtok(pcFound, "\r\n");
 		
-		if(_pWithIO->over_script.data) {
-			pCopyOverScript = new char[_pWithIO->over_script.size + 1];
-			pCopyOverScript[_pWithIO->over_script.size] = '\0';
-			memcpy(pCopyOverScript, _pWithIO->over_script.data, _pWithIO->over_script.size);
+		if(strstr(pcToken, "{")) {
+			uiNbOpen++;
 		}
 		
-		char *pcFound = NULL;
-		
-		if(pCopyOverScript) {
-			pcFound = strstr((char*)pCopyOverScript, "on combine");
+		while(pcToken) {
+			pcToken = strtok(NULL, "\r\n");
 			
-			if(pcFound) {
-				unsigned int uiNbOpen = 0;
+			bool bCanCombine = false;
+			char* pStartString;
+			char* pEndString;
+			
+			pStartString = findParam(pcToken, "isclass");
+			if(pStartString) {
+				pStartString = strstr(pStartString, "\"");
 				
-				char *pcToken = strtok(pcFound, "\r\n");
-				
-				if(strstr(pcToken, "{")) {
-					uiNbOpen++;
-				}
-				
-				while(pcToken) {
-					pcToken = strtok(NULL, "\r\n");
+				if(pStartString) {
+					pStartString++;
+					pEndString = strstr(pStartString, "\"");
 					
-					bool bCanCombine = false;
-					char* pStartString;
-					char* pEndString;
-					
-					pStartString = findParam(pcToken, "isclass");
-					if(pStartString) {
-						pStartString = strstr(pStartString, "\"");
+					if(pEndString) {
+						char tTxtCombineDest[256];
+						memcpy(tTxtCombineDest, pStartString, pEndString - pStartString);
+						tTxtCombineDest[pEndString - pStartString] = 0;
 						
-						if(pStartString) {
-							pStartString++;
-							pEndString = strstr(pStartString, "\"");
-							
-							if(pEndString) {
-								char tTxtCombineDest[256];
-								memcpy(tTxtCombineDest, pStartString, pEndString - pStartString);
-								tTxtCombineDest[pEndString - pStartString] = 0;
-								
-								if(tTxtCombineDest == combine->className()) {
-									//same class
-									bCanCombine = true;
-								}
-							}
+						if(tTxtCombineDest == combine->className()) {
+							// same class
+							bCanCombine = true;
 						}
-					} else {
-						pStartString = findParam(pcToken, "==");
-						if(pStartString) {
-							pStartString = strstr(pStartString, "\"");
-							
-							if(pStartString) {
-								pStartString++;
-								pEndString = strstr(pStartString, "\"");
-								
-								if(pEndString) {
-									char tTxtCombineDest[256];
-									memcpy(tTxtCombineDest, pStartString, pEndString - pStartString);
-									tTxtCombineDest[pEndString - pStartString] = 0;
-									
-									if(tTxtCombineDest == tcIndent) {
-										//same class
-										bCanCombine=true;
-									}
-								}
-							}
-						} else {
-							pStartString = findParam(pcToken, "isgroup");
-							if(pStartString) {
-								pStartString = strstr(pStartString, " ");
-								
-								if(pStartString) {
-									pStartString++;
-									pEndString = strstr(pStartString, " ");
-									char* pEndString2 = strstr(pStartString, ")");
-									
-									if(pEndString2 < pEndString) {
-										pEndString = pEndString2;
-									}
-									
-									if(pEndString) {
-										char tTxtCombineDest[256];
-										memcpy(tTxtCombineDest, pStartString, pEndString - pStartString);
-										tTxtCombineDest[pEndString - pStartString] = 0;
-										if(combine->groups.find(tTxtCombineDest) != combine->groups.end()) {
-											//same class
-											bCanCombine = true;
-										}
-									}
-								}
-							}
-						}
-					}
-					
-					if(strstr(pcToken, "{")) {
-						uiNbOpen++;
-					}
-					
-					if(strstr(pcToken, "}")) {
-						uiNbOpen--;
-					}
-					
-					if(bCanCombine) {
-						uiNbOpen = 0;
-						_pWithIO->ioflags |= IO_CAN_COMBINE;
-					} else {
-						_pWithIO->ioflags &= ~IO_CAN_COMBINE;
-					}
-					
-					if(!uiNbOpen) {
-						break;
 					}
 				}
-			}
-		}
-		
-		if(_pWithIO->ioflags & IO_CAN_COMBINE) {
-			delete[] pCopyScript;
-			delete[] pCopyOverScript;
-			return;
-		}
-		
-		pcFound = strstr((char*)pCopyScript, "on combine");
-		
-		if(pcFound) {
-			unsigned int uiNbOpen=0;
-			
-			char *pcToken = strtok(pcFound, "\r\n");
-			
-			if(strstr(pcToken,"{")) {
-				uiNbOpen++;
-			}
-			
-			while(pcToken) {
-				pcToken = strtok(NULL, "\r\n");
-				
-				bool bCanCombine = false;
-				char* pStartString;
-				char* pEndString;
-				
-				pStartString = findParam(pcToken, "isclass");
+			} else {
+				pStartString = findParam(pcToken, "==");
 				if(pStartString) {
 					pStartString = strstr(pStartString, "\"");
 					
@@ -710,85 +604,79 @@ static void GetInfosCombineWithIO(Entity * combine, Entity * _pWithIO) {
 							memcpy(tTxtCombineDest, pStartString, pEndString - pStartString);
 							tTxtCombineDest[pEndString - pStartString] = 0;
 							
-							if(tTxtCombineDest == combine->className()) {
-								//same class
+							if(tTxtCombineDest == tcIndent) {
+								// same class
 								bCanCombine = true;
 							}
 						}
 					}
 				} else {
-					pStartString = findParam(pcToken, "==");
+					pStartString = findParam(pcToken, "isgroup");
 					if(pStartString) {
-						pStartString = strstr(pStartString, "\"");
+						pStartString = strstr(pStartString, " ");
 						
 						if(pStartString) {
 							pStartString++;
-							pEndString = strstr(pStartString, "\"");
+							pEndString = strstr(pStartString, " ");
+							char* pEndString2 = strstr(pStartString, ")");
+							
+							if(pEndString2 < pEndString) {
+								pEndString = pEndString2;
+							}
 							
 							if(pEndString) {
 								char tTxtCombineDest[256];
 								memcpy(tTxtCombineDest, pStartString, pEndString - pStartString);
 								tTxtCombineDest[pEndString - pStartString] = 0;
-								
-								if(tTxtCombineDest == tcIndent) {
-									//same class
+								if(combine->groups.find(tTxtCombineDest) != combine->groups.end()) {
+									// same class
 									bCanCombine = true;
-								}
-							}
-						}
-					} else {
-						pStartString = findParam(pcToken, "isgroup");
-						if(pStartString) {
-							pStartString = strstr(pStartString, " ");
-							
-							if(pStartString) {
-								pStartString++;
-								pEndString = strstr(pStartString, " ");
-								char* pEndString2 = strstr(pStartString, ")");
-								
-								if(pEndString2 < pEndString) {
-									pEndString = pEndString2;
-								}
-								
-								if(pEndString) {
-									char tTxtCombineDest[256];
-									memcpy(tTxtCombineDest, pStartString, pEndString - pStartString);
-									tTxtCombineDest[pEndString - pStartString] = 0;
-									
-									if(combine->groups.find(tTxtCombineDest) != combine->groups.end()) {
-										// same class
-										bCanCombine = true;
-									}
 								}
 							}
 						}
 					}
 				}
-				
-				if(strstr(pcToken, "{")) {
-					uiNbOpen++;
-				}
-				
-				if(strstr(pcToken, "}")) {
-					uiNbOpen--;
-				}
-				
-				if(bCanCombine) {
-					uiNbOpen = 0;
-					_pWithIO->ioflags |= IO_CAN_COMBINE;
-				} else {
-					_pWithIO->ioflags &= ~IO_CAN_COMBINE;
-				}
-				
-				if(!uiNbOpen) {
-					break;
-				}
+			}
+			
+			if(strstr(pcToken, "{")) {
+				uiNbOpen++;
+			}
+			
+			if(strstr(pcToken, "}")) {
+				uiNbOpen--;
+			}
+			
+			if(bCanCombine) {
+				uiNbOpen = 0;
+				_pWithIO->ioflags |= IO_CAN_COMBINE;
+			} else {
+				_pWithIO->ioflags &= ~IO_CAN_COMBINE;
+			}
+			
+			if(!uiNbOpen) {
+				break;
 			}
 		}
-		
-		delete[] pCopyScript;
-		delete[] pCopyOverScript;
 	}
+	
+	delete[] pCopyScript;
+	
+}
+
+static void GetInfosCombineWithIO(Entity * combine, Entity * _pWithIO) {
+	
+	if(!combine || !_pWithIO || _pWithIO == combine || !_pWithIO->script.data) {
+		return;
+	}
+	
+	if(_pWithIO->over_script.data) {
+		GetInfosCombineWithIO_Script(combine, _pWithIO, _pWithIO->over_script);
+	}
+	
+	if(!(_pWithIO->ioflags & IO_CAN_COMBINE)) {
+		GetInfosCombineWithIO_Script(combine, _pWithIO, _pWithIO->script);
+	}
+	
 }
 
 static void GetInfosCombine() {
@@ -799,7 +687,7 @@ static void GetInfosCombine() {
 	for(size_t bag = 0; bag < size_t(player.bag); bag++)
 	for(size_t y = 0; y < INVENTORY_Y; y++)
 	for(size_t x = 0; x < INVENTORY_X; x++) {
-		Entity * io = inventory[bag][x][y].io;
+		Entity * io = g_inventory[bag][x][y].io;
 		GetInfosCombineWithIO(COMBINE, io);
 	}
 
@@ -810,6 +698,62 @@ static void GetInfosCombine() {
 			GetInfosCombineWithIO(COMBINE, io);
 		}
 	}
+}
+
+static bool isPlayerLookingAtEnemy() {
+	
+	if(FlyingOverIO) {
+		// Looking directly at an enemy or ally
+		return isEnemy(FlyingOverIO);
+	}
+	
+	const float maxLookAtDistance = 500.f;
+	const float maxFriendlyDistance = 300.f;
+	const float maxLookAtAngle = glm::radians(45.f);
+	const float maxNearByDistance = 300.f;
+	
+	float closestNPCInFrontDistance = std::numeric_limits<float>::infinity();
+	Entity * closestNPCInFront = NULL;
+	bool isEnemyNearBy = false;
+	
+	for(size_t i = 1; i < entities.size(); i++) {
+		const EntityHandle handle = EntityHandle(i);
+		Entity * entity = entities[handle];
+		
+		if(!entity || !(entity->ioflags & IO_NPC)) {
+			continue;
+		}
+		
+		float distance = glm::distance(entity->pos, entities.player()->pos);
+		if(distance > maxLookAtDistance) {
+			continue;
+		}
+		
+		// Determine the direction of the entity from the player
+		Vec3f dir = glm::normalize(Vec3f(entity->pos.x, 0.f, entity->pos.z)
+		                           - Vec3f(player.pos.x, 0.f, player.pos.z));
+		float cangle = glm::dot(dir, angleToVectorXZ(player.angle.getYaw()));
+		
+		if(cangle > glm::cos(maxLookAtAngle)) {
+			if(distance < closestNPCInFrontDistance) {
+				closestNPCInFrontDistance = distance;
+				closestNPCInFront = entity;
+			}
+		} else if(distance <= maxNearByDistance && isEnemy(entity)) {
+			isEnemyNearBy = true;
+		}
+		
+	}
+	
+	if(closestNPCInFront) {
+		if(isEnemy(closestNPCInFront) || closestNPCInFrontDistance < maxFriendlyDistance) {
+			// Enemy or ally in front
+			return isEnemy(closestNPCInFront);
+		}
+	}
+	
+	// No ally in front - enemy near by?
+	return isEnemyNearBy;
 }
 
 //-----------------------------------------------------------------------------
@@ -829,8 +773,8 @@ void ARX_INTERFACE_setCombatMode(ARX_INTERFACE_COMBAT_MODE i) {
 		return;
 
 	if((player.Interface & INTER_COMBATMODE)) {
-		player.Interface&=~INTER_COMBATMODE;
-		player.Interface&=~INTER_NO_STRIKE;
+		player.Interface &= ~INTER_COMBATMODE;
+		player.Interface &= ~INTER_NO_STRIKE;
 
 		ARX_EQUIPMENT_LaunchPlayerUnReadyWeapon();
 		WeaponType weapontype = ARX_EQUIPMENT_GetPlayerWeaponType();
@@ -843,7 +787,7 @@ void ARX_INTERFACE_setCombatMode(ARX_INTERFACE_COMBAT_MODE i) {
 	} else if(   !entities.player()->animlayer[1].cur_anim
 	           || entities.player()->animlayer[1].cur_anim == entities.player()->anims[ANIM_WAIT]
 	) {
-		ARX_INTERFACE_BookClose();
+		g_playerBook.close();
 
 		player.Interface|=INTER_COMBATMODE;
 
@@ -864,7 +808,7 @@ long CSEND=0;
 long MOVE_PRECEDENCE=0;
 
 
-extern ArxInstant REQUEST_JUMP;
+extern PlatformInstant REQUEST_JUMP;
 //-----------------------------------------------------------------------------
 void ArxGame::managePlayerControls() {
 	
@@ -881,14 +825,14 @@ void ArxGame::managePlayerControls() {
 		if(t) {
 			if(t->ioflags & IO_NPC) {
 				if(t->script.data) {
-					if(t->_npcdata->lifePool.current>0.f) {
-						SendIOScriptEvent(t,SM_CHAT);
+					if(t->_npcdata->lifePool.current > 0.f) {
+						SendIOScriptEvent(t, SM_CHAT);
 						DRAGGING = false;
 					} else {
 						if(t->inventory) {
 							if(player.Interface & INTER_STEAL)
 								if(ioSteal && t != ioSteal) {
-									SendIOScriptEvent(ioSteal, SM_STEAL,"off");
+									SendIOScriptEvent(ioSteal, SM_STEAL, "off");
 									player.Interface &= ~INTER_STEAL;
 								}
 							
@@ -909,7 +853,7 @@ void ArxGame::managePlayerControls() {
 				if(t->inventory) {
 					if(player.Interface & INTER_STEAL) {
 						if(ioSteal && t != ioSteal) {
-							SendIOScriptEvent(ioSteal, SM_STEAL,"off");
+							SendIOScriptEvent(ioSteal, SM_STEAL, "off");
 							player.Interface &= ~INTER_STEAL;
 						}
 					}
@@ -921,7 +865,7 @@ void ArxGame::managePlayerControls() {
 						lOldTruePlayerMouseLook=!TRUE_PLAYER_MOUSELOOK_ON;
 					}
 				} else if (t->script.data) {
-					SendIOScriptEvent(t,SM_ACTION);
+					SendIOScriptEvent(t, SM_ACTION);
 				}
 				DRAGGING = false;
 			}
@@ -964,9 +908,9 @@ void ArxGame::managePlayerControls() {
 				&& !NOMOREMOVES)
 			{
 				eyeball.pos += angleToVectorXZ(eyeball.angle.getYaw() + 90.f) * 10.f * FD * 0.033f;
-				NOMOREMOVES=1;			
+				NOMOREMOVES = 1;
 			}
-
+			
 			// Checks STRAFE_RIGHT Key Status.
 			if( (GInput->actionPressed(CONTROLS_CUST_STRAFERIGHT)||
 				(GInput->actionPressed(CONTROLS_CUST_STRAFE)&&GInput->actionPressed(CONTROLS_CUST_TURNRIGHT)))
@@ -985,15 +929,15 @@ void ArxGame::managePlayerControls() {
 			Cylinder test = phys.cyl;
 			
 			bool npc = AttemptValidCylinderPos(test, NULL, CFLAG_JUST_TEST | CFLAG_NPC);
-			float val=CheckAnythingInCylinder(phys.cyl,entities.player(),CFLAG_NO_NPC_COLLIDE | CFLAG_JUST_TEST);
-
+			float val = CheckAnythingInCylinder(phys.cyl, entities.player(), CFLAG_NO_NPC_COLLIDE | CFLAG_JUST_TEST);
+			
 			if(val > -40.f) {
 				if(val <= 70.f) {
 					eyeball.pos.y += val-70.f;
 				}
 
 				if(!npc) {
-					MagicSightFader += toMs(g_platformTime.lastFrameDuration()) * ( 1.0f / 200 );
+					MagicSightFader += g_platformTime.lastFrameDuration() / PlatformDurationMs(200);
 
 					if(MagicSightFader > 1.f)
 						MagicSightFader = 1.f;
@@ -1002,10 +946,11 @@ void ArxGame::managePlayerControls() {
 				eyeball.pos = old;
 			}
 		}
-
-		if(arxtime.is_paused())
+		
+		if(g_gameTime.isPaused()) {
 			FD = 40.f;
-
+		}
+		
 		bool left=GInput->actionPressed(CONTROLS_CUST_STRAFELEFT);
 
 		if(!left) {
@@ -1135,12 +1080,12 @@ void ArxGame::managePlayerControls() {
 	
 	// Checks JUMP Key Status.
 	if(player.jumpphase == NotJumping && GInput->actionNowPressed(CONTROLS_CUST_JUMP) && !player.levitate) {
-		REQUEST_JUMP = arxtime.now();
+		REQUEST_JUMP = g_platformTime.frameStart();
 	}
 	
 	// MAGIC
 	if(GInput->actionPressed(CONTROLS_CUST_MAGICMODE)) {
-		if(!(player.m_currentMovement & PLAYER_CROUCH) && !BLOCK_PLAYER_CONTROLS && ARXmenu.currentmode == AMCM_OFF) {
+		if(!(player.m_currentMovement & PLAYER_CROUCH) && !BLOCK_PLAYER_CONTROLS && ARXmenu.mode() == Mode_InGame) {
 			if(!ARX_SOUND_IsPlaying(SND_MAGIC_AMBIENT))
 				ARX_SOUND_PlaySFX(SND_MAGIC_AMBIENT, NULL, 1.0F, ARX_SOUND_PLAY_LOOPED);
 		}
@@ -1189,13 +1134,13 @@ void ArxGame::managePlayerControls() {
 
 	if(GInput->actionNowPressed(CONTROLS_CUST_PREVIOUS)) {
 		if(eMouseState == MOUSE_IN_BOOK) {
-			if(player.Interface & INTER_MAP) {
-				openBookPage(prevBookPage());
+			if(player.Interface & INTER_PLAYERBOOK) {
+				g_playerBook.openPrevPage();
 			}
 		} else if(g_playerInventoryHud.containsPos(DANAEMouse)) {
 			g_playerInventoryHud.previousBag();
-		} else if(player.Interface & INTER_MAP) {
-			openBookPage(prevBookPage());
+		} else if(player.Interface & INTER_PLAYERBOOK) {
+			g_playerBook.openPrevPage();
 		} else {
 			g_playerInventoryHud.previousBag();
 		}
@@ -1203,32 +1148,32 @@ void ArxGame::managePlayerControls() {
 
 	if(GInput->actionNowPressed(CONTROLS_CUST_NEXT)) {
 		if(eMouseState == MOUSE_IN_BOOK) {
-			if(player.Interface & INTER_MAP) {
-				openBookPage(nextBookPage());
+			if(player.Interface & INTER_PLAYERBOOK) {
+				g_playerBook.openNextPage();
 			}
 		} else if(g_playerInventoryHud.containsPos(DANAEMouse)) {
 			g_playerInventoryHud.nextBag();
-		} else if(player.Interface & INTER_MAP) {
-			openBookPage(nextBookPage());
+		} else if(player.Interface & INTER_PLAYERBOOK) {
+			g_playerBook.openNextPage();
 		} else {
 			g_playerInventoryHud.nextBag();
 		}
 	}
 	
 	if(GInput->actionNowPressed(CONTROLS_CUST_BOOKCHARSHEET)) {
-		openBookPage(BOOKMODE_STATS, true);
+		g_playerBook.openPage(BOOKMODE_STATS, true);
 	}
 	
 	if(GInput->actionNowPressed(CONTROLS_CUST_BOOKSPELL) && player.rune_flags) {
-		openBookPage(BOOKMODE_SPELLS, true);
+		g_playerBook.openPage(BOOKMODE_SPELLS, true);
 	}
 	
 	if(GInput->actionNowPressed(CONTROLS_CUST_BOOKMAP)) {
-		openBookPage(BOOKMODE_MINIMAP, true);
+		g_playerBook.openPage(BOOKMODE_MINIMAP, true);
 	}
 	
 	if(GInput->actionNowPressed(CONTROLS_CUST_BOOKQUEST)) {
-		openBookPage(BOOKMODE_QUESTS, true);
+		g_playerBook.openPage(BOOKMODE_QUESTS, true);
 	}
 	
 	if(GInput->actionNowPressed(CONTROLS_CUST_CANCELCURSPELL)) {
@@ -1259,8 +1204,9 @@ void ArxGame::managePlayerControls() {
 	}
 
 	if(GInput->actionNowPressed(CONTROLS_CUST_WEAPON) || lChangeWeapon) {
-		bool bGo = true; 
-
+		
+		bool bGo = true;
+		
 		if(lChangeWeapon > 0) {
 			if(lChangeWeapon == 2) {
 				lChangeWeapon--;
@@ -1269,17 +1215,16 @@ void ArxGame::managePlayerControls() {
 					entities.player()->animlayer[1].cur_anim == entities.player()->anims[ANIM_WAIT])
 				{
 					lChangeWeapon--;
-
 					if(pIOChangeWeapon) {
-						SendIOScriptEvent(pIOChangeWeapon,SM_INVENTORYUSE,"");
-						pIOChangeWeapon=NULL;
+						SendIOScriptEvent(pIOChangeWeapon, SM_INVENTORYUSE, "");
+						pIOChangeWeapon = NULL;
 					}
 				} else {
-					bGo=false;
+					bGo = false;
 				}
 			}
 		}
-
+		
 		if(bGo) {
 			if(player.Interface & INTER_COMBATMODE) {
 				ARX_INTERFACE_setCombatMode(COMBAT_MODE_OFF);
@@ -1317,14 +1262,14 @@ void ArxGame::managePlayerControls() {
 			} else {
 				if(GInput->actionNowPressed(CONTROLS_CUST_FREELOOK)) {
 					if(!TRUE_PLAYER_MOUSELOOK_ON) {
-						ARX_INTERFACE_BookClose();
+						g_playerBook.close();
 						TRUE_PLAYER_MOUSELOOK_ON = true;
 						SLID_START = g_platformTime.frameStart();
 					} else {
 						TRUE_PLAYER_MOUSELOOK_ON = false;
 
 						if(player.Interface & INTER_COMBATMODE)
-							ARX_INTERFACE_setCombatMode(COMBAT_MODE_OFF);			
+							ARX_INTERFACE_setCombatMode(COMBAT_MODE_OFF);
 					}
 				}
 			}
@@ -1351,7 +1296,7 @@ void ArxGame::managePlayerControls() {
 
 	// Checks BOOK Key Status.
 	if(GInput->actionNowPressed(CONTROLS_CUST_BOOK))
-		ARX_INTERFACE_BookToggle();
+		g_playerBook.toggle();
 
 	// Check For Combat Mode ON/OFF
 	if(   eeMousePressed1()
@@ -1361,36 +1306,34 @@ void ArxGame::managePlayerControls() {
 	   && PLAYER_MOUSELOOK_ON
 	   && !DRAGINTER
 	   && !InInventoryPos(DANAEMouse)
-	   && config.input.autoReadyWeapon
-	) {
+	   && (config.input.autoReadyWeapon == AlwaysAutoReadyWeapon
+	       || (config.input.autoReadyWeapon == AutoReadyWeaponNearEnemies && isPlayerLookingAtEnemy()))) {
 		if(eeMouseDown1()) {
-			// TODO use os time
-			COMBAT_MODE_ON_START_TIME = arxtime.now();
+			COMBAT_MODE_ON_START_TIME = g_platformTime.frameStart();
 		} else {
-			if(arxtime.now() - COMBAT_MODE_ON_START_TIME > ArxDurationMs(10)) {
+			if(g_platformTime.frameStart() - COMBAT_MODE_ON_START_TIME > PlatformDurationMs(10)) {
 				ARX_INTERFACE_setCombatMode(COMBAT_MODE_ON);
 			}
 		}
 	}
-
+	
 	if(lOldTruePlayerMouseLook != TRUE_PLAYER_MOUSELOOK_ON) {
-		bInverseInventory=false;
-
+		bInverseInventory = false;
 		if(TRUE_PLAYER_MOUSELOOK_ON) {
 			if(!CSEND) {
-				CSEND=1;
-				SendIOScriptEvent(entities.player(),SM_EXPLORATIONMODE);
+				CSEND = 1;
+				SendIOScriptEvent(entities.player(), SM_EXPLORATIONMODE);
 			}
 		}
 	} else {
 		if(CSEND) {
-			CSEND=0;
-			SendIOScriptEvent(entities.player(),SM_CURSORMODE);
+			CSEND = 0;
+			SendIOScriptEvent(entities.player(), SM_CURSORMODE);
 		}
 	}
-
-	static PlayerInterfaceFlags lOldInterfaceTemp=0;
-
+	
+	static PlayerInterfaceFlags lOldInterfaceTemp = 0;
+	
 	if(TRUE_PLAYER_MOUSELOOK_ON) {
 		if(bInverseInventory) {
 			bRenderInCursorMode=true;
@@ -1478,7 +1421,7 @@ void ARX_INTERFACE_Reset()
 void ArxGame::manageKeyMouse() {
 	arx_assert(entities.player());
 	
-	if(ARXmenu.currentmode == AMCM_OFF) {
+	if(ARXmenu.mode() == Mode_InGame) {
 		Entity * pIO = NULL;
 
 		if(!BLOCK_PLAYER_CONTROLS) {
@@ -1489,7 +1432,7 @@ void ArxGame::manageKeyMouse() {
 				Vec2s poss = MemoMouse;
 
 				// mode systemshock
-				if(config.input.mouseLookToggle && config.input.autoReadyWeapon == false) {
+				if(config.input.mouseLookToggle && config.input.autoReadyWeapon != AlwaysAutoReadyWeapon) {
 					
 					DANAEMouse = g_size.center();
 					
@@ -1569,15 +1512,14 @@ void ArxGame::manageKeyMouse() {
 						if(bOk) {
 							if(!(FlyingOverIO->_itemdata->playerstacksize <= 1 && FlyingOverIO->_itemdata->count > 1)) {
 								SendIOScriptEvent(FlyingOverIO, SM_INVENTORYUSE);
-
-								if (!(config.input.autoReadyWeapon == false && config.input.mouseLookToggle)) {
+								if(config.input.autoReadyWeapon == AlwaysAutoReadyWeapon || !config.input.mouseLookToggle) {
 									TRUE_PLAYER_MOUSELOOK_ON = false;
 								}
 							}
 						}
 					}
 
-					if(config.input.autoReadyWeapon == false && config.input.mouseLookToggle) {
+					if(config.input.autoReadyWeapon != AlwaysAutoReadyWeapon && config.input.mouseLookToggle) {
 						EERIEMouseButton &= ~2;
 					}
 				}
@@ -1589,7 +1531,7 @@ void ArxGame::manageKeyMouse() {
 		}
 
 		if((eMouseState == MOUSE_IN_WORLD) ||
-			((eMouseState == MOUSE_IN_BOOK) && !(g_cursorOverBook && (g_guiBookCurrentTopTab != BOOKMODE_MINIMAP)))
+			((eMouseState == MOUSE_IN_BOOK) && !(g_cursorOverBook && (g_playerBook.currentPage() != BOOKMODE_MINIMAP)))
 		) {
 			if(!config.input.mouseLookToggle) {
 				if(TRUE_PLAYER_MOUSELOOK_ON && !(EERIEMouseButton & 2) && !SPECIAL_DRAW_WEAPON) {
@@ -1605,7 +1547,7 @@ void ArxGame::manageKeyMouse() {
 			PLAYER_MOUSELOOK_ON = false;
 	}
 
-	if(ARXmenu.currentmode != AMCM_OFF) {
+	if(ARXmenu.mode() != Mode_InGame) {
 		PLAYER_MOUSELOOK_ON = false;
 	}
 
@@ -1632,7 +1574,7 @@ void ArxGame::manageKeyMouse() {
 	}
 	
 	LAST_PLAYER_MOUSELOOK_ON = mouselook;
-	PLAYER_ROTATION = AnimationDuration_ZERO;
+	PLAYER_ROTATION = 0;
 
 	Vec2f rotation = GInput->getRelativeMouseMovement();
 	
@@ -1655,66 +1597,61 @@ void ArxGame::manageKeyMouse() {
 			PlatformInstant lookDown;
 		};
 		
-		static PushTime pushTime = {
-			PlatformInstant_ZERO,
-			PlatformInstant_ZERO,
-			PlatformInstant_ZERO,
-			PlatformInstant_ZERO
-		};
+		static PushTime pushTime = { 0, 0, 0, 0 };
 		
 		if(!GInput->actionPressed(CONTROLS_CUST_STRAFE)) {
 			const PlatformInstant now = g_platformTime.frameStart();
 
 			if(GInput->actionPressed(CONTROLS_CUST_TURNLEFT)) {
-				if(pushTime.turnLeft == PlatformInstant_ZERO)
+				if(pushTime.turnLeft == 0)
 					pushTime.turnLeft = now;
 
 				bKeySpecialMove = true;
 			}
 			else
-				pushTime.turnLeft = PlatformInstant_ZERO;
+				pushTime.turnLeft = 0;
 
 			if(GInput->actionPressed(CONTROLS_CUST_TURNRIGHT)) {
-				if(pushTime.turnRight == PlatformInstant_ZERO)
+				if(pushTime.turnRight == 0)
 					pushTime.turnRight = now;
 
 				bKeySpecialMove = true;
 			}
 			else
-				pushTime.turnRight = PlatformInstant_ZERO;
+				pushTime.turnRight = 0;
 		}
 
 		if(USE_PLAYERCOLLISIONS) {
 			const PlatformInstant now = g_platformTime.frameStart();
 
 			if(GInput->actionPressed(CONTROLS_CUST_LOOKUP)) {
-				if(pushTime.lookUp == PlatformInstant_ZERO)
+				if(pushTime.lookUp == 0)
 					pushTime.lookUp = now;
 
 				bKeySpecialMove = true;
 			}
 			else
-				pushTime.lookUp = PlatformInstant_ZERO;
+				pushTime.lookUp = 0;
 
 			if(GInput->actionPressed(CONTROLS_CUST_LOOKDOWN)) {
-				if(pushTime.lookDown == PlatformInstant_ZERO)
+				if(pushTime.lookDown == 0)
 					pushTime.lookDown = now;
 
 				bKeySpecialMove = true;
 			}
 			else
-				pushTime.lookDown = PlatformInstant_ZERO;
+				pushTime.lookDown = 0;
 		}
 		
 		if(bKeySpecialMove) {
 			
 			rotation = Vec2f_ZERO;
 			
-			if(pushTime.turnLeft != PlatformInstant_ZERO || pushTime.turnRight != PlatformInstant_ZERO) {
+			if(pushTime.turnLeft != 0 || pushTime.turnRight != 0) {
 				rotation.x = (pushTime.turnLeft < pushTime.turnRight) ? 1.f : -1.f;
 			}
 			
-			if(pushTime.lookUp != PlatformInstant_ZERO || pushTime.lookDown != PlatformInstant_ZERO) {
+			if(pushTime.lookUp != 0 || pushTime.lookDown != 0) {
 				rotation.y = (pushTime.lookUp < pushTime.lookDown) ? 1.f : -1.f;
 			}
 			
@@ -1729,7 +1666,7 @@ void ArxGame::manageKeyMouse() {
 			bool dragging = GInput->getMouseButtonRepeat(Mouse::Button_0);
 			
 			static bool mouseInBorder = false;
-			static PlatformInstant mouseInBorderTime = PlatformInstant_ZERO;
+			static PlatformInstant mouseInBorderTime = 0;
 			
 			if(!bRenderInCursorMode || (!dragging && !GInput->isMouseInWindow())) {
 				mouseInBorder = false;
@@ -1785,8 +1722,7 @@ void ArxGame::manageKeyMouse() {
 					mouseInBorder = true;
 				}
 				
-				if(borderDelay > PlatformDuration_ZERO
-				   && g_platformTime.frameStart() - mouseInBorderTime < borderDelay) {
+				if(borderDelay > 0 && g_platformTime.frameStart() - mouseInBorderTime < borderDelay) {
 					rotation = Vec2f_ZERO;
 				} else {
 					bKeySpecialMove = true;
@@ -1817,7 +1753,7 @@ void ArxGame::manageKeyMouse() {
 
 				eyeball.angle.setPitch(MAKEANGLE(eyeball.angle.getPitch()));
 				eyeball.angle.setYaw(MAKEANGLE(eyeball.angle.getYaw() - rotation.x));
-			} else if(ARXmenu.currentmode != AMCM_NEWQUEST) {
+			} else if(ARXmenu.mode() != Mode_CharacterCreation) {
 
 				float iangle = player.angle.getPitch();
 
@@ -1833,7 +1769,7 @@ void ArxGame::manageKeyMouse() {
 				}
 
 				if(glm::abs(rotation.y) > 2.f)
-					entities.player()->animBlend.lastanimtime = ArxInstant_ZERO;
+					entities.player()->animBlend.lastanimtime = 0;
 
 				if(rotation.x != 0.f)
 					player.m_currentMovement |= PLAYER_ROTATE;
@@ -1915,7 +1851,7 @@ void ArxGame::manageEditorControls() {
 	eMouseState = MOUSE_IN_WORLD;
 
 	if(   TRUE_PLAYER_MOUSELOOK_ON
-	   && config.input.autoReadyWeapon == false
+	   && config.input.autoReadyWeapon != AlwaysAutoReadyWeapon
 	   && config.input.mouseLookToggle
 	) {
 		DANAEMouse = g_size.center();
@@ -1951,17 +1887,17 @@ void ArxGame::manageEditorControls() {
 	g_hudRoot.updateInput();
 	
 	// gros player book
-	if(player.Interface & INTER_MAP) {
+	if(player.Interface & INTER_PLAYERBOOK) {
 		Vec2f pos(97 * g_sizeRatio.x, 64 * g_sizeRatio.y);
 		
 		TextureContainer* playerbook = g_bookResouces.playerbook;
 		arx_assert(g_bookResouces.playerbook);
 		
 		const Rect mouseTestRect(
-		pos.x,
-		pos.y,
-		pos.x + playerbook->m_size.x * g_sizeRatio.x,
-		pos.y + playerbook->m_size.y * g_sizeRatio.y
+		s32(pos.x),
+		s32(pos.y),
+		s32(pos.x + playerbook->m_size.x * g_sizeRatio.x),
+		s32(pos.y + playerbook->m_size.y * g_sizeRatio.y)
 		);
 		
 		if(mouseTestRect.contains(Vec2i(DANAEMouse))) {
@@ -2062,8 +1998,8 @@ void ArxGame::manageEditorControls() {
 			if(InInventoryPos(DANAEMouse)) {// Attempts to put it in inventory
 				PutInInventory();
 			} else if(ARX_INTERFACE_MouseInBook()) {
-				if(g_guiBookCurrentTopTab == BOOKMODE_STATS) {
-					SendIOScriptEvent(DRAGINTER,SM_INVENTORYUSE);
+				if(g_playerBook.currentPage() == BOOKMODE_STATS) {
+					SendIOScriptEvent(DRAGINTER, SM_INVENTORYUSE);
 					COMBINE=NULL;
 				}
 			} else if(DRAGINTER->ioflags & IO_GOLD) {
@@ -2096,8 +2032,8 @@ void ArxGame::manageEditorControls() {
 						Vec3f viewvector = angleToVector(player.angle + Anglef(0.f, ratio.x * 30.f, 0.f));
 						viewvector.y += ratio.y;
 						
-						io->soundtime = ArxInstant_ZERO;
-						io->soundcount=0;
+						io->soundtime = 0;
+						io->soundcount = 0;
 						
 						EERIE_PHYSICS_BOX_Launch(io->obj, io->pos, io->angle, viewvector);
 						ARX_SOUND_PlaySFX(SND_WHOOSH, &io->pos);
@@ -2220,7 +2156,7 @@ void ArxGame::manageEditorControls() {
 		
 		// Checks for Object Dragging
 		if(   DRAGGING
-		   && (!PLAYER_MOUSELOOK_ON || !config.input.autoReadyWeapon)
+		   && (!PLAYER_MOUSELOOK_ON || config.input.autoReadyWeapon != AlwaysAutoReadyWeapon)
 		   && !GInput->actionPressed(CONTROLS_CUST_MAGICMODE)
 		   && !DRAGINTER
 		) {
@@ -2239,13 +2175,15 @@ void ArxGame::manageEditorControls() {
 				}
 				
 				if(bOk) {
+					
 					Set_DragInter(io);
 					
 					if(io) {
+						
 						ARX_PLAYER_Remove_Invisibility();
 						
 						if(DRAGINTER->show == SHOW_FLAG_ON_PLAYER) {
-							ARX_EQUIPMENT_UnEquip(entities.player(),DRAGINTER);
+							ARX_EQUIPMENT_UnEquip(entities.player(), DRAGINTER);
 							RemoveFromAllInventories(DRAGINTER);
 							DRAGINTER->bbox2D.max.x = -1;
 						}
@@ -2253,16 +2191,16 @@ void ArxGame::manageEditorControls() {
 						if((io->ioflags & IO_NPC) || (io->ioflags & IO_FIX)) {
 							Set_DragInter(NULL);
 						} else {
-							
 							if(io->ioflags & IO_UNDERWATER) {
 								io->ioflags &= ~IO_UNDERWATER;
 								ARX_SOUND_PlayInterface(SND_PLOUF, Random::getf(0.8f, 1.2f));
 							}
-							
 							DRAGINTER->show = SHOW_FLAG_NOT_DRAWN;
 							ARX_SOUND_PlayInterface(SND_INVSTD);
 						}
+						
 					}
+					
 				} else {
 					Set_DragInter(NULL);
 				}

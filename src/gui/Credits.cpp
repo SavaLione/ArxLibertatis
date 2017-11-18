@@ -104,7 +104,7 @@ public:
 	Credits()
 		: m_background(NULL)
 		, m_scrollPosition(0.f)
-		, m_lastUpdateTime(PlatformInstant_ZERO)
+		, m_lastUpdateTime(0)
 		, m_firstVisibleLine(0)
 		, m_lineHeight(-1)
 		, m_windowSize(Vec2i_ZERO)
@@ -164,13 +164,13 @@ bool Credits::load() {
 	std::string creditsFile = "localisation/ucredits_" +  config.language + ".txt";
 	
 	size_t creditsSize;
-	char * credits = resources->readAlloc(creditsFile, creditsSize);
+	char * credits = g_resources->readAlloc(creditsFile, creditsSize);
 	
 	std::string englishCreditsFile;
 	if(!credits) {
 		// Fallback if there is no localised credits file
 		englishCreditsFile = "localisation/ucredits_english.txt";
-		credits = resources->readAlloc(englishCreditsFile, creditsSize);
+		credits = g_resources->readAlloc(englishCreditsFile, creditsSize);
 	}
 	
 	if(!credits) {
@@ -456,8 +456,8 @@ void Credits::render() {
 	if(!init()) {
 		LogError << "Could not initialize credits";
 		reset();
-		ARXmenu.currentmode = AMCM_MAIN;
-		MenuFader_start(true, false, -1);
+		ARXmenu.requestMode(Mode_MainMenu);
+		MenuFader_start(Fade_Out, -1);
 	}
 	
 	// Draw the background
@@ -469,10 +469,10 @@ void Credits::render() {
 	
 	// Use time passed between frame to create scroll effect
 	PlatformInstant now = g_platformTime.frameStart();
-	float elapsed = float(toMs(now - m_lastUpdateTime));
+	float elapsed = toMs(now - m_lastUpdateTime);
 	
-	static PlatformInstant lastKeyPressTime   = PlatformInstant_ZERO;
-	static PlatformInstant lastUserScrollTime = PlatformInstant_ZERO;
+	static PlatformInstant lastKeyPressTime   = 0;
+	static PlatformInstant lastUserScrollTime = 0;
 	static float scrollDirection = 1.f;
 	
 	PlatformDuration keyRepeatDelay  = PlatformDurationMs(256); // delay after key press before continuous scrolling
@@ -520,7 +520,7 @@ void Credits::render() {
 	// Don't scroll past the credits start
 	m_scrollPosition = std::min(0.f, m_scrollPosition);
 	
-	std::vector<CreditsLine>::const_iterator it = m_lines.begin() + m_firstVisibleLine ;
+	std::vector<CreditsLine>::const_iterator it = m_lines.begin() + m_firstVisibleLine;
 	
 	for(; it != m_lines.begin(); --it, --m_firstVisibleLine) {
 		float yy = (it - 1)->sPos.y + m_scrollPosition;
@@ -535,7 +535,7 @@ void Credits::render() {
 		float yy = it->sPos.y + m_scrollPosition;
 		
 		//Display the text only if he is on the viewport
-		if ((yy >= -m_lineHeight) && (yy <= g_size.height())) 
+		if ((yy >= -m_lineHeight) && (yy <= g_size.height()))
 		{
 			hFontCredits->draw(it->sPos.x, static_cast<int>(yy), it->sText, it->fColors);
 		}
@@ -546,19 +546,19 @@ void Credits::render() {
 		}
 		
 		if ( yy >= g_size.height() )
-			break ; //it's useless to continue because next phrase will not be inside the viewport
+			break; //it's useless to continue because next phrase will not be inside the viewport
 	}
 	
-	if(m_firstVisibleLine >= m_lines.size() && iFadeAction != AMCM_MAIN) {
+	if(m_firstVisibleLine >= m_lines.size() && iFadeAction != Mode_MainMenu) {
 		
-		MenuFader_start(true, true, AMCM_MAIN);
+		MenuFader_start(Fade_In, Mode_MainMenu);
 		ARX_MENU_LaunchAmb(AMB_MENU);
 	}
 
-	if(MenuFader_process(bFadeInOut) && iFadeAction == AMCM_MAIN) {
+	if(MenuFader_process() && iFadeAction == Mode_MainMenu) {
 		reset();
-		ARXmenu.currentmode = AMCM_MAIN;
-		MenuFader_start(true, false, -1);
+		ARXmenu.requestMode(Mode_MainMenu);
+		MenuFader_start(Fade_Out, -1);
 	}
 	
 }

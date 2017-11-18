@@ -74,7 +74,7 @@ inline glm::mat4 eulerAngleX
 	return glm::mat4(
 		float(1), float(0), float(0), float(0),
 		float(0), cosX, sinX, float(0),
-		float(0),-sinX, cosX, float(0),
+		float(0), -sinX, cosX, float(0),
 		float(0), float(0), float(0), float(1));
 }
 
@@ -123,10 +123,10 @@ GLM_FUNC_QUALIFIER genType pow3(genType const & x)
 template <typename genType>
 GLM_FUNC_QUALIFIER genType catmullRom
 (
-	genType const & v1, 
-	genType const & v2, 
-	genType const & v3, 
-	genType const & v4, 
+	genType const & v1,
+	genType const & v2,
+	genType const & v3,
+	genType const & v4,
 	typename genType::value_type const & s
 )
 {

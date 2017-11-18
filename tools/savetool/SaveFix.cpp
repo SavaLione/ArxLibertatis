@@ -172,7 +172,7 @@ static long copy_io(SaveBlock & save, const std::string & name, Idents & idents,
 			continue;
 		}
 		
-		if(resources->getDirectory(dir / ident)) {
+		if(g_resources->getDirectory(dir / ident)) {
 			continue;
 		}
 		
@@ -323,7 +323,7 @@ static void fix_player(SaveBlock & save, Idents & idents) {
 		for(size_t m = 0; m < SAVED_INVENTORY_Y; m++) {
 			for(size_t n = 0; n < SAVED_INVENTORY_X; n++) {
 				std::stringstream where;
-				where << "player.inventory[" << iNbBag << "][" << n << "][" << m << "]"; 
+				where << "player.inventory[" << iNbBag << "][" << n << "][" << m << "]";
 				changed |= fix_ident(save, asp.id_inventory[iNbBag][n][m], idents, where.str(), remap);
 			}
 		}
@@ -338,7 +338,7 @@ static void fix_player(SaveBlock & save, Idents & idents) {
 	
 	for(size_t k = 0; k < SAVED_MAX_EQUIPED; k++) {
 		std::stringstream where;
-		where << "player.equiped[" << k << "]"; 
+		where << "player.equiped[" << k << "]";
 		changed |= fix_ident(save, asp.equiped[k], idents, where.str(), remap);
 	}
 	
@@ -412,12 +412,12 @@ int main_fix(SaveBlock & save, const std::vector<std::string> & args) {
 		return -1;
 	}
 	
-	resources = new PakReader();
+	g_resources = new PakReader();
 	
 	// TODO share this list with the game code
 	static const char * const default_paks[] = { "data.pak", "data2.pak" };
 	BOOST_FOREACH(const char * const filename, default_paks) {
-		if(resources->addArchive(fs::paths.find(filename))) {
+		if(g_resources->addArchive(fs::paths.find(filename))) {
 			continue;
 		}
 		LogError << "Missing required data file: \"" << filename << "\"";
@@ -425,7 +425,7 @@ int main_fix(SaveBlock & save, const std::vector<std::string> & args) {
 	}
 	BOOST_REVERSE_FOREACH(const fs::path & base, fs::paths.data) {
 		const char * dirname = "graph";
-		resources->addFiles(base / dirname, dirname);
+		g_resources->addFiles(base / dirname, dirname);
 	}
 	
 	if(!save.open(true)) {

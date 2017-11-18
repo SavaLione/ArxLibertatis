@@ -221,10 +221,7 @@ void ARX_NPC_Kill_Spell_Launch(Entity * io)
 	io->spellcast_data.castingspell = SPELL_NONE;
 }
 
-/*!
- * \brief Releases Pathfinder info from an NPC
- * \param io
- */
+//! Releases Pathfinder info from an NPC
 static void ARX_NPC_ReleasePathFindInfo(Entity * io) {
 	
 	if(!io || !(io->ioflags & IO_NPC))
@@ -238,10 +235,7 @@ static void ARX_NPC_ReleasePathFindInfo(Entity * io) {
 	io->_npcdata->pathfind.pathwait = 0;
 }
 
-/*!
- * \brief Creates an extra rotations structure for a NPC
- * \param io
- */
+//! Creates an extra rotations structure for a NPC
 static void ARX_NPC_CreateExRotateData(Entity * io) {
 	
 	if(!io || !(io->ioflags & IO_NPC) || io->_npcdata->ex_rotate)
@@ -262,11 +256,7 @@ static void ARX_NPC_CreateExRotateData(Entity * io) {
 	io->_npcdata->look_around_inc = 0.f;
 }
 
-/*!
- * \brief Resurects an NPC
- * \param io
- * \param flags
- */
+//! Resurects an NPC
 void ARX_NPC_Revive(Entity * io, bool init)
 {
 	if(TSecondaryInventory && TSecondaryInventory->io == io) {
@@ -310,12 +300,7 @@ void ARX_NPC_Revive(Entity * io, bool init)
 		io->_npcdata->cuts = 0;
 }
 
-/*!
- * \brief Sets a new behaviour for NPC
- * \param io
- * \param behavior
- * \param behavior_param
- */
+//! Sets a new behaviour for NPC
 void ARX_NPC_Behaviour_Change(Entity * io, Behaviour behavior, long behavior_param) {
 	
 	if(!io || !(io->ioflags & IO_NPC)) {
@@ -343,10 +328,7 @@ void ARX_NPC_Behaviour_Change(Entity * io, Behaviour behavior, long behavior_par
 	io->_npcdata->behavior_param = (float)behavior_param;
 }
 
-/*!
- * \brief Resets all behaviour data from a NPC
- * \param io
- */
+//! Resets all behaviour data from a NPC
 void ARX_NPC_Behaviour_Reset(Entity * io)
 {
 	if(!io || !(io->ioflags & IO_NPC))
@@ -358,9 +340,7 @@ void ARX_NPC_Behaviour_Reset(Entity * io)
 		io->_npcdata->stacked[i].exist = 0;
 }
 
-/*!
- * \brief Reset all Behaviours from all NPCs
- */
+//! Reset all Behaviours from all NPCs
 void ARX_NPC_Behaviour_ResetAll() {
 	for(size_t i = 0; i < entities.size(); i++) {
 		const EntityHandle handle = EntityHandle(i);
@@ -372,10 +352,7 @@ void ARX_NPC_Behaviour_ResetAll() {
 	}
 }
 
-/*!
- * \brief Stacks an NPC behaviour
- * \param io
- */
+//! Stacks an NPC behaviour
 void ARX_NPC_Behaviour_Stack(Entity * io) {
 	
 	if(!io || !(io->ioflags & IO_NPC))
@@ -401,10 +378,7 @@ void ARX_NPC_Behaviour_Stack(Entity * io) {
 	}
 }
 
-/*!
- * \brief Unstacks One stacked behaviour from an NPC
- * \param io
- */
+//! Unstacks One stacked behaviour from an NPC
 void ARX_NPC_Behaviour_UnStack(Entity * io)
 {
 	if(!io || !(io->ioflags & IO_NPC))
@@ -435,11 +409,7 @@ void ARX_NPC_Behaviour_UnStack(Entity * io)
 	}
 }
 
-/*!
- * \brief Checks for any direct shortcut between NPC and future anchors...
- * \param io
- * \return
- */
+//! Checks for any direct shortcut between NPC and future anchors...
 static long ARX_NPC_GetNextAttainableNodeIncrement(Entity * io) {
 	
 	arx_assert(io);
@@ -501,9 +471,7 @@ static long ARX_NPC_GetNextAttainableNodeIncrement(Entity * io) {
 	return 0;
 }
 
-/*!
- * \brief Checks for nearest VALID anchor for a cylinder from a position
- */
+//! Checks for nearest VALID anchor for a cylinder from a position
 static long AnchorData_GetNearest(const Vec3f & pos, const Cylinder & cyl, long except = -1) {
 	long returnvalue = -1;
 	float distmax = std::numeric_limits<float>::max();
@@ -548,7 +516,6 @@ bool ARX_NPC_LaunchPathfind(Entity * io, EntityHandle target)
 	if(!io || !(io->ioflags & IO_NPC))
 		return false;
 
-	long MUST_SELECT_Start_Anchor = -1;
 	io->physics.cyl.origin = io->pos;
 	EntityHandle old_target = io->targetinfo;
 
@@ -644,25 +611,19 @@ bool ARX_NPC_LaunchPathfind(Entity * io, EntityHandle target)
 			}
 		}
 	}
-
+	
 suite:
-	;
 wander:
-	;
-	io->targetinfo = target; 
+	io->targetinfo = target;
 	io->_npcdata->pathfind.truetarget = target;
 
 	long from;
 
-	if (MUST_SELECT_Start_Anchor == -1)
-	{
-		if ((io->_npcdata->behavior & BEHAVIOUR_WANDER_AROUND)
-		        ||	(io->_npcdata->behavior & BEHAVIOUR_FLEE))
-			from = AnchorData_GetNearest(pos1, io->physics.cyl);
-		else
-			from = AnchorData_GetNearest_2(io->angle.getYaw(), pos1, io->physics.cyl);
-	}
-	else from = MUST_SELECT_Start_Anchor;
+	if ((io->_npcdata->behavior & BEHAVIOUR_WANDER_AROUND)
+	        ||	(io->_npcdata->behavior & BEHAVIOUR_FLEE))
+		from = AnchorData_GetNearest(pos1, io->physics.cyl);
+	else
+		from = AnchorData_GetNearest_2(io->angle.getYaw(), pos1, io->physics.cyl);
 
 	long to;
 
@@ -705,10 +666,7 @@ wander:
 			PATHFINDER_REQUEST tpr;
 			tpr.from = from;
 			tpr.to = to;
-			tpr.returnlist = &io->_npcdata->pathfind.list;
-			tpr.returnnumber = &io->_npcdata->pathfind.listnb;
-			tpr.ioid = io;
-			tpr.isvalid = true;
+			tpr.entity = io;
 
 			if(EERIE_PATHFINDER_Add_To_Queue(tpr))
 				return true;
@@ -716,7 +674,6 @@ wander:
 	}
 
 failure:
-	;
 	io->_npcdata->pathfind.pathwait = 0;
 
 	if(io->_npcdata->pathfind.list)
@@ -753,7 +710,7 @@ bool ARX_NPC_SetStat(Entity& io, const std::string & statname, float value) {
 	} else if(statname == "tohit") {
 		io._npcdata->tohit = value < 0 ? 0 : value;
 	} else if(statname == "aimtime") {
-		io._npcdata->aimtime = ArxDurationMs(value < 0 ? 0 : value);
+		io._npcdata->aimtime = GameDurationMsf(value < 0.f ? 0.f : value);
 	} else if(statname == "life") {
 		io._npcdata->lifePool.max = io._npcdata->lifePool.current = value < 0 ? 0.0000001f : value;
 	} else if(statname == "mana") {
@@ -813,7 +770,6 @@ void ARX_NPC_ChangeMoveMode(Entity * io, MoveMode MOVEMODE) {
 
 /*!
  * \brief Diminishes life of a Poisoned NPC
- * \param io
  */
 static void ARX_NPC_ManagePoison(Entity * io) {
 	
@@ -846,8 +802,6 @@ static void ARX_NPC_ManagePoison(Entity * io) {
 
 /*!
  * \brief Checks if the bottom of an IO is underwater.
- * \param io
- * \warning io must be valid (no check !)
  *
  * Plays Water sounds
  * Decrease/stops Ignition of this IO if necessary
@@ -918,7 +872,7 @@ void ARX_PHYSICS_Apply() {
 
 		if(   (io->ioflags & IO_ITEM)
 		   && (io->gameFlags & GFLAG_GOREEXPLODE)
-		   && arxtime.now_f() - toMs(io->animBlend.lastanimtime) > 300
+		   && g_gameTime.now() - io->animBlend.lastanimtime > GameDurationMs(300)
 		   && io->obj
 		   && !io->obj->vertexlist.empty()
 		) {
@@ -964,7 +918,7 @@ void ARX_PHYSICS_Apply() {
 				ARX_PHYSICS_BOX_ApplyModel(pbox, g_framedelay, io->rubber, io);
 				
 				if(io->soundcount > 12) {
-					io->soundtime = ArxInstant_ZERO;
+					io->soundtime = 0;
 					io->soundcount = 0;
 					for(size_t k = 0; k < pbox->vert.size(); k++) {
 						pbox->vert[k].velocity = Vec3f_ZERO;
@@ -994,8 +948,8 @@ void ARX_PHYSICS_Apply() {
 				}
 
 				GetTargetPos(io);
-
-				if(!arxtime.is_paused() && !(layer0.flags & EA_FORCEPLAY)) {
+				
+				if(!g_gameTime.isPaused() && !(layer0.flags & EA_FORCEPLAY)) {
 					if(io->_npcdata->behavior & BEHAVIOUR_STARE_AT)
 						StareAtTarget(io);
 					else
@@ -1075,9 +1029,9 @@ void FaceTarget2(Entity * io)
 
 	if(tt == 0)
 		return;
-
-	float rot = 0.33f * g_framedelay; 
-
+	
+	float rot = 0.33f * g_framedelay;
+	
 	if(glm::abs(tt) < rot)
 		rot = glm::abs(tt);
 
@@ -1130,7 +1084,7 @@ void StareAtTarget(Entity * io)
 
 	float rot = 0.27f * g_framedelay;
 	float alpha = MAKEANGLE(io->angle.getYaw());
-	float beta = -io->head_rot; 
+	float beta = -io->head_rot;
 	float pouet = MAKEANGLE(180.f + glm::degrees(getAngle(io->target.x, io->target.z, tv.x, tv.z)));
 	float A = MAKEANGLE((MAKEANGLE(alpha + beta) - pouet));
 	float B = MAKEANGLE(alpha - pouet);
@@ -1205,11 +1159,7 @@ static float GetTRUETargetDist(Entity * io) {
 
 extern Entity * EVENT_SENDER;
 
-/*!
- * \brief Checks If a NPC is dead
- * \param io
- * \return
- */
+//! Checks If a NPC is dead
 bool IsDeadNPC(Entity * io) {
 	
 	if(!io || !(io->ioflags & IO_NPC))
@@ -1218,10 +1168,7 @@ bool IsDeadNPC(Entity * io) {
 	return (io->_npcdata->lifePool.current <= 0 || io->mainevent == "dead");
 }
 
-/*!
- * \brief Checks if Player is currently striking.
- * \return
- */
+//! Checks if Player is currently striking.
 static bool IsPlayerStriking() {
 	
 	arx_assert(entities.player());
@@ -1286,14 +1233,7 @@ static void ARX_NPC_Manage_NON_Fight(Entity * io) {
 	}
 }
 
-static void Strike_StartTickCount(Entity * io) {
-	io->_npcdata->strike_time = 0;
-}
-
-/*!
- * \brief NPC IS in fight mode and close to target...
- * \param io
- */
+//! NPC IS in fight mode and close to target...
 static void ARX_NPC_Manage_Fight(Entity * io) {
 	
 	if(!(io->ioflags & IO_NPC))
@@ -1335,7 +1275,6 @@ static void ARX_NPC_Manage_Fight(Entity * io) {
 				|| (layer1.cur_anim == NULL))
 		{
 			changeAnimation(io, 1, ANIM_BARE_WAIT, EA_LOOP);
-			Strike_StartTickCount(io);
 		}
 	}
 	// DAGGER fight !!! ***********************************
@@ -1363,7 +1302,6 @@ static void ARX_NPC_Manage_Fight(Entity * io) {
 				|| (layer1.cur_anim == NULL))
 		{
 			changeAnimation(io, 1, ANIM_DAGGER_WAIT, EA_LOOP);
-			Strike_StartTickCount(io);
 		}
 	}
 	// 1H fight !!! ***************************************
@@ -1391,7 +1329,6 @@ static void ARX_NPC_Manage_Fight(Entity * io) {
 				|| (layer1.cur_anim == NULL))
 		{
 			changeAnimation(io, 1, ANIM_1H_WAIT, EA_LOOP);
-			Strike_StartTickCount(io);
 		}
 	}
 	// 2H fight !!! ***************************************
@@ -1486,16 +1423,10 @@ static void TryAndCheckAnim(Entity * io, long animnum, long layerIndex) {
 //Define Time of Strike Damage
 static const float STRIKE_MUL = 0.25f;
 static const float STRIKE_MUL2 = 0.8f;
-static const int STRIKE_DISTANCE = 220;
+static const float STRIKE_DISTANCE = 220.f;
 
-/*!
- * \brief Main animations management
- * \param io
- * \param TOLERANCE
- */
+//! Main animations management
 static void ARX_NPC_Manage_Anims(Entity * io, float TOLERANCE) {
-	
-	io->_npcdata->strike_time += (short)g_framedelay;
 	
 	AnimLayer & layer0 = io->animlayer[0];
 	AnimLayer & layer1 = io->animlayer[1];
@@ -1598,9 +1529,8 @@ static void ARX_NPC_Manage_Anims(Entity * io, float TOLERANCE) {
 			io->_npcdata->weaponinhand = 1;
 		}
 		
-		if(isCurrentAnimation(io, 1, ANIM_BARE_WAIT)
-			 && (io->_npcdata->behavior & BEHAVIOUR_FIGHT)
-			 && tdist < square(STRIKE_DISTANCE) && io->_npcdata->strike_time > 0) {
+		if(isCurrentAnimation(io, 1, ANIM_BARE_WAIT) && (io->_npcdata->behavior & BEHAVIOUR_FIGHT)
+			 && tdist < square(STRIKE_DISTANCE)) {
 			size_t j = Random::getu(0, 3); // Choose a random attack move
 			changeAnimation(io, 1, AnimationNumber(ANIM_BARE_STRIKE_LEFT_START + j * 3));
 		}
@@ -1615,13 +1545,13 @@ static void ARX_NPC_Manage_Anims(Entity * io, float TOLERANCE) {
 				
 				io->ioflags &= ~IO_HIT;
 				changeAnimation(io, 1, cycle, EA_LOOP);
-				io->_npcdata->aiming_start = arxtime.now();
+				io->_npcdata->aiming_start = g_gameTime.now();
 				
 			} else if(isCurrentAnimation(io, 1, cycle)) {
 				
-				ArxDuration elapsed = arxtime.now() - io->_npcdata->aiming_start;
-				ArxDuration aimtime = io->_npcdata->aimtime;
-				if((elapsed > aimtime || (elapsed > ArxDurationMs(toMs(aimtime) * 0.5f) && Random::getf() > 0.9f))
+				GameDuration elapsed = g_gameTime.now() - io->_npcdata->aiming_start;
+				GameDuration aimtime = io->_npcdata->aimtime;
+				if((elapsed > aimtime || (elapsed * 2 > aimtime && Random::getf() > 0.9f))
 				    && tdist < square(STRIKE_DISTANCE)) {
 					changeAnimation(io, 1, strike);
 					SendIOScriptEvent(io, SM_STRIKE, "bare");
@@ -1632,7 +1562,6 @@ static void ARX_NPC_Manage_Anims(Entity * io, float TOLERANCE) {
 				if(layer1.flags & EA_ANIMEND) {
 					io->ioflags &= ~IO_HIT;
 					changeAnimation(io, 1, ANIM_BARE_WAIT);
-					Strike_StartTickCount(io);
 					if((io->ioflags & IO_NPC) && !io->_npcdata->reachedtarget) {
 						layer1.cur_anim = NULL;
 					}
@@ -1689,7 +1618,6 @@ static void ARX_NPC_Manage_Anims(Entity * io, float TOLERANCE) {
 			} else if(isCurrentAnimation(io, 1, part2) &&	(layer1.flags & EA_ANIMEND)) {
 				if(io->_npcdata->behavior & BEHAVIOUR_FIGHT) {
 					changeAnimation(io, 1, ready, EA_LOOP);
-					Strike_StartTickCount(io);
 				} else {
 					stopAnimation(io, 1);
 				}
@@ -1702,7 +1630,7 @@ static void ARX_NPC_Manage_Anims(Entity * io, float TOLERANCE) {
 			// Weapon in hand... ready to strike
 			
 			if(isCurrentAnimation(io, 1, ready) && (io->_npcdata->behavior & BEHAVIOUR_FIGHT)
-				 && tdist < square(STRIKE_DISTANCE) && io->_npcdata->strike_time > 0) {
+				 && tdist < square(STRIKE_DISTANCE)) {
 				size_t j = Random::getu(0, 3); // Choose a random attack move
 				changeAnimation(io, 1, AnimationNumber(ANIM_1H_STRIKE_LEFT_START + j * 3 + wtype));
 			}
@@ -1716,13 +1644,13 @@ static void ARX_NPC_Manage_Anims(Entity * io, float TOLERANCE) {
 				if(isCurrentAnimation(io, 1, start) && (layer1.flags & EA_ANIMEND)) {
 					
 					changeAnimation(io, 1, cycle, EA_LOOP);
-					io->_npcdata->aiming_start = arxtime.now();
+					io->_npcdata->aiming_start = g_gameTime.now();
 					
 				} else if(isCurrentAnimation(io, 1, cycle)) {
 					
-					ArxDuration elapsed = arxtime.now() - io->_npcdata->aiming_start;
-					ArxDuration aimtime = io->_npcdata->aimtime;
-					if((elapsed > aimtime || (elapsed > ArxDurationMs(toMs(aimtime) * 0.5f) && Random::getf() > 0.9f))
+					GameDuration elapsed = g_gameTime.now() - io->_npcdata->aiming_start;
+					GameDuration aimtime = io->_npcdata->aimtime;
+					if((elapsed > aimtime || (elapsed * 2 > aimtime && Random::getf() > 0.9f))
 					   && tdist < square(STRIKE_DISTANCE)) {
 						changeAnimation(io, 1, strike);
 						if(io->_npcdata->weapontype & OBJECT_TYPE_1H) {
@@ -1741,7 +1669,6 @@ static void ARX_NPC_Manage_Anims(Entity * io, float TOLERANCE) {
 					if(layer1.flags & EA_ANIMEND) {
 						io->ioflags &= ~IO_HIT;
 						changeAnimation(io, 1, ready);
-						Strike_StartTickCount(io);
 					} else {
 						AnimationDuration ctime = layer1.ctime;
 						AnimationDuration animtime = layer1.cur_anim->anims[0]->anim_time;
@@ -1770,7 +1697,7 @@ float GetIOHeight(Entity * io) {
 	
 	if (io == entities.player())
 	{
-		return io->physics.cyl.height; 
+		return io->physics.cyl.height;
 	}
 
 	float v = (io->original_height * io->scale);
@@ -1798,12 +1725,7 @@ Cylinder GetIOCyl(Entity * io) {
 static void ManageNPCMovement_check_target_reached(Entity * io);
 static void ManageNPCMovement_REFACTOR_end(Entity * io, float TOLERANCE2);
 
-/*!
- * \brief Computes distance tolerance between NPC and its target
- * \param io
- * \param targ
- * \param dst
- */
+//! Computes distance tolerance between NPC and its target
 static float ComputeTolerance(const Entity * io, EntityHandle targ) {
 	
 	float TOLERANCE = 30.f;
@@ -1879,15 +1801,15 @@ static void ManageNPCMovement(Entity * io)
 		io->requestRoomUpdate = true;
 		Vec3f tv;
 
-		if(aup->_curtime - aup->_starttime > 500) {
-			aup->_curtime -= 500;
+		if(aup->_curtime - aup->_starttime > GameDurationMs(500)) {
+			aup->_curtime -= GameDurationMs(500);
 			ARX_PATHS_Interpolate(aup, &tv);
-			aup->_curtime += 500;
+			aup->_curtime += GameDurationMs(500);
 			io->angle.setYaw(MAKEANGLE(glm::degrees(getAngle(tv.x, tv.z, io->pos.x, io->pos.z))));
 		} else {
-			aup->_curtime += 500;
+			aup->_curtime += GameDurationMs(500);
 			ARX_PATHS_Interpolate(aup, &tv);
-			aup->_curtime -= 500;
+			aup->_curtime -= GameDurationMs(500);
 			io->angle.setYaw(MAKEANGLE(180.f + glm::degrees(getAngle(tv.x, tv.z, io->pos.x, io->pos.z))));
 		}
 		return;
@@ -1930,7 +1852,7 @@ static void ManageNPCMovement(Entity * io)
 			if(!io->_npcdata->pathfind.pathwait) {
 				if(io->_npcdata->pathfind.flags & PATHFIND_NO_UPDATE) {
 					io->_npcdata->reachedtarget = 1;
-					io->_npcdata->reachedtime = arxtime.now();
+					io->_npcdata->reachedtime = g_gameTime.now();
 
 					if(io->targetinfo != io->index())
 						SendIOScriptEvent(io, SM_REACHEDTARGET);
@@ -1960,10 +1882,9 @@ static void ManageNPCMovement(Entity * io)
 			}
 		}
 
-	afterthat:
-		;
 	}
 	
+afterthat:
 	if(io->_npcdata->behavior & BEHAVIOUR_NONE) {
 		ARX_NPC_Manage_Anims(io, 0);
 		if(!layer0.cur_anim || (layer0.flags & EA_ANIMEND)) {
@@ -1984,21 +1905,18 @@ static void ManageNPCMovement(Entity * io)
 	) {
 		ARX_NPC_LaunchPathfind(io, io->targetinfo);
 	}
-
+	
 	if((io->_npcdata->behavior & (BEHAVIOUR_FRIENDLY | BEHAVIOUR_NONE))
-			&& (layer0.cur_anim == alist[ANIM_WALK]
-				|| layer0.cur_anim == alist[ANIM_WALK_SNEAK]
-				|| layer0.cur_anim == alist[ANIM_FIGHT_WALK_FORWARD]
-				|| layer0.cur_anim == alist[ANIM_RUN]
-				|| layer0.cur_anim == alist[ANIM_FIGHT_STRAFE_LEFT]
-				|| layer0.cur_anim == alist[ANIM_FIGHT_STRAFE_RIGHT]
-				|| layer0.cur_anim == alist[ANIM_FIGHT_WALK_BACKWARD]
-			   )
-	) {
+	   && (layer0.cur_anim == alist[ANIM_WALK]
+	       || layer0.cur_anim == alist[ANIM_WALK_SNEAK]
+	       || layer0.cur_anim == alist[ANIM_FIGHT_WALK_FORWARD]
+	       || layer0.cur_anim == alist[ANIM_RUN]
+	       || layer0.cur_anim == alist[ANIM_FIGHT_STRAFE_LEFT]
+	       || layer0.cur_anim == alist[ANIM_FIGHT_STRAFE_RIGHT]
+	       || layer0.cur_anim == alist[ANIM_FIGHT_WALK_BACKWARD])) {
 		changeAnimation(io, ANIM_WAIT, 0, true);
 	}
-
-
+	
 	// look around if finished fleeing or being looking around !
 	if((io->_npcdata->behavior & BEHAVIOUR_LOOK_AROUND) && fartherThan(io->pos, io->target, 150.f)) {
 		if(!io->_npcdata->ex_rotate) {
@@ -2103,7 +2021,7 @@ static void ManageNPCMovement(Entity * io)
 	// Force to flee/wander again
 	if(!io->_npcdata->pathfind.pathwait && io->_npcdata->pathfind.listnb <= 0) {
 		if(io->_npcdata->behavior & BEHAVIOUR_WANDER_AROUND) {
-			ARX_NPC_LaunchPathfind(io, io->targetinfo); 
+			ARX_NPC_LaunchPathfind(io, io->targetinfo);
 		} else if(dis > STRIKE_DISTANCE
 		         &&	(io->_npcdata->behavior & BEHAVIOUR_MOVE_TO)
 				 &&	!(io->_npcdata->behavior & (BEHAVIOUR_FIGHT | BEHAVIOUR_MAGIC | BEHAVIOUR_SNEAK))
@@ -2180,7 +2098,7 @@ static void ManageNPCMovement(Entity * io)
 			} else if(layer0.cur_anim == alist[ANIM_WALK] || layer0.cur_anim == alist[ANIM_RUN]
 			          || layer0.cur_anim == alist[ANIM_WALK_SNEAK]) {
 				layer0.flags &= ~EA_LOOP;
-				if(toMs(io->_npcdata->reachedtime + ArxDurationMs(500)) < arxtime.now_f()) {
+				if(io->_npcdata->reachedtime + GameDurationMs(500) < g_gameTime.now()) {
 					changeAnimation(io, ANIM_DEFAULT, EA_LOOP, startAtBeginning);
 				}
 			}
@@ -2223,7 +2141,7 @@ static void ManageNPCMovement(Entity * io)
 	}
 	
 	// Tries to face/stare at target
-	if(!arxtime.is_paused() && CHANGE && !(layer0.flags & EA_FORCEPLAY)) {
+	if(!g_gameTime.isPaused() && CHANGE && !(layer0.flags & EA_FORCEPLAY)) {
 		if(io->_npcdata->behavior & BEHAVIOUR_STARE_AT)
 			StareAtTarget(io);
 		else
@@ -2390,11 +2308,8 @@ static void ManageNPCMovement(Entity * io)
 				   && (io->_npcdata->behavior & BEHAVIOUR_FIGHT)
 				   && layer0.cur_anim != alist[ANIM_RUN]
 				) {
-					float fCalc = io->_npcdata->walk_start_time + g_framedelay ;
-
-					io->_npcdata->walk_start_time = checked_range_cast<short>(fCalc);
-
-					if(io->_npcdata->walk_start_time > 600) {
+					io->_npcdata->walk_start_time += g_gameTime.lastFrameDuration();
+					if(io->_npcdata->walk_start_time > GameDurationMs(600)) {
 						desiredanim = alist[ANIM_FIGHT_WALK_FORWARD];
 						io->_npcdata->walk_start_time = 0;
 					}
@@ -2459,7 +2374,7 @@ static void ManageNPCMovement(Entity * io)
 					EVENT_SENDER = NULL;
 
 				io->_npcdata->reachedtarget = 1;
-				io->_npcdata->reachedtime = arxtime.now();
+				io->_npcdata->reachedtime = g_gameTime.now();
 
 				if(io->animlayer[1].flags & EA_ANIMEND)
 					io->animlayer[1].cur_anim = NULL;
@@ -2508,7 +2423,7 @@ static void ManageNPCMovement_check_target_reached(Entity * io) {
 			if(!io->_npcdata->reachedtarget) {
 				EntityHandle num = io->index();
 				io->_npcdata->reachedtarget = 1;
-				io->_npcdata->reachedtime = arxtime.now();
+				io->_npcdata->reachedtime = g_gameTime.now();
 
 				if(io->targetinfo != num) {
 					SendIOScriptEvent(io, SM_REACHEDTARGET, "fake");
@@ -2580,7 +2495,6 @@ static float AngularDifference(float a1, float a2) {
 
 /*!
  * \brief ARX_NPC_GetFirstNPCInSight
- * \param ioo
  * \return the "first" NPC in sight for another NPC (ioo)
  */
 Entity * ARX_NPC_GetFirstNPCInSight(Entity * ioo)
@@ -2665,9 +2579,8 @@ Entity * ARX_NPC_GetFirstNPCInSight(Entity * ioo)
 				}
 				continue;
 			}
-
-			float grnd_color = CURRENT_PLAYER_COLOR - GetPlayerStealth(); 
-
+			
+			float grnd_color = CURRENT_PLAYER_COLOR - GetPlayerStealth();
 			if(grnd_color > 0)  {
 				Vec3f ppos;
 				
@@ -2691,10 +2604,7 @@ Entity * ARX_NPC_GetFirstNPCInSight(Entity * ioo)
 	return found_io;
 }
 
-/*!
- * \brief Checks if a NPC is dead to prevent further Layers Animation
- * \param io
- */
+//! Checks if a NPC is dead to prevent further Layers Animation
 void CheckNPC(Entity * io)
 {
 	if(!io || (io->show != SHOW_FLAG_IN_SCENE))
@@ -2710,10 +2620,8 @@ void CheckNPC(Entity * io)
 /*!
  * \brief Checks an NPC Visibility Field (Player Detect)
  * Sends appropriate Detectplayer/Undetectplayer events to the IO
- * \param io
  *
  * \remarks Uses Invisibility/Confuse/Torch infos.
- * \warning io and io->obj must be valid (no check !)
  */
 void CheckNPCEx(Entity * io) {
 	
@@ -2860,7 +2768,7 @@ void ARX_NPC_SpawnAudibleSound(const Vec3f & pos, Entity * source, const float f
 					float fdist = SP_GetRoomDist(pos, entity->pos, Source_Room, entity->room);
 
 					if(fdist < max_distance * 1.5f) {
-						long ldistance = fdist;
+						long ldistance = long(fdist);
 						char temp[64];
 
 						sprintf(temp, "%ld", ldistance);
@@ -2868,7 +2776,7 @@ void ARX_NPC_SpawnAudibleSound(const Vec3f & pos, Entity * source, const float f
 						SendIOScriptEvent(entity, SM_HEAR, temp);
 					}
 				} else {
-					long ldistance = distance;
+					long ldistance = long(distance);
 					char temp[64];
 
 					sprintf(temp, "%ld", ldistance);
@@ -3037,7 +2945,7 @@ void GetTargetPos(Entity * io, unsigned long smoothing) {
 		}
 		
 		ARX_USE_PATH * aup = io->usepath;
-		aup->_curtime += smoothing + 100;
+		aup->_curtime += GameDurationMs(s64(smoothing) + 100);
 
 		Vec3f tp;
 		long wp = ARX_PATHS_Interpolate(aup, &tp);
@@ -3064,4 +2972,10 @@ void GetTargetPos(Entity * io, unsigned long smoothing) {
 	}
 	
 	io->target = io->pos;
+}
+
+bool isEnemy(const Entity * entity) {
+	return (entity->ioflags & IO_NPC)
+	       && !(entity->_npcdata->behavior & BEHAVIOUR_FRIENDLY)
+	       && (entity->_npcdata->behavior & BEHAVIOUR_FIGHT);
 }

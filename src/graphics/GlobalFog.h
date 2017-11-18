@@ -41,8 +41,8 @@ ZeniMax Media Inc., Suite 120, Rockville, Maryland 20850 USA.
 ===========================================================================
 */
 
-#ifndef ARX_GRAPHICS_GRAPHICSMODES_H
-#define ARX_GRAPHICS_GRAPHICSMODES_H
+#ifndef ARX_GRAPHICS_GLOBALFOG_H
+#define ARX_GRAPHICS_GLOBALFOG_H
 
 #include "graphics/Color.h"
 #include "util/Flags.h"
@@ -69,10 +69,11 @@ struct GLOBAL_MODS {
 	{}
 };
 
-extern GLOBAL_MODS current;
-extern GLOBAL_MODS desired;
+extern GLOBAL_MODS g_currentFogParameters;
+extern GLOBAL_MODS g_desiredFogParameters;
+extern Color g_fogColor;
 
 void ARX_GLOBALMODS_Reset();
 void ARX_GLOBALMODS_Apply();
 
-#endif // ARX_GRAPHICS_GRAPHICSMODES_H
+#endif // ARX_GRAPHICS_GLOBALFOG_H

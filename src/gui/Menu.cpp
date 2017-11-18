@@ -65,6 +65,7 @@ ZeniMax Media Inc., Suite 120, Rockville, Maryland 20850 USA.
 
 #include "gui/Credits.h"
 #include "gui/Interface.h"
+#include "gui/MainMenu.h"
 #include "gui/MenuPublic.h"
 #include "gui/MenuWidgets.h"
 #include "gui/Text.h"
@@ -91,7 +92,6 @@ ZeniMax Media Inc., Suite 120, Rockville, Maryland 20850 USA.
 #include "scene/Light.h"
 
 extern TextManager * pTextManage;
-extern ARX_INTERFACE_BOOK_MODE g_guiBookCurrentTopTab;
 extern bool START_NEW_QUEST;
 extern long OLD_FLYING_OVER;
 extern long FLYING_OVER;
@@ -178,32 +178,23 @@ void ARX_Menu_Resources_Release(bool _bNoSound) {
 	delete g_thumbnailCursor.m_loadTexture, g_thumbnailCursor.m_loadTexture = NULL;
 }
 
-extern bool TIME_INIT;
-
 void ARX_MENU_Clicked_QUIT() {
 	
-	if(!g_canResumeGame) {
-		return;
-	}
+	arx_assert(g_canResumeGame);
 	
 	ARX_Menu_Resources_Release();
-	ARXmenu.currentmode = AMCM_OFF;
-	if(TIME_INIT) {
-		arxtime.resume();
-	}
+	ARXmenu.requestMode(Mode_InGame);
 }
 
 void ARX_MENU_Clicked_NEWQUEST() {
 	
-	arxtime.resume();
-	
 	g_canResumeGame = false;
 	
 	ARX_PLAYER_Start_New_Quest();
-	g_guiBookCurrentTopTab = BOOKMODE_STATS;
+	g_playerBook.forcePage(BOOKMODE_STATS);
 	player.skin = 0;
 	ARX_PLAYER_Restore_Skin();
-	ARXmenu.currentmode = AMCM_NEWQUEST;
+	ARXmenu.requestMode(Mode_CharacterCreation);
 }
 
 static void ARX_MENU_NEW_QUEST_Clicked_QUIT() {
@@ -213,7 +204,7 @@ static void ARX_MENU_NEW_QUEST_Clicked_QUIT() {
 }
 
 void ARX_MENU_Clicked_CREDITS() {
-	ARXmenu.currentmode = AMCM_CREDITS;
+	ARXmenu.requestMode(Mode_Credits);
 	credits::reset();
 	ARX_MENU_LaunchAmb(AMB_CREDITS);
 }
@@ -222,7 +213,7 @@ void ARX_MENU_Launch(bool allowResume) {
 	
 	g_canResumeGame = allowResume;
 
-	arxtime.pause();
+	g_gameTime.pause(GameTime::PauseMenu);
 
 	//Synchronize menu mixers with game mixers and switch between them
 	ARX_SOUND_MixerSwitch(ARX_SOUND_MixerGame, ARX_SOUND_MixerMenu);
@@ -230,7 +221,7 @@ void ARX_MENU_Launch(bool allowResume) {
 	ARX_SOUND_PlayMenuAmbiance(AMB_MENU);
 	ARX_SOUND_PlayMenu(SND_MENU_CLICK);
 
-	ARXmenu.currentmode = AMCM_MAIN;
+	ARXmenu.requestMode(Mode_MainMenu);
 	ARX_Menu_Resources_Create();
 	Menu2_Open();
 }
@@ -238,8 +229,8 @@ void ARX_MENU_Launch(bool allowResume) {
 void ARX_Menu_Manage() {
 	
 	// looks for keys for each mode.
-	switch(ARXmenu.currentmode) {
-		case AMCM_OFF: {
+	switch(ARXmenu.mode()) {
+		case Mode_InGame: {
 			// Checks for ESC key
 			if(GInput->isKeyPressedNowUnPressed(Keyboard::Key_Escape)) {
 				if(cinematicBorder.isActive()) {
@@ -251,12 +242,11 @@ void ARX_Menu_Manage() {
 					}
 				} else {
 					GRenderer->getSnapshot(savegame_thumbnail, config.interface.thumbnailSize.x, config.interface.thumbnailSize.y);
-
-					arxtime.pause();
-
+					
+					g_gameTime.pause(GameTime::PauseMenu);
+					
 					ARX_MENU_Launch(true);
-					bFadeInOut=false;	//fade out
-					g_menuFadeActive = true; //active le fade
+					MenuFader_start(Fade_Out, -1); // TODO: does this fader even work ?
 					TRUE_PLAYER_MOUSELOOK_ON = false;
 
 					ARX_PLAYER_PutPlayerInNormalStance();
@@ -264,31 +254,31 @@ void ARX_Menu_Manage() {
 			}
 			break;
 		}
-		case AMCM_NEWQUEST: {
+		case Mode_CharacterCreation: {
 			if(   GInput->isKeyPressedNowUnPressed(Keyboard::Key_Escape)
-			   && !bFadeInOut // XS: Disabling ESC capture while fading in or out.
+			   && bFadeInOut == Fade_Out //TODO: comment seems incorrect -> // XS: Disabling ESC capture while fading in or out.
 			) {
 				ARX_SOUND_PlayMenu(SND_MENU_CLICK);
-				ARXmenu.currentmode = AMCM_MAIN;
+				ARXmenu.requestMode(Mode_MainMenu);
 			}
 			break;
 		}
-		case AMCM_MAIN: {
+		case Mode_MainMenu: {
 			if(   GInput->isKeyPressedNowUnPressed(Keyboard::Key_Escape)
 			   && MENU_NoActiveWindow()
 			   && g_canResumeGame
 			) {
-				arxtime.resume();
+				g_gameTime.resume(GameTime::PauseMenu);
 				ARX_MENU_Clicked_QUIT();
 			}
 			break;
 		}
-		case AMCM_CREDITS: {
+		case Mode_Credits: {
 			if(   GInput->isKeyPressedNowUnPressed(Keyboard::Key_Escape)
 			   || GInput->isKeyPressedNowUnPressed(Keyboard::Key_Spacebar)
 			) {
 				ARX_SOUND_PlayMenu(SND_MENU_CLICK);
-				MenuFader_start(true, true, AMCM_MAIN);
+				MenuFader_start(Fade_In, Mode_MainMenu);
 				ARX_MENU_LaunchAmb(AMB_MENU);
 			}
 			break;
@@ -298,23 +288,34 @@ void ARX_Menu_Manage() {
 	}
 }
 
-//-----------------------------------------------------------------------------
-// ARX Menu Rendering Func
-// returns false if no menu needs to be displayed
-//-----------------------------------------------------------------------------
+void CharacterCreationRender();
+
 void ARX_Menu_Render() {
 	
-	if(ARXmenu.currentmode == AMCM_OFF)
-		return;
-	
-	bool br = Menu2_Render();
-	
-	if(br)
-		return;
-	
-	if(ARXmenu.currentmode == AMCM_OFF)
-		return;
-	
+	switch(ARXmenu.mode()) {
+		case Mode_InGame: {
+			ARX_DEAD_CODE();
+			return;
+		}
+		case Mode_CharacterCreation: {
+			delete g_mainMenu, g_mainMenu = NULL;
+			CharacterCreationRender();
+			return;
+		}
+		case Mode_Credits: {
+			delete g_mainMenu, g_mainMenu = NULL;
+			credits::render();
+			return;
+		}
+		case Mode_MainMenu: {
+			MainMenuDoFrame();
+			return;
+		}
+	}
+}
+
+void CharacterCreationRender() {
+	arx_assert(ARXmenu.mode() == Mode_CharacterCreation);
 	
 	GRenderer->Clear(Renderer::ColorBuffer);
 	
@@ -322,15 +323,13 @@ void ARX_Menu_Render() {
 	
 	//-------------------------------------------------------------------------
 	
-	if(ARXmenu.currentmode == AMCM_NEWQUEST && ARXmenu.mda) {
+	if(ARXmenu.mda) {
 		
 		UseRenderState state(render2D().noBlend());
 		
 		if(ARXmenu.mda->BookBackground != NULL) {
 			EERIEDrawBitmap(Rectf(Vec2f(0, 0), g_size.width(), g_size.height()), 0.9f, ARXmenu.mda->BookBackground, Color::white);
 		}
-		
-		BOOKZOOM = 1;
 		
 		ARX_INTERFACE_ManageOpenedBook();
 		
@@ -423,7 +422,6 @@ void ARX_Menu_Render() {
 				
 				if(eeMouseUp1()) {
 					player.m_cheatSkinButtonClickCount++;
-					BOOKZOOM = 1;
 					ARX_SOUND_PlayMenu(SND_MENU_CLICK);
 					player.skin++;
 					
@@ -474,7 +472,7 @@ void ARX_Menu_Render() {
 						
 						ARX_SOUND_PlayMenu(SND_MENU_CLICK);
 						
-						MenuFader_start(true, true, AMCM_OFF);
+						MenuFader_start(Fade_In, Mode_InGame);
 					}
 				} else {
 					if(DONE)
@@ -505,22 +503,18 @@ void ARX_Menu_Render() {
 		pTextManage->Render();
 	}
 	
-	if(ARXmenu.currentmode != AMCM_CREDITS)
-		ARX_INTERFACE_RenderCursor(true);
+	ARX_INTERFACE_RenderCursor(true);
 	
-	if(ARXmenu.currentmode == AMCM_NEWQUEST) {
-		if(MenuFader_process(bFadeInOut)) {
-			switch(iFadeAction) {
-				case AMCM_OFF:
-					arxtime.resume();
-					ARX_MENU_NEW_QUEST_Clicked_QUIT();
-					MenuFader_reset();
-					
-					if(pTextManage)
-						pTextManage->Clear();
-					
-					break;
-			}
+	if(MenuFader_process()) {
+		switch(iFadeAction) {
+			case Mode_InGame:
+				ARX_MENU_NEW_QUEST_Clicked_QUIT();
+				MenuFader_reset();
+				
+				if(pTextManage)
+					pTextManage->Clear();
+				
+				break;
 		}
 	}
 }

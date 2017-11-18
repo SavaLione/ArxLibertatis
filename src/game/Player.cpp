@@ -90,7 +90,7 @@ ZeniMax Media Inc., Suite 120, Rockville, Maryland 20850 USA.
 #include "graphics/BaseGraphicsTypes.h"
 #include "graphics/Color.h"
 #include "graphics/Draw.h"
-#include "graphics/GraphicsModes.h"
+#include "graphics/GlobalFog.h"
 #include "graphics/GraphicsTypes.h"
 #include "graphics/Math.h"
 #include "graphics/Renderer.h"
@@ -151,14 +151,14 @@ ARXCHARACTER player;
 EERIE_3DOBJ * hero = NULL;
 float currentdistance = 0.f;
 float CURRENT_PLAYER_COLOR = 0;
-AnimationDuration PLAYER_ROTATION = AnimationDuration_ZERO;
+AnimationDuration PLAYER_ROTATION = 0;
 
 bool USE_PLAYERCOLLISIONS = true;
 bool BLOCK_PLAYER_CONTROLS = false;
 bool WILLRETURNTOCOMBATMODE = false;
-ArxDuration DeadTime = ArxDuration_ZERO;
-static ArxInstant LastHungerSample = ArxInstant_ZERO;
-static ArxInstant ROTATE_START = ArxInstant_ZERO;
+GameDuration DeadTime = 0;
+static GameInstant LastHungerSample = 0;
+static GameInstant ROTATE_START = 0;
 
 // Player Anims FLAGS/Vars
 ANIM_HANDLE * herowaitbook = NULL;
@@ -206,25 +206,17 @@ bool ARX_PLAYER_IsInFightMode() {
 	return false;
 }
 
-/*!
- * \brief Init/Reset player Keyring structures
- */
+//! Init/Reset player Keyring structures
 void ARX_KEYRING_Init() {
 	g_playerKeyring.clear();
 }
 
-/*!
- * \brief Add a key to Keyring
- * \param key
- */
+//! Add a key to Keyring
 void ARX_KEYRING_Add(const std::string & key) {
 	g_playerKeyring.push_back(key);
 }
 
-/*!
- * \brief Sends COMBINE event to "io" for each keyring entry
- * \param io
- */
+//! Sends COMBINE event to "io" for each keyring entry
 void ARX_KEYRING_Combine(Entity * io) {
 	for(size_t i = 0; i < g_playerKeyring.size(); i++) {
 		if(SendIOScriptEvent(io, SM_COMBINE, g_playerKeyring[i]) == REFUSE) {
@@ -243,9 +235,7 @@ Vec3f ARX_PLAYER_FrontPos() {
 	return pos;
 }
 
-/*!
- * \brief Reset all extra-rotation groups of player
- */
+//! Reset all extra-rotation groups of player
 void ARX_PLAYER_RectifyPosition() {
 	arx_assert(entities.player());
 	
@@ -322,18 +312,13 @@ static void ARX_PLAYER_ManageTorch() {
 	}
 }
 
-/*!
- * \brief Init/Reset player Quest structures
- */
+//! Init/Reset player Quest structures
 void ARX_PLAYER_Quest_Init() {
 	g_playerQuestLogEntries.clear();
-	gui::updateQuestBook();
+	g_playerBook.clearJournal();
 }
 
-/*!
- * \brief Add _ulRune to player runes
- * \param _ulRune
- */
+//! Add _ulRune to player runes
 void ARX_Player_Rune_Add(RuneFlag _ulRune)
 {
 	int iNbSpells = 0;
@@ -383,49 +368,52 @@ void ARX_Player_Rune_Add(RuneFlag _ulRune)
 	}
 }
 
-/*!
- * \brief Remove _ulRune from player runes
- * \param _ulRune
- */
+//! Remove _ulRune from player runes
 void ARX_Player_Rune_Remove(RuneFlag _ulRune)
 {
 	player.rune_flags &= ~_ulRune;
 }
 
-/*!
- * \brief Add quest "quest" to player Questbook
- * \param quest
- * \param _bLoad
- */
+//! Add quest "quest" to player Questbook
 void ARX_PLAYER_Quest_Add(const std::string & quest) {
-	
 	g_playerQuestLogEntries.push_back(quest);
-	gui::updateQuestBook();
+	g_playerBook.clearJournal();
 }
 
-/*!
- * \brief Removes player invisibility by killing Invisibility spells on him
- */
+//! Removes player invisibility by killing Invisibility spells on him
 void ARX_PLAYER_Remove_Invisibility() {
 	spells.endByCaster(EntityHandle_Player, SPELL_INVISIBILITY);
 }
 
-/* TODO use this table instead of the copied functions below!
-static const size_t max_skills = 9;
-static const size_t max_attributes = 4;
-static const float skill_attribute_factors[max_skills][max_attributes] = {
-	// Str   Men   Dex   Con
-	{ 0.0f, 0.0f, 2.0f, 0.0f }, // Stealth
-	{ 0.0f, 1.0f, 1.0f, 0.0f }, // Technical
-	{ 0.0f, 2.0f, 0.0f, 0.0f }, // Intuition
-	{ 0.0f, 2.0f, 0.0f, 0.0f }, // Ethereal link
-	{ 0.5f, 1.5f, 0.5f, 0.0f }, // Object knowledge
-	{ 0.0f, 2.0f, 0.0f, 0.0f }, // Casting
-	{ 2.0f, 0.0f, 1.0f, 0.0f }, // Close combat
-	{ 1.0f, 0.0f, 2.0f, 0.0f }, // Projectile
-	{ 0.0f, 0.0f, 0.0f, 1.0f }, // Defense
-};
-*/
+static PlayerSkill getAttributeSkillModifiers(const PlayerAttribute & attribute) {
+	
+	PlayerSkill skillMod;
+	
+	skillMod.stealth         = attribute.dexterity * 2.f;
+	skillMod.mecanism        = attribute.dexterity + attribute.mind;
+	skillMod.intuition       = attribute.mind * 2.f;
+	skillMod.etheralLink     = attribute.mind * 2.f;
+	skillMod.objectKnowledge = attribute.mind * 1.5f + attribute.dexterity * 0.5f + attribute.strength * 0.5f;
+	skillMod.casting         = attribute.mind * 2.f;
+	skillMod.projectile      = attribute.dexterity * 2.f + attribute.strength;
+	skillMod.closeCombat     = attribute.dexterity + attribute.strength * 2.f;
+	skillMod.defense         = attribute.constitution * 3.f;
+	
+	return skillMod;
+}
+
+static PlayerMisc getMiscStats(const PlayerAttribute & attribute, const PlayerSkill & skill) {
+	
+	PlayerMisc stats;
+	
+	stats.armorClass   = std::max(1.f, skill.defense * 0.1f - 1.0f);
+	stats.resistMagic  = attribute.mind * 2.f * (1.f + skill.casting * 0.005f); // TODO why *?
+	stats.resistPoison = attribute.constitution * 2.f + skill.defense * 0.25f;
+	stats.criticalHit  = attribute.dexterity * 2.f + skill.closeCombat * 0.2f - 18.f;
+	stats.damages      = std::max(1.f, attribute.strength * 0.5f - 5.f);
+	
+	return stats;
+}
 
 /*!
  * \brief Compute secondary attributes for player
@@ -435,22 +423,6 @@ static void ARX_PLAYER_ComputePlayerStats() {
 	player.lifePool.max = player.m_attribute.constitution * (player.level + 2);
 	player.manaPool.max = player.m_attribute.mind * (player.level + 1);
 	
-	float base_defense = player.m_skill.defense + player.m_attribute.constitution * 3;
-	player.m_misc.armorClass = std::max(1.f, glm::floor(base_defense * 0.1f - 1));
-	
-	float base_casting = player.m_skill.casting + player.m_attribute.mind * 2.f;
-	player.m_misc.resistMagic = glm::floor(player.m_attribute.mind * 2.f * (1.f + base_casting * ( 1.0f / 200 )));
-	
-	player.m_misc.resistPoison = glm::floor(player.m_attribute.constitution * 2 + base_defense * 0.25f);
-	
-	player.m_misc.damages = std::max(1.f, (player.m_attribute.strength - 10) * 0.5f);
-	
-	player.AimTime = PlatformDurationMs(1500);
-	
-	float base_close_combat = player.m_skill.closeCombat
-	                          + player.m_attribute.dexterity + player.m_attribute.strength * 2.f;
-	player.m_misc.criticalHit = (player.m_attribute.dexterity - 9) * 2.f
-	                            + base_close_combat * 0.2f;
 }
 
 /*!
@@ -475,12 +447,12 @@ void ARX_PLAYER_ComputePlayerFullStats() {
 	float fCalcHandicap	= (player.m_attributeFull.dexterity - 10.f) * 20.f;
 
 	//CAST
-	player.Full_AimTime = PlatformDurationMs(fFullAimTime);
+	player.Full_AimTime = PlatformDurationMsf(fFullAimTime);
 	
-	if(player.Full_AimTime <= PlatformDuration_ZERO)
-		player.Full_AimTime = player.AimTime;
+	if(player.Full_AimTime <= 0)
+		player.Full_AimTime = PlatformDurationMs(1500);
 	
-	player.Full_AimTime -= PlatformDurationMs(fCalcHandicap);
+	player.Full_AimTime -= PlatformDurationMsf(fCalcHandicap);
 	
 	if(player.Full_AimTime <= PlatformDurationMs(1500))
 		player.Full_AimTime = PlatformDurationMs(1500);
@@ -635,11 +607,7 @@ void ARX_PLAYER_ComputePlayerFullStats() {
 	// Attributes
 	
 	// Calculate base attributes
-	PlayerAttribute attributeBase;
-	attributeBase.strength     = player.m_attribute.strength;
-	attributeBase.dexterity    = player.m_attribute.dexterity;
-	attributeBase.constitution = player.m_attribute.constitution;
-	attributeBase.mind         = player.m_attribute.mind;
+	PlayerAttribute attributeBase = player.m_attribute;
 	
 	// Calculate equipment modifiers for attributes
 	player.m_attributeMod.strength += getEquipmentModifier(
@@ -666,30 +634,8 @@ void ARX_PLAYER_ComputePlayerFullStats() {
 	// Skills
 	
 	// Calculate base skills
-	PlayerSkill skillBase;
-	skillBase.stealth          = player.m_skill.stealth
-	                              + player.m_attributeFull.dexterity * 2.f;
-	skillBase.mecanism         = player.m_skill.mecanism
-	                              + player.m_attributeFull.dexterity
-	                              + player.m_attributeFull.mind;
-	skillBase.intuition        = player.m_skill.intuition
-	                              + player.m_attributeFull.mind * 2.f;
-	skillBase.etheralLink    = player.m_skill.etheralLink
-	                              + player.m_attributeFull.mind * 2.f;
-	skillBase.objectKnowledge = player.m_skill.objectKnowledge
-	                              + player.m_attributeFull.mind * 1.5f
-	                              + player.m_attributeFull.dexterity * 0.5f
-	                              + player.m_attributeFull.strength * 0.5f;
-	skillBase.casting          = player.m_skill.casting
-	                              + player.m_attributeFull.mind * 2.f;
-	skillBase.projectile       = player.m_skill.projectile
-	                              + player.m_attributeFull.dexterity * 2.f
-	                              + player.m_attributeFull.strength;
-	skillBase.closeCombat     = player.m_skill.closeCombat
-	                              + player.m_attributeFull.dexterity
-	                              + player.m_attributeFull.strength * 2.f;
-	skillBase.defense          = player.m_skill.defense
-	                              + player.m_attributeFull.constitution * 3;
+	PlayerSkill skillBase = player.m_skill;
+	skillBase.add(getAttributeSkillModifiers(player.m_attributeFull));
 	
 	// Calculate equipment modifiers for skills
 	player.m_skillMod.stealth += getEquipmentModifier(
@@ -736,40 +682,31 @@ void ARX_PLAYER_ComputePlayerFullStats() {
 	// Other stats
 	
 	// Calculate base stats
-	float base_armor_class   = std::max(1.f, player.m_skillFull.defense * 0.1f
-	                           + -1.0f);
-	float base_resist_magic  = player.m_attributeFull.mind * 2.f
-	                           * (1.f + player.m_skillFull.casting * 0.005f); // TODO why *?
-	float base_resist_poison = player.m_attributeFull.constitution * 2.f
-	                           + player.m_skillFull.defense * 0.25f;
-	float base_critical_hit  = player.m_attributeFull.dexterity * 2.f
-	                           + player.m_skillFull.closeCombat * 0.2f
-	                           + -18.f;
-	float base_damages       = std::max(1.f, player.m_attributeFull.strength * 0.5f - 5.f);
+	PlayerMisc miscBase = getMiscStats(player.m_attributeFull, player.m_skillFull);
 	
 	// Calculate equipment modifiers for stats
 	player.m_miscMod.armorClass += getEquipmentModifier(
-		IO_EQUIPITEM_ELEMENT_Armor_Class, base_armor_class
+		IO_EQUIPITEM_ELEMENT_Armor_Class, miscBase.armorClass
 	);
 	player.m_miscMod.resistMagic += getEquipmentModifier(
-		IO_EQUIPITEM_ELEMENT_Resist_Magic, base_resist_magic
+		IO_EQUIPITEM_ELEMENT_Resist_Magic, miscBase.resistMagic
 	);
 	player.m_miscMod.resistPoison += getEquipmentModifier(
-		IO_EQUIPITEM_ELEMENT_Resist_Poison, base_resist_poison
+		IO_EQUIPITEM_ELEMENT_Resist_Poison, miscBase.resistPoison
 	);
 	player.m_miscMod.criticalHit += getEquipmentModifier(
-		IO_EQUIPITEM_ELEMENT_Critical_Hit, base_critical_hit
+		IO_EQUIPITEM_ELEMENT_Critical_Hit, miscBase.criticalHit
 	);
 	player.m_miscMod.damages += getEquipmentModifier(
-		IO_EQUIPITEM_ELEMENT_Damages, base_damages
+		IO_EQUIPITEM_ELEMENT_Damages, miscBase.damages
 	);
 	
 	// Calculate full stats
-	player.m_miscFull.armorClass = (int)std::max(0.f, base_armor_class + player.m_miscMod.armorClass);
-	player.m_miscFull.resistMagic = (int)std::max(0.f, base_resist_magic + player.m_miscMod.resistMagic);
-	player.m_miscFull.resistPoison = (int)std::max(0.f, base_resist_poison + player.m_miscMod.resistPoison);
-	player.m_miscFull.criticalHit = std::max(0.f, base_critical_hit + player.m_miscMod.criticalHit);
-	player.m_miscFull.damages = std::max(1.f, base_damages + player.m_miscMod.damages
+	player.m_miscFull.armorClass = std::floor(std::max(0.f, miscBase.armorClass + player.m_miscMod.armorClass));
+	player.m_miscFull.resistMagic = std::floor(std::max(0.f, miscBase.resistMagic + player.m_miscMod.resistMagic));
+	player.m_miscFull.resistPoison = std::floor(std::max(0.f, miscBase.resistPoison + player.m_miscMod.resistPoison));
+	player.m_miscFull.criticalHit = std::max(0.f, miscBase.criticalHit + player.m_miscMod.criticalHit);
+	player.m_miscFull.damages = std::max(1.f, miscBase.damages + player.m_miscMod.damages
 	                                          + player.m_skillFull.closeCombat * 0.1f);
 	
 	
@@ -967,13 +904,11 @@ void ARX_PLAYER_QuickGeneration() {
 
 /*!
  * \brief Returns necessary Experience for a given level
- * \param level
- * \return
  */
 long GetXPforLevel(short level)
 {
-	const long XP_FOR_LEVEL[] = { 
-		0, 
+	const long XP_FOR_LEVEL[] = {
+		0,
 		2000,
 		4000,
 		6000,
@@ -987,7 +922,7 @@ long GetXPforLevel(short level)
 		300000,
 		450000,
 		600000,
-		750000 
+		750000
 	};
 
 	long xpNeeded;
@@ -995,7 +930,7 @@ long GetXPforLevel(short level)
 		xpNeeded = XP_FOR_LEVEL[level];
 	else
 		xpNeeded = level * 60000;
-	return xpNeeded;	
+	return xpNeeded;
 }
 
 /*!
@@ -1015,7 +950,6 @@ static void ARX_PLAYER_LEVEL_UP() {
 
 /*!
  * \brief Modify player XP by adding "val" to it
- * \param val
  */
 void ARX_PLAYER_Modify_XP(long val) {
 	
@@ -1030,11 +964,10 @@ void ARX_PLAYER_Modify_XP(long val) {
 
 /*!
  * \brief Function to poison player by "val" poison level
- * \param val
  */
 void ARX_PLAYER_Poison(float val) {
 	// Make a poison saving throw to see if player is affected
-	if(Random::getf(0.f, 100.f) > player.m_misc.resistPoison) {
+	if(Random::getf(0.f, 100.f) > player.m_miscFull.resistPoison) {
 		player.poison += val;
 		ARX_SOUND_PlayInterface(SND_PLAYER_POISONED);
 	}
@@ -1042,7 +975,6 @@ void ARX_PLAYER_Poison(float val) {
 
 /*!
  * \brief updates some player stats depending on time
- * \param Framedelay
  *
  * Updates: life/mana recovery, poison evolution, hunger, invisibility
  */
@@ -1051,8 +983,8 @@ void ARX_PLAYER_FrameCheck(PlatformDuration delta)
 	ARX_PROFILE_FUNC();
 	
 	//	ARX_PLAYER_QuickGeneration();
-	if(delta > PlatformDuration_ZERO) {
-		float Framedelay = float(toMs(delta));
+	if(delta > 0) {
+		float Framedelay = toMs(delta);
 		
 		UpdateIOInvisibility(entities.player());
 		// Natural LIFE recovery
@@ -1063,9 +995,9 @@ void ARX_PLAYER_FrameCheck(PlatformDuration delta)
 
 			// Check for player hungry sample playing
 			if((player.hunger > 10.f && player.hunger - inc_hunger <= 10.f)
-					|| (player.hunger < 10.f && arxtime.now() > LastHungerSample + ArxDurationMs(180000)))
-			{
-				LastHungerSample = arxtime.now();
+			   || (player.hunger < 10.f && g_gameTime.now() > LastHungerSample + GameDurationMs(180000))) {
+				
+				LastHungerSample = g_gameTime.now();
 
 				if(!BLOCK_PLAYER_CONTROLS) {
 					bool bOk = true;
@@ -1114,7 +1046,7 @@ void ARX_PLAYER_FrameCheck(PlatformDuration delta)
 				if(faster < 0.f)
 					faster = 0.f;
 
-				if(Random::getf(0.f, 100.f) > player.m_misc.resistPoison + faster) {
+				if(Random::getf(0.f, 100.f) > player.m_miscFull.resistPoison + faster) {
 					float dmg = cp * ( 1.0f / 3 );
 
 					if(player.lifePool.current - dmg <= 0.f)
@@ -1211,10 +1143,10 @@ void ARX_PLAYER_Restore_Skin() {
  */
 void ARX_PLAYER_LoadHeroAnimsAndMesh(){
 	
-	const char OBJECT_HUMAN_BASE[] = "graph/obj3d/interactive/npc/human_base/human_base.teo"; 
+	const char OBJECT_HUMAN_BASE[] = "graph/obj3d/interactive/npc/human_base/human_base.teo";
 	hero = loadObject(OBJECT_HUMAN_BASE, false);
 	PLAYER_SKIN_TC = TextureContainer::Load("graph/obj3d/textures/npc_human_base_hero_head");
-
+	
 	const char ANIM_WAIT_BOOK[] = "graph/obj3d/anims/npc/human_wait_book.tea";
 	herowaitbook = EERIE_ANIMMANAGER_Load(ANIM_WAIT_BOOK);
 	const char ANIM_WAIT_NORMAL[] = "graph/obj3d/anims/npc/human_normal_wait.tea";
@@ -1246,7 +1178,7 @@ void ARX_PLAYER_LoadHeroAnimsAndMesh(){
 
 	//todo free
 	io->armormaterial = "leather";
-	loadScript(io->script, resources->getFile("graph/obj3d/interactive/player/player.asl"));
+	loadScript(io->script, g_resources->getFile("graph/obj3d/interactive/player/player.asl"));
 
 	if ((EERIE_OBJECT_GetGroup(io->obj, "head") != ObjVertGroup())
 	        &&	(EERIE_OBJECT_GetGroup(io->obj, "neck") != ObjVertGroup())
@@ -1292,7 +1224,7 @@ void ARX_PLAYER_BecomesDead() {
 
 	player.Interface &= ~INTER_COMBATMODE;
 	player.Interface = 0;
-	DeadTime = ArxDuration_ZERO;
+	DeadTime = 0;
 	
 	spells.endByCaster(EntityHandle_Player);
 }
@@ -1311,16 +1243,16 @@ void ARX_PLAYER_Manage_Visual() {
 	
 	ARX_PROFILE_FUNC();
 	
-	ArxInstant now = arxtime.now();
+	GameInstant now = g_gameTime.now();
 	
 	if(player.m_currentMovement & PLAYER_ROTATE) {
-		if(ROTATE_START == ArxInstant_ZERO) {
+		if(ROTATE_START == 0) {
 			ROTATE_START = now;
 		}
-	} else if(ROTATE_START != ArxInstant_ZERO) {
-		ArxDuration elapsed = now - ROTATE_START;
-		if(elapsed > ArxDurationMs(100)) {
-			ROTATE_START = ArxInstant_ZERO;
+	} else if(ROTATE_START != 0) {
+		GameDuration elapsed = now - ROTATE_START;
+		if(elapsed > GameDurationMs(100)) {
+			ROTATE_START = 0;
 		}
 	}
 	
@@ -1426,13 +1358,13 @@ void ARX_PLAYER_Manage_Visual() {
 		request0_loop = true;
 	}
 	
-	if(ROTATE_START != ArxInstant_ZERO
+	if(ROTATE_START != 0
 	   && player.angle.getPitch() > 60.f
 	   && player.angle.getPitch() < 180.f
 	   && LASTPLAYERA > 60.f
 	   && LASTPLAYERA < 180.f
 	) {
-		if(PLAYER_ROTATION < AnimationDuration_ZERO) {
+		if(PLAYER_ROTATION < 0) {
 			if(player.Interface & INTER_COMBATMODE)
 				request0_anim = alist[ANIM_U_TURN_LEFT_FIGHT];
 			else
@@ -1451,16 +1383,16 @@ void ARX_PLAYER_Manage_Visual() {
 		{
 			layer0.ctime -= PLAYER_ROTATION;
 			
-			if(layer0.ctime < AnimationDuration_ZERO)
-				layer0.ctime = AnimationDuration_ZERO;
+			if(layer0.ctime < 0)
+				layer0.ctime = 0;
 		}
 		else if(layer0.cur_anim == alist[ANIM_U_TURN_RIGHT]
 				 ||	layer0.cur_anim == alist[ANIM_U_TURN_RIGHT_FIGHT])
 		{
 			layer0.ctime += PLAYER_ROTATION;
 			
-			if(layer0.ctime < AnimationDuration_ZERO)
-				layer0.ctime = AnimationDuration_ZERO;
+			if(layer0.ctime < 0)
+				layer0.ctime = 0;
 		}
 	}
 	
@@ -1619,7 +1551,6 @@ void ARX_PLAYER_Manage_Visual() {
 	}
 	
 retry:
-	;
 	
 	if(spells.ExistAnyInstanceForThisCaster(SPELL_FLYING_EYE, EntityHandle_Player)) {
 		request0_anim = alist[ANIM_MEDITATION];
@@ -1638,7 +1569,7 @@ retry:
 				FALLING_TIME = 0;
 				player.jumpphase = JumpAscending;
 				request0_anim = alist[ANIM_JUMP_UP];
-				player.jumpstarttime = arxtime.now();
+				player.jumpstarttime = g_platformTime.frameStart();
 				player.jumplastposition = -1.f;
 				break;
 			}
@@ -1652,7 +1583,7 @@ retry:
 				break;
 			}
 			case JumpDescending: { // Post-synch
-				LAST_JUMP_ENDTIME = arxtime.now();
+				LAST_JUMP_ENDTIME = g_platformTime.frameStart();
 				if((layer0.cur_anim == alist[ANIM_JUMP_END] && (layer0.flags & EA_ANIMEND))
 				   || player.onfirmground) {
 					player.jumpphase = JumpEnd;
@@ -1663,15 +1594,14 @@ retry:
 				break;
 			}
 			case JumpEnd: { // Post-synch
-				LAST_JUMP_ENDTIME = arxtime.now();
+				LAST_JUMP_ENDTIME = g_platformTime.frameStart();
 				if(layer0.cur_anim == alist[ANIM_JUMP_END_PART2] && (layer0.flags & EA_ANIMEND)) {
 					AcquireLastAnim(io);
 					player.jumpphase = NotJumping;
 					goto retry;
 				} else if(layer0.cur_anim == alist[ANIM_JUMP_END_PART2]
-						 && glm::abs(player.physics.velocity.x)
-							 + glm::abs(player.physics.velocity.z) > (4.f/TARGET_DT)
-						 && layer0.ctime > AnimationDurationMs(1)) {
+				          && glm::abs(player.physics.velocity.x) + glm::abs(player.physics.velocity.z) > (4.f/TARGET_DT)
+				          && layer0.ctime > AnimationDurationMs(1)) {
 					AcquireLastAnim(io);
 					player.jumpphase = NotJumping;
 					goto retry;
@@ -1687,7 +1617,6 @@ retry:
 		goto makechanges;
 	} else {
 	makechanges:
-		;
 		
 		if(request0_anim && request0_anim != layer0.cur_anim) {
 			AcquireLastAnim(io);
@@ -1722,7 +1651,6 @@ retry:
 	}
 	
 nochanges:
-	;
 	player.m_lastMovement = player.m_currentMovement;
 }
 
@@ -1746,7 +1674,6 @@ void ARX_PLAYER_InitPlayer() {
 
 /*!
  * \brief Forces player orientation to look at an IO
- * \param io
  */
 void ForcePlayerLookAtIO(Entity * io) {
 	
@@ -1824,14 +1751,14 @@ void ARX_PLAYER_Frame_Update()
 				extraRotation->group_rotate[2].setPitch(0); //chest
 				extraRotation->group_rotate[3].setPitch(v); //belt
 			} else {
-				v *= ( 1.0f / 10 ); 
+				v *= ( 1.0f / 10 );
 				extraRotation->group_rotate[0].setPitch(v); //head
 				extraRotation->group_rotate[1].setPitch(v); //neck
 				extraRotation->group_rotate[2].setPitch(v * 4); //chest
 				extraRotation->group_rotate[3].setPitch(v * 4); //belt
 			}
 		} else {
-			v *= ( 1.0f / 4 ); 
+			v *= ( 1.0f / 4 );
 			extraRotation->group_rotate[0].setPitch(v); //head
 			extraRotation->group_rotate[1].setPitch(v); //neck
 			extraRotation->group_rotate[2].setPitch(v); //chest
@@ -1859,7 +1786,7 @@ static void ARX_PLAYER_MakeStepNoise() {
 		return;
 	}
 	
-	if(USE_PLAYERCOLLISIONS) {	
+	if(USE_PLAYERCOLLISIONS) {
 		float volume = ARX_NPC_AUDIBLE_VOLUME_DEFAULT;
 		float factor = ARX_NPC_AUDIBLE_FACTOR_DEFAULT;
 		
@@ -1884,9 +1811,9 @@ extern float MAX_ALLOWED_PER_SECOND;
 static long LAST_FIRM_GROUND = 1;
 static long TRUE_FIRM_GROUND = 1;
 float lastposy = -9999999.f;
-ArxInstant REQUEST_JUMP = ArxInstant_ZERO;
+PlatformInstant REQUEST_JUMP = 0;
 
-ArxInstant LAST_JUMP_ENDTIME = ArxInstant_ZERO;
+PlatformInstant LAST_JUMP_ENDTIME = 0;
 
 static bool Valid_Jump_Pos() {
 	
@@ -1991,7 +1918,7 @@ void PlayerMovementIterate(float DeltaTime) {
 	
 	if(USE_PLAYERCOLLISIONS) {
 		// A jump is requested so let's go !
-		if(REQUEST_JUMP != ArxInstant_ZERO) {
+		if(REQUEST_JUMP != 0) {
 			if((player.m_currentMovement & PLAYER_CROUCH)
 			   || player.physics.cyl.height > player.baseHeight()) {
 				float old = player.physics.cyl.height;
@@ -2002,7 +1929,7 @@ void PlayerMovementIterate(float DeltaTime) {
 				if(anything < 0.f) {
 					player.m_currentMovement |= PLAYER_CROUCH;
 					player.physics.cyl.height = old;
-					REQUEST_JUMP = ArxInstant_ZERO;
+					REQUEST_JUMP = 0;
 				} else {
 					bGCroucheToggle = false;
 					player.m_currentMovement &= ~PLAYER_CROUCH;
@@ -2011,13 +1938,13 @@ void PlayerMovementIterate(float DeltaTime) {
 			}
 			
 			if(!Valid_Jump_Pos()) {
-				REQUEST_JUMP = ArxInstant_ZERO;
+				REQUEST_JUMP = 0;
 			}
 			
-			if(REQUEST_JUMP != ArxInstant_ZERO) {
-				ArxDuration t = arxtime.now() - REQUEST_JUMP;
-				if(t >= ArxDuration_ZERO && t <= ArxDurationMs(350)) {
-					REQUEST_JUMP = ArxInstant_ZERO;
+			if(REQUEST_JUMP != 0) {
+				PlatformDuration t = g_platformTime.frameStart() - REQUEST_JUMP;
+				if(t >= 0 && t <= PlatformDurationMs(350)) {
+					REQUEST_JUMP = 0;
 					ARX_NPC_SpawnAudibleSound(player.pos, entities.player());
 					ARX_SPEECH_Launch_No_Unicode_Seek("player_jump", entities.player());
 					player.onfirmground = false;
@@ -2153,11 +2080,11 @@ void PlayerMovementIterate(float DeltaTime) {
 		// Apply player impulse force
 		
 		float jump_mul = 1.f;
-		ArxDuration diff = ArxDurationMs(float(toMs(arxtime.now() - LAST_JUMP_ENDTIME)) * (1.0f / GLOBAL_SLOWDOWN));
-		if(diff < ArxDurationMs(600)) {
+		PlatformDuration diff = g_platformTime.frameStart() - LAST_JUMP_ENDTIME;
+		if(diff < PlatformDurationMs(600)) {
 			jump_mul = 0.5f;
-			if(diff >= ArxDurationMs(300)) {
-				jump_mul += float(toMs(LAST_JUMP_ENDTIME - arxtime.now()) * (1.0f / GLOBAL_SLOWDOWN) + 300) * (1.f / 300);
+			if(diff >= PlatformDurationMs(300)) {
+				jump_mul += (toMs(LAST_JUMP_ENDTIME - g_platformTime.frameStart()) + 300.f) * (1.f / 300);
 				if(jump_mul > 1.f) {
 					jump_mul = 1.f;
 				}
@@ -2322,14 +2249,14 @@ void PlayerMovementIterate(float DeltaTime) {
 				
 				if(player.jumplastposition == -1.f) {
 					player.jumplastposition = 0;
-					player.jumpstarttime = arxtime.now();
+					player.jumpstarttime = g_platformTime.frameStart();
 				}
 				
 				const float jump_up_time = 200.f;
 				const float jump_up_height = 130.f;
-				const ArxInstant now = arxtime.now();
-				const unsigned long elapsed = toMs(now - player.jumpstarttime) * (1.0f / GLOBAL_SLOWDOWN);
-				float position = glm::clamp(float(elapsed) / jump_up_time, 0.f, 1.f);
+				const PlatformInstant now = g_platformTime.frameStart();
+				const float elapsed = toMs(now - player.jumpstarttime);
+				float position = glm::clamp(elapsed / jump_up_time, 0.f, 1.f);
 				
 				float p = (position - player.jumplastposition) * jump_up_height;
 				player.physics.targetpos.y -= p;
@@ -2454,15 +2381,15 @@ void PlayerMovementIterate(float DeltaTime) {
  * \brief Manage Player Death Visual
  */
 void ARX_PLAYER_Manage_Death() {
-	if(DeadTime <= ArxDurationMs(2000))
+	if(DeadTime <= GameDurationMs(2000))
 		return;
 
 	player.m_paralysed = false;
-	float ratio = toMs(DeadTime - ArxDurationMs(2000)) * ( 1.0f / 5000 );
+	float ratio = (DeadTime - GameDurationMs(2000)) / GameDurationMs(5000);
 
 	if(ratio >= 1.f) {
 		ARX_MENU_Launch(false);
-		DeadTime = ArxDuration_ZERO;
+		DeadTime = 0;
 	}
 	
 	UseRenderState state(render2D().blend(BlendZero, BlendInvSrcColor));
@@ -2471,7 +2398,6 @@ void ARX_PLAYER_Manage_Death() {
 
 /*!
  * \brief Specific for color checks
- * \return
  */
 float GetPlayerStealth() {
 	return 15 + player.m_skillFull.stealth * ( 1.0f / 10 );
@@ -2479,7 +2405,6 @@ float GetPlayerStealth() {
 
 /*!
  * \brief Force Player to standard stance
- * \param val
  */
 void ARX_PLAYER_PutPlayerInNormalStance() {
 	
@@ -2509,7 +2434,6 @@ void ARX_PLAYER_PutPlayerInNormalStance() {
 
 /*!
  * \brief Add gold to player purse
- * \param _lValue
  */
 void ARX_PLAYER_AddGold(long _lValue) {
 	player.gold += _lValue;
@@ -2602,16 +2526,16 @@ void ARX_PLAYER_Invulnerability(long flag) {
 
 extern Entity * FlyingOverIO;
 
-void ARX_GAME_Reset(long type) {
+void ARX_GAME_Reset() {
 	arx_assert(entities.player());
 	
-	DeadTime = ArxDuration_ZERO;
+	DeadTime = 0;
 	
 	LastValidPlayerPos = Vec3f_ZERO;
 	
 	entities.player()->speed_modif = 0;
 	
-	LAST_JUMP_ENDTIME = ArxInstant_ZERO;
+	LAST_JUMP_ENDTIME = 0;
 	FlyingOverIO = NULL;
 	g_miniMap.mapMarkerInit();
 	ClearDynLights();
@@ -2636,7 +2560,7 @@ void ARX_GAME_Reset(long type) {
 
 	ioSteal = NULL;
 
-	GLOBAL_SLOWDOWN = 1.f;
+	g_gameTime.setSpeed(1.f);
 
 	CheatReset();
 	
@@ -2661,11 +2585,9 @@ void ARX_GAME_Reset(long type) {
 	EERIE_PATHFINDER_Clear();
 
 	// Sound
-	if(!(type & 1)) {
-		ARX_SOUND_MixerStop(ARX_SOUND_MixerGame);
-		ARX_SOUND_MixerPause(ARX_SOUND_MixerGame);
-		ARX_SOUND_MixerResume(ARX_SOUND_MixerGame);
-	}
+	ARX_SOUND_MixerStop(ARX_SOUND_MixerGame);
+	ARX_SOUND_MixerPause(ARX_SOUND_MixerGame);
+	ARX_SOUND_MixerResume(ARX_SOUND_MixerGame);
 
 	// Damages
 	ARX_DAMAGE_Reset_Blood_Info();
@@ -2712,12 +2634,7 @@ void ARX_GAME_Reset(long type) {
 	ARX_PATH_ClearAllUsePath();
 
 	// Player Torch
-	if(type & 1) {
-		if(player.torch)
-			ARX_PLAYER_ClickedOnTorch(player.torch);
-	} else {
-		player.torch = NULL;
-	}
+	player.torch = NULL;
 
 	// Player Quests
 	ARX_PLAYER_Quest_Init();
@@ -2731,10 +2648,8 @@ void ARX_GAME_Reset(long type) {
 		GLOBAL_MAGIC_MODE = true;
 
 		// Linked Objects
-		if(!(type & 2)) {
-			UnlinkAllLinkedObjects();
-			ARX_EQUIPMENT_UnEquipAllPlayer();
-		}
+		UnlinkAllLinkedObjects();
+		ARX_EQUIPMENT_UnEquipAllPlayer();
 
 		ARX_EQUIPMENT_ReleaseAll(entities.player());
 
@@ -2749,12 +2664,12 @@ void ARX_GAME_Reset(long type) {
 	}
 
 	// Misc Player Vars.
-	ROTATE_START = ArxInstant_ZERO;
+	ROTATE_START = 0;
 	BLOCK_PLAYER_CONTROLS = false;
 	HERO_SHOW_1ST = -1;
 	PUSH_PLAYER_FORCE = Vec3f_ZERO;
 	player.jumplastposition = 0;
-	player.jumpstarttime = ArxInstant_ZERO;
+	player.jumpstarttime = 0;
 	player.jumpphase = NotJumping;
 	player.inzone = NULL;
 
@@ -2765,7 +2680,7 @@ void ARX_GAME_Reset(long type) {
 		eyeball.exist = -100;
 	}
 	
-	entities.player()->ouch_time = ArxInstant_ZERO;
+	entities.player()->ouch_time = 0;
 	entities.player()->invisibility = 0.f;
 	
 	fadeReset();
@@ -2785,13 +2700,10 @@ void ARX_GAME_Reset(long type) {
 	SecondaryInventory = NULL;
 	TSecondaryInventory = NULL;
 	MasterCamera.exist = 0;
-	CHANGE_LEVEL_ICON = -1;
+	CHANGE_LEVEL_ICON = NoChangeLevel;
 	
 	// Kill Script Loaded IO
 	CleanScriptLoadedIO();
-	
-	// ARX Timer
-	arxtime.init();
 	
 	ClearTileLights();
 }

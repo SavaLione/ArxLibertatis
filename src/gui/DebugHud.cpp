@@ -159,14 +159,27 @@ static const char * entityVisilibityToString(EntityVisilibity value) {
 	return "Unknown";
 }
 
+static std::string prettyUs(s64 us) {
+	std::ostringstream s;
+	s << std::setw(7)
+	  << us / 1000000ll
+	  << "s"
+	  << std::setfill('0')
+	  << std::setw(3)
+	  << (us % 1000000ll) / 1000ll
+	  << "ms";
+	return s.str();
+}
+
 void ShowInfoText() {
 	
 	DebugBox frameInfo = DebugBox(Vec2i(10, 10), "FrameInfo");
+	frameInfo.add("PlatformTime", prettyUs(toUs(g_platformTime.frameStart())));
+	frameInfo.add("ArxTime", prettyUs(toUs(g_gameTime.now())));
 	frameInfo.add("Prims", EERIEDrawnPolys);
 	frameInfo.add("Particles", getParticleCount());
 	frameInfo.add("Sparks", ParticleSparkCount());
 	frameInfo.add("Polybooms", long(PolyBoomCount()));
-	frameInfo.add("TIME", static_cast<long>(toMs(arxtime.now()) / 1000));
 	frameInfo.print();
 	
 	DebugBox camBox = DebugBox(Vec2i(10, frameInfo.size().y + 5), "Camera");
@@ -195,7 +208,7 @@ void ShowInfoText() {
 	if(ep)
 		slope = ep->norm.y;
 	
-	long zap = IsAnyPolyThere(player.pos.x,player.pos.z);
+	long zap = IsAnyPolyThere(player.pos.x, player.pos.z);
 	
 	playerBox.add("Ground Slope", slope);
 	playerBox.add("Ground truePolyY", truePolyY);
@@ -220,7 +233,7 @@ void ShowInfoText() {
 	miscBox.add("Cinema", cinematicBorder.CINEMA_DECAL);
 	miscBox.add("Mouse", Vec2i(DANAEMouse));
 	miscBox.add("Pathfind queue", EERIE_PATHFINDER_Get_Queued_Number());
-	miscBox.add("Pathfind status", (PATHFINDER_WORKING ? "Working" : "Idled"));
+	miscBox.add("Pathfind status", EERIE_PATHFINDER_Is_Busy() ? "Working" : "Idled");
 	miscBox.print();
 	
 	{
@@ -318,7 +331,7 @@ void ShowInfoText() {
 				animLayerBox.add("ctime", long(layer.ctime.t));
 				animLayerBox.add("flags", flagNames(AnimUseFlagNames, layer.flags));
 				
-				animLayerBox.add("currentFrame", long(layer.currentFrame));
+				animLayerBox.add("currentFrame", layer.currentFrame);
 				if(layer.cur_anim) {
 					animLayerBox.add("cur_anim", layer.cur_anim->path.string());
 				} else {
@@ -352,7 +365,7 @@ void ShowDebugToggles() {
 		textStream << i << "   ";
 		textStream << (g_debugToggles[i] ? "on " : "off") << "    ";
 		
-		if(platform::getElapsedMs(g_debugTriggersTime[i]) <= g_debugTriggersDecayDuration)
+		if(g_platformTime.frameStart() - g_debugTriggersTime[i] <= g_debugTriggersDecayDuration)
 			textStream << "fired";
 		
 		hFontDebug->draw(0.f, line * lineHeight, textStream.str(), Color::white);

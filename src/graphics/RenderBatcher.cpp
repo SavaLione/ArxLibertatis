@@ -24,8 +24,12 @@
 #include <vector>
 
 #include "graphics/Draw.h"
+#include "graphics/texture/Texture.h"
 
 #include "platform/profiler/Profiler.h"
+
+
+RenderBatcher g_renderBatcher;
 
 RenderBatcher::~RenderBatcher() {
 	reset();
@@ -85,12 +89,7 @@ void RenderBatcher::reset() {
 	m_BatchedSprites.clear();
 }
 
-RenderBatcher& RenderBatcher::getInstance() {
-	static RenderBatcher renderBatcher;
-	return renderBatcher;
-}
-
-RenderMaterial::RenderMaterial() 
+RenderMaterial::RenderMaterial()
 	: m_texture(0)
 	, m_depthTest(false)
 	, m_blendType(Opaque)
@@ -130,18 +129,18 @@ bool RenderMaterial::operator<(const RenderMaterial & other) const {
 	if(m_cullingMode != other.m_cullingMode) {
 		return m_cullingMode < other.m_cullingMode;
 	}
-
+	
 	// Then wrap mode
 	if(m_wrapMode != other.m_wrapMode) {
 		return m_wrapMode < other.m_wrapMode;
-	}	
-
+	}
+	
 	// Materials are equals...
 	return false;
 }
 
 RenderState RenderMaterial::apply() const {
-		
+	
 	if(m_texture) {
 		GRenderer->SetTexture(0, m_texture);
 	} else {
@@ -149,7 +148,9 @@ RenderState RenderMaterial::apply() const {
 	}
 	
 	RenderState state = render3D();
-
+	
+	state.setAlphaCutout(m_texture && m_texture->hasAlpha());
+	
 	GRenderer->GetTextureStage(0)->setWrapMode(m_wrapMode);
 	state.setDepthOffset(m_depthBias);
 

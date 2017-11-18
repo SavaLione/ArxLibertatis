@@ -21,6 +21,7 @@
 
 #include <cstring>
 
+#include "core/Benchmark.h"
 #include "graphics/opengl/OpenGLUtil.h"
 #include "io/log/Logger.h"
 #include "platform/ProgramOptions.h"
@@ -171,7 +172,7 @@ static bool g_enable = false;
 #endif
 
 bool isEnabled() {
-	return g_enable;
+	return g_enable && !benchmark::isEnabled();
 }
 
 static void enable() {

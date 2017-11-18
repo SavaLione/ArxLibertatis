@@ -54,8 +54,6 @@ static bool IsNearSelection(EERIE_3DOBJ * obj, long vert, ObjSelection tw) {
 
 /*!
  * \brief Spawns a body part from NPC
- * \param ioo
- * \param num
  */
 static void ARX_NPC_SpawnMember(Entity * ioo, ObjSelection num) {
 	
@@ -270,8 +268,8 @@ static void ARX_NPC_SpawnMember(Entity * ioo, ObjSelection num) {
 	io->no_collide = ioo->index();
 	
 	io->gameFlags |= GFLAG_GOREEXPLODE;
-	io->animBlend.lastanimtime = arxtime.now();
-	io->soundtime = ArxInstant_ZERO;
+	io->animBlend.lastanimtime = g_gameTime.now();
+	io->soundtime = 0;
 	io->soundcount = 0;
 
 	EERIE_PHYSICS_BOX_Launch(io->obj, io->pos, io->angle, vector);

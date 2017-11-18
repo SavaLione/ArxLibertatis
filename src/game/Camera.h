@@ -57,13 +57,11 @@ struct EERIE_CAMERA {
 	Vec3f lastpos;
 	Vec3f translatetarget;
 	bool lastinfovalid;
-	Color3f fadecolor;
 	Rect clip;
 	Vec2i center;
 
 	float smoothing;
 
-	Color bkgcolor; // TODO was BGR!
 	float cdepth;
 	
 	glm::mat4x4 ProjectionMatrix;

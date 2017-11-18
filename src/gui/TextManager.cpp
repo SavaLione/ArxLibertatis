@@ -98,11 +98,9 @@ bool TextManager::AddText(Font* _pFont, const std::string & _lpszUText,
 	pArxText->lTimeOut = _lTimeOut;
 	pArxText->rRectClipp = pArxText->rRect;
 	
-	if(iNbLigneClipp) 
-	{
+	if(iNbLigneClipp) {
 		Vec2i sSize = _pFont->getTextSize(pArxText->lpszUText);
 		sSize.y *= iNbLigneClipp;
-	
 		pArxText->rRectClipp.bottom = pArxText->rRect.top + sSize.y;
 	}
 	
@@ -127,7 +125,7 @@ void TextManager::Update(PlatformDuration _iDiffFrame) {
 		
 		ManagedText * pArxText = *itManage;
 		
-		if(pArxText->lTimeOut < PlatformDuration_ZERO) {
+		if(pArxText->lTimeOut < 0) {
 			delete pArxText;
 			itManage = entries.erase(itManage);
 			continue;
@@ -135,9 +133,9 @@ void TextManager::Update(PlatformDuration _iDiffFrame) {
 		
 		pArxText->lTimeOut -= _iDiffFrame;
 		
-		if(pArxText->lTimeScroll < PlatformDuration_ZERO &&
-		   pArxText->fDeltaY < (pArxText->rRect.bottom - pArxText->rRectClipp.bottom)) {
-			pArxText->fDeltaY += pArxText->fSpeedScrollY * float(toMs(_iDiffFrame));
+		if(pArxText->lTimeScroll < 0
+		   && pArxText->fDeltaY < float(pArxText->rRect.bottom - pArxText->rRectClipp.bottom)) {
+			pArxText->fDeltaY += pArxText->fSpeedScrollY * toMs(_iDiffFrame);
 			
 			if(pArxText->fDeltaY >= (pArxText->rRect.bottom - pArxText->rRectClipp.bottom)) {
 				pArxText->fDeltaY = static_cast<float>(pArxText->rRect.bottom - pArxText->rRectClipp.bottom);
@@ -188,7 +186,6 @@ void TextManager::Clear() {
 	entries.clear();
 }
 
-bool TextManager::Empty() const 
-{
+bool TextManager::Empty() const {
 	return entries.empty();
 }

@@ -50,7 +50,7 @@ ZeniMax Media Inc., Suite 120, Rockville, Maryland 20850 USA.
 Particle::Particle()
 	: p3Pos(arx::randomVec(-5.f, 5.f))
 	, p3Velocity(arx::randomVec(-10.f, 10.f))
-	, m_age(ArxDuration_ZERO)
+	, m_age(0)
 	, fSize(1.f)
 	, fSizeStart(1.f)
 	, fSizeEnd(1.f)
@@ -60,8 +60,7 @@ Particle::Particle()
 	, iTexNum(0)
 {
 	
-	m_timeToLive = ArxDurationMs(Random::get(2000, 5000));
-	fOneOnTTL = 1.0f / toMs(m_timeToLive);
+	m_timeToLive = GameDurationMs(Random::get(2000, 5000));
 	
 	fColorStart = Color4f(1, 1, 1, 0.5f);
 	fColorEnd = Color4f(1, 1, 1, 0.1f);
@@ -71,7 +70,7 @@ Particle::~Particle() { }
 
 void Particle::Regen() {
 	p3Pos = Vec3f_ZERO;
-	m_age = ArxDuration_ZERO;
+	m_age = 0;
 	fSize = 1;
 	iTexTime = 0;
 	iTexNum = 0;
@@ -93,21 +92,20 @@ void Particle::Validate() {
 	fColorEnd.b = glm::clamp(fColorEnd.b, 0.f, 1.f);
 	fColorEnd.a = glm::clamp(fColorEnd.a, 0.f, 1.f);
 	
-	if(m_timeToLive < ArxDurationMs(100)) {
-		m_timeToLive = ArxDurationMs(100);
-		fOneOnTTL = 1.0f / toMs(m_timeToLive);
+	if(m_timeToLive < GameDurationMs(100)) {
+		m_timeToLive = GameDurationMs(100);
 	}
 }
 
-void Particle::Update(ArxDuration delta) {
+void Particle::Update(GameDuration delta) {
 	
 	m_age += delta;
-	iTexTime += toMs(delta);
-	float fTimeSec = toMs(delta) * (1.f / 1000);
+	iTexTime += toMsi(delta); // FIXME time, this will break with sub ms deltas
+	float fTimeSec = delta / GameDurationMs(1000);
 	
 	if(m_age < m_timeToLive) {
 		
-		float ft = fOneOnTTL * toMs(m_age);
+		float ft = m_age / m_timeToLive;
 		
 		// update new pos
 		p3Pos += p3Velocity * fTimeSec;

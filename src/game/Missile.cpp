@@ -78,9 +78,9 @@ struct ARX_MISSILE
 	Vec3f startpos;
 	Vec3f velocity;
 	Vec3f lastpos;
-	ArxInstant timecreation;
-	ArxInstant lastupdate;
-	ArxDuration tolive;
+	GameInstant timecreation;
+	GameInstant lastupdate;
+	GameDuration tolive;
 	LightHandle	m_light;
 	EntityHandle owner;
 };
@@ -109,7 +109,7 @@ static void ARX_MISSILES_Kill(long i) {
 			
 			EERIE_LIGHT * light = lightHandleGet(missiles[i].m_light);
 			if(light) {
-				light->duration = ArxDurationMs(150);
+				light->duration = GameDurationMs(150);
 			}
 
 			break;
@@ -144,14 +144,14 @@ void ARX_MISSILES_Spawn(Entity * io, ARX_SPELLS_MISSILE_TYPE type, const Vec3f &
 
 	dist = 1.0F / fdist(startpos, targetpos);
 	missiles[i].velocity = (targetpos - startpos) * dist;
-	missiles[i].lastupdate = missiles[i].timecreation = arxtime.now();
+	missiles[i].lastupdate = missiles[i].timecreation = g_gameTime.now();
 
 	switch (type)
 	{
 		case MISSILE_NONE: break;
 		case MISSILE_FIREBALL:
 		{
-			missiles[i].tolive = ArxDurationMs(6000);
+			missiles[i].tolive = GameDurationMs(6000);
 			missiles[i].velocity *= 0.8f;
 			
 			EERIE_LIGHT * light = dynLightCreate(missiles[i].m_light);
@@ -177,30 +177,27 @@ void ARX_MISSILES_Update() {
 	
 	ARX_PROFILE_FUNC();
 	
-	TextureContainer * tc = TC_fire; 
-
-	ArxInstant now = arxtime.now();
+	TextureContainer * tc = TC_fire;
+	
+	GameInstant now = g_gameTime.now();
 
 	for(unsigned long i(0); i < MAX_MISSILES; i++) {
 		if(missiles[i].type == MISSILE_NONE)
 			continue;
-
-		ArxDuration framediff = missiles[i].timecreation + missiles[i].tolive - now;
-
-		if(framediff < ArxDuration_ZERO) {
+		
+		GameDuration framediff3 = now - missiles[i].timecreation;
+		if(framediff3 > missiles[i].tolive) {
 			ARX_MISSILES_Kill(i);
 			continue;
 		}
-
-		ArxDuration framediff3 = now - missiles[i].timecreation;
-
+		
 		switch(missiles[i].type) {
 			case MISSILE_NONE:
 			break;
 			case MISSILE_FIREBALL: {
 				Vec3f pos;
 
-				pos = missiles[i].startpos + missiles[i].velocity * Vec3f(toMs(framediff3));
+				pos = missiles[i].startpos + missiles[i].velocity * Vec3f(toMsf(framediff3));
 				
 				EERIE_LIGHT * light = lightHandleGet(missiles[i].m_light);
 				if(light) {
@@ -250,7 +247,7 @@ void ARX_MISSILES_Update() {
 					pd->move += Vec3f(3.f, 4.f, 3.f) + Vec3f(-6.f, -12.f, -6.f) * arx::randomVec3f();
 					pd->tolive = Random::getu(500, 1000);
 					pd->tc = tc;
-					pd->siz = 12.f * toMs(missiles[i].tolive - framediff3) * (1.f / 4000);
+					pd->siz = 12.f * ((missiles[i].tolive - framediff3) / GameDurationMs(4000));
 					pd->scale = arx::randomVec(15.f, 20.f);
 					pd->m_flags = FIRE_TO_SMOKE;
 				}

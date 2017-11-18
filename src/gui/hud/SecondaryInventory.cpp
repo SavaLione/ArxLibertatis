@@ -105,7 +105,7 @@ void SecondaryInventoryCloseHudIcon::updateInput() {
 			if(io) {
 				ARX_SOUND_PlayInterface(SND_BACKPACK, Random::getf(0.9f, 1.1f));
 				g_secondaryInventoryHud.m_fadeDirection = SecondaryInventoryHud::Fade_left;
-				SendIOScriptEvent(io,SM_INVENTORY2_CLOSE);
+				SendIOScriptEvent(io, SM_INVENTORY2_CLOSE);
 				TSecondaryInventory=SecondaryInventory;
 				SecondaryInventory=NULL;
 			}
@@ -151,11 +151,10 @@ void SecondaryInventoryHud::update() {
 		if(dist > maxDist) {
 			if(m_fadeDirection != Fade_left) {
 				ARX_SOUND_PlayInterface(SND_BACKPACK, Random::getf(0.9f, 1.1f));
-				
 				m_fadeDirection = Fade_left;
-				SendIOScriptEvent(io,SM_INVENTORY2_CLOSE);
-				TSecondaryInventory=SecondaryInventory;
-				SecondaryInventory=NULL;
+				SendIOScriptEvent(io, SM_INVENTORY2_CLOSE);
+				TSecondaryInventory = SecondaryInventory;
+				SecondaryInventory = NULL;
 			} else {
 				if(player.Interface & INTER_STEAL) {
 					player.Interface &= ~INTER_STEAL;
@@ -295,10 +294,10 @@ void SecondaryInventoryHud::updateInputButtons() {
 bool SecondaryInventoryHud::containsPos(const Vec2s & pos) {
 	if(SecondaryInventory != NULL) {
 		Vec2s t;
-		t.x = pos.x + checked_range_cast<short>(m_fadePosition) - (2 * m_scale);
-		t.y = pos.y - (13 * m_scale);
-		t.x = t.x / (32 * m_scale);
-		t.y = t.y / (32 * m_scale);
+		t.x = s16(pos.x + checked_range_cast<short>(m_fadePosition) - (2 * m_scale));
+		t.y = s16(pos.y - (13 * m_scale));
+		t.x = s16(t.x / (32 * m_scale));
+		t.y = s16(t.y / (32 * m_scale));
 		
 		if(t.x < 0 || t.x >= SecondaryInventory->m_size.x)
 			return false;
@@ -315,12 +314,12 @@ bool SecondaryInventoryHud::containsPos(const Vec2s & pos) {
 Entity * SecondaryInventoryHud::getObj(const Vec2s & pos) {
 	
 	if(SecondaryInventory != NULL) {
-		short tx = pos.x + checked_range_cast<short>(m_fadePosition) - (2 * m_scale);
-		short ty = pos.y - (13 * m_scale);
+		short tx = short(pos.x + checked_range_cast<short>(m_fadePosition) - (2 * m_scale));
+		short ty = short(pos.y - (13 * m_scale));
 
 		if(tx >= 0 && ty >= 0) {
-			tx = tx / (32 * m_scale); 
-			ty = ty / (32 * m_scale); 
+			tx = short(tx / (32 * m_scale));
+			ty = short(ty / (32 * m_scale));
 
 			if(   tx >= 0
 			   && tx <= SecondaryInventory->m_size.x
@@ -391,10 +390,10 @@ void SecondaryInventoryHud::dropEntity() {
 		}
 		
 		Vec2s t = Vec2s_ZERO;
-		t.x = DANAEMouse.x + static_cast<short>(m_fadePosition) - (2 * m_scale);
-		t.y = DANAEMouse.y - (13 * m_scale);
-		t.x = t.x / (32 * m_scale);
-		t.y = t.y / (32 * m_scale);
+		t.x = s16(DANAEMouse.x + static_cast<short>(m_fadePosition) - (2 * m_scale));
+		t.y = s16(DANAEMouse.y - (13 * m_scale));
+		t.x = s16(t.x / (32 * m_scale));
+		t.y = s16(t.y / (32 * m_scale));
 		
 		Vec2s s = DRAGINTER->m_inventorySize;
 		
@@ -580,13 +579,14 @@ void SecondaryInventoryHud::close() {
 void SecondaryInventoryHud::updateFader() {
 	
 	if(m_fadeDirection != Fade_stable) {
-		float frameDelay = toMs(g_platformTime.lastFrameDuration());
+		float frameDelay = g_platformTime.lastFrameDuration() / PlatformDurationMs(3);
+		
 		if((player.Interface & INTER_COMBATMODE) || player.doingmagic >= 2 || m_fadeDirection == Fade_left) {
 			if(m_fadePosition > -160)
-				m_fadePosition -= (frameDelay * ( 1.0f / 3 )) * m_scale;
+				m_fadePosition -= frameDelay * m_scale;
 		} else {
 			if(m_fadePosition < 0)
-				m_fadePosition += m_fadeDirection * (frameDelay * ( 1.0f / 3 )) * m_scale;
+				m_fadePosition += m_fadeDirection * frameDelay * m_scale;
 		}
 		
 		if(m_fadePosition <= -160) {

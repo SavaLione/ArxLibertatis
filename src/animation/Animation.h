@@ -87,7 +87,7 @@ struct EERIE_ANIM
 	unsigned char *	voidgroups;
 	
 	EERIE_ANIM()
-		: anim_time(AnimationDuration_ZERO)
+		: anim_time(0)
 		, nb_groups(0)
 		, nb_key_frames(0)
 		, frames(NULL)
@@ -125,7 +125,7 @@ struct AnimLayer {
 	AnimLayer()
 		: cur_anim(NULL)
 		, altidx_cur(0)
-		, ctime(AnimationDuration_ZERO)
+		, ctime(0)
 		, flags(0)
 		, lastframe(-1)
 		, currentInterpolation(0.f)
@@ -183,7 +183,7 @@ void setAnimation(Entity * entity, ANIM_HANDLE * animation,
  */
 void stopAnimation(Entity * entity, size_t layer = 0);
 
-short ANIM_GetAltIdx(ANIM_HANDLE * ah,long old);
+short ANIM_GetAltIdx(ANIM_HANDLE * ah, long old);
 void ANIM_Set(AnimLayer & layer, ANIM_HANDLE * anim);
 
 Vec3f GetAnimTotalTranslate(ANIM_HANDLE * eanim, long alt_idx);
@@ -198,11 +198,11 @@ void PrepareAnim(AnimLayer & layer, AnimationDuration time, Entity *io);
 void ResetAnim(AnimLayer & layer);
 
 void AcquireLastAnim(Entity * io);
-void FinishAnim(Entity * io,ANIM_HANDLE * eanim);
+void FinishAnim(Entity * io, ANIM_HANDLE * eanim);
 
 void ARX_SOUND_PushAnimSamples();
 void ARX_SOUND_PopAnimSamples();
 
-void ReleaseAnimFromIO(Entity * io,long num);
+void ReleaseAnimFromIO(Entity * io, long num);
 
 #endif // ARX_ANIMATION_ANIMATION_H

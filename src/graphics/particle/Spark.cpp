@@ -24,7 +24,7 @@
 #include "core/Core.h"
 #include "core/GameTime.h"
 #include "graphics/Color.h"
-#include "graphics/GraphicsModes.h"
+#include "graphics/GlobalFog.h"
 #include "graphics/Math.h"
 #include "graphics/RenderBatcher.h"
 #include "math/RandomVector.h"
@@ -63,9 +63,9 @@ long ParticleSparkCount() {
 
 void ParticleSparkSpawnContinous(const Vec3f & pos, unsigned rate, SpawnSparkType type) {
 	
-	float amount = float(rate) * toMs(g_platformTime.lastFrameDuration()) * (15.f / 1000.f);
+	float amount = float(rate) * (g_platformTime.lastFrameDuration() / PlatformDurationMsf(66.666666f));
 	
-	unsigned count = std::floor(amount);
+	unsigned count = unsigned(amount);
 	if(Random::getf() < (amount - float(count))) {
 		count++;
 	}
@@ -75,7 +75,7 @@ void ParticleSparkSpawnContinous(const Vec3f & pos, unsigned rate, SpawnSparkTyp
 
 void ParticleSparkSpawn(const Vec3f & pos, unsigned int count, SpawnSparkType type) {
 	
-	if(arxtime.is_paused()) {
+	if(g_gameTime.isPaused()) {
 		return;
 	}
 	
@@ -99,7 +99,7 @@ void ParticleSparkSpawn(const Vec3f & pos, unsigned int count, SpawnSparkType ty
 		
 		g_sparkParticlesCount++;
 		
-		spark.timcreation = toMs(arxtime.now());
+		spark.timcreation = toMsi(g_gameTime.now());
 		spark.m_pos = pos + arx::randomVec(-5.f, 5.f);
 		spark.move = arx::randomVec(-6.f, 6.f);
 		spark.m_duration = len * 90 + count;
@@ -130,7 +130,7 @@ void ParticleSparkUpdate() {
 	
 	EERIE_CAMERA * cam = &subj;
 	
-	const ArxInstant now = arxtime.now();
+	const GameInstant now = g_gameTime.now();
 	
 	RenderMaterial sparkMaterial;
 	sparkMaterial.setBlendType(RenderMaterial::Additive);
@@ -142,8 +142,8 @@ void ParticleSparkUpdate() {
 			continue;
 		}
 
-		long framediff = spark.timcreation + spark.m_duration - toMs(now);
-		long framediff2 = toMs(now) - spark.timcreation;
+		long framediff = spark.timcreation + spark.m_duration - toMsi(now);
+		long framediff2 = toMsi(now) - spark.timcreation;
 		
 		if(framediff2 < 0) {
 			continue;
@@ -178,6 +178,6 @@ void ParticleSparkUpdate() {
 		worldToClipSpace(temp1, tv[1]);
 		worldToClipSpace(temp2, tv[2]);
 		
-		RenderBatcher::getInstance().add(sparkMaterial, tv);
+		g_renderBatcher.add(sparkMaterial, tv);
 	}
 }

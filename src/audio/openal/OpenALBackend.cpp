@@ -406,16 +406,16 @@ Source * OpenALBackend::createSource(SampleId sampleId, const Channel & channel)
 	
 	SampleId s_id = getSampleId(sampleId);
 	
-	if(!_sample.isValid(s_id)) {
+	if(!g_samples.isValid(s_id)) {
 		return NULL;
 	}
 	
-	Sample * sample = _sample[s_id];
+	Sample * sample = g_samples[s_id];
 	
 	OpenALSource * orig = NULL;
 	for(size_t i = 0; i < sources.size(); i++) {
 		if(sources[i] && sources[i]->getSample() == sample) {
-			orig = (OpenALSource*)sources[i];
+			orig = sources[i];
 			break;
 		}
 	}
@@ -455,7 +455,7 @@ Source * OpenALBackend::getSource(SourceId sourceId) {
 	Source * source = sources[index];
 	
 	SampleId sample = getSampleId(sourceId);
-	if(!_sample.isValid(sample) || source->getSample() != _sample[sample]) {
+	if(!g_samples.isValid(sample) || source->getSample() != g_samples[sample]) {
 		return NULL;
 	}
 	
@@ -558,7 +558,7 @@ aalError OpenALBackend::setReverbEnabled(bool enable) {
 		alGenEffects(1, &effect);
 		alEffecti(effect, AL_EFFECT_TYPE, AL_EFFECT_REVERB);
 		alGenAuxiliaryEffectSlots(1, &effectSlot);
-		AL_CHECK_ERROR_N("creating effect",
+		AL_CHECK_ERROR_C("creating effect",
 			enable = false;
 		);
 	}
@@ -629,7 +629,7 @@ aalError OpenALBackend::setListenerEnvironment(const Environment & env) {
 			           << raw ## Property << " to " << al ## Property; \
 		} \
 		alEffectf(effect, AL_REVERB_ ## Property, al ## Property); \
-		AL_CHECK_ERROR_N("setting REVERB_" << ARX_STR(Property) << " to " << al ## Property,)
+		AL_CHECK_ERROR_N("setting REVERB_" << ARX_STR(Property) << " to " << al ## Property)
 	
 	ARX_AL_REVERB_SET(ROOM_ROLLOFF_FACTOR, rolloffFactor);
 	ARX_AL_REVERB_SET(DENSITY, 1.f);

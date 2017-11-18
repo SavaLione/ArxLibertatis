@@ -35,7 +35,6 @@ class TextureContainer;
 class TextureStage;
 class Image;
 class Texture;
-class Texture2D;
 template <class Vertex> class VertexBuffer;
 
 enum BlendingFactor {
@@ -69,7 +68,7 @@ class RenderState {
 	enum Offsets {
 		Cull,
 		Fog = Cull + CullSize,
-		ColorKey,
+		AlphaCutout,
 		DepthTest,
 		DepthWrite,
 		DepthOffset,
@@ -132,18 +131,18 @@ public:
 		return get<Fog, 1>() != 0;
 	}
 	
-	void setColorKey(bool enable) {
-		set<ColorKey, 1>(enable);
+	void setAlphaCutout(bool enable) {
+		set<AlphaCutout, 1>(enable);
 	}
 	
-	RenderState colorKey(bool enable = true) const {
+	RenderState alphaCutout(bool enable = true) const {
 		RenderState copy = *this;
-		copy.setColorKey(enable);
+		copy.setAlphaCutout(enable);
 		return copy;
 	}
 	
-	bool getColorKey() const {
-		return get<ColorKey, 1>() != 0;
+	bool getAlphaCutout() const {
+		return get<AlphaCutout, 1>() != 0;
 	}
 	
 	void setDepthTest(bool enable) {
@@ -300,6 +299,12 @@ public:
 		Stream
 	};
 	
+	enum AlphaCutoutAntialising {
+		NoAlphaCutoutAA = 0,
+		FuzzyAlphaCutoutAA = 1,
+		CrispAlphaCutoutAA = 2
+	};
+	
 	Renderer();
 	virtual ~Renderer();
 	
@@ -337,13 +342,12 @@ public:
 	virtual void GetProjectionMatrix(glm::mat4x4 & matProj) const = 0;
 	
 	// Texture management
-	virtual void ReleaseAllTextures() {}
-	virtual void RestoreAllTextures() {}
+	virtual void ReleaseAllTextures() = 0;
+	virtual void RestoreAllTextures() = 0;
+	virtual void reloadColorKeyTextures() = 0;
 
 	// Factory
-	virtual Texture2D * CreateTexture2D() = 0;
-	
-	virtual void SetAlphaFunc(PixelCompareFunc func, float fef) = 0; // Ref = [0.0f, 1.0f]
+	virtual Texture * createTexture() = 0;
 	
 	// Viewport
 	virtual void SetViewport(const Rect & viewport) = 0;
@@ -364,9 +368,9 @@ public:
 	virtual void SetFillMode(FillMode mode) = 0;
 	
 	// Texturing
-	unsigned int GetTextureStageCount() const { return m_TextureStages.size(); }
-	TextureStage * GetTextureStage(unsigned int textureStage);
-	const TextureStage * GetTextureStage(unsigned int textureStage) const;
+	size_t getTextureStageCount() const { return m_TextureStages.size(); }
+	TextureStage * GetTextureStage(size_t textureStage);
+	const TextureStage * GetTextureStage(size_t textureStage) const;
 	void ResetTexture(unsigned int textureStage);
 	Texture * GetTexture(unsigned int textureStage) const;
 	void SetTexture(unsigned int textureStage, Texture * pTexture);
@@ -374,6 +378,8 @@ public:
 	
 	virtual float getMaxSupportedAnisotropy() const = 0;
 	virtual void setMaxAnisotropy(float value) = 0;
+	
+	virtual AlphaCutoutAntialising getMaxSupportedAlphaCutoutAntialiasing() const = 0;
 	
 	virtual VertexBuffer<TexturedVertex> * createVertexBufferTL(size_t capacity, BufferUsage usage) = 0;
 	virtual VertexBuffer<SMY_VERTEX> * createVertexBuffer(size_t capacity, BufferUsage usage) = 0;
@@ -447,8 +453,7 @@ inline RenderState render2D() {
 
 //! Default render state for 3D rendering
 inline RenderState render3D() {
-	// TODO only enable colorKey when needed
-	return RenderState().depthTest().depthWrite().fog().colorKey();
+	return RenderState().depthTest().depthWrite().fog();
 }
 
 #endif // ARX_GRAPHICS_RENDERER_H

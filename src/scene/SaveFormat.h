@@ -50,8 +50,8 @@ ZeniMax Media Inc., Suite 120, Rockville, Maryland 20850 USA.
 #include "gui/MiniMap.h"
 #include "game/Item.h"
 #include "game/NPC.h"
+#include "graphics/GlobalFog.h"
 #include "graphics/GraphicsFormat.h"
-#include "graphics/GraphicsModes.h"
 #include "graphics/GraphicsTypes.h"
 #include "graphics/data/Mesh.h"
 #include "graphics/data/MeshManipulation.h"
@@ -89,7 +89,7 @@ enum SavePlayerFlag {
 };
 
 
-#pragma pack(push,1)
+#pragma pack(push, 1)
 
 
 const size_t SAVED_QUEST_SLOT_SIZE = 80;
@@ -291,18 +291,18 @@ struct SavedPrecast {
 		PRECAST_STRUCT a;
 		a.typ = (typ < 0) ? SPELL_NONE : (SpellType)typ; // TODO save/load enum
 		a.level = level;
-		a.launch_time = ArxInstantMs(launch_time); // TODO save/load time
+		a.launch_time = GameInstantMs(launch_time); // TODO save/load time
 		a.flags = SpellcastFlags::load(flags); // TODO save/load flags
-		a.duration = ArxDurationMs(duration); // TODO save/load time
+		a.duration = GameDurationMs(duration); // TODO save/load time
 		return a;
 	}
 	
 	SavedPrecast & operator=(const PRECAST_STRUCT & b) {
 		typ = (b.typ == SPELL_NONE) ? -1 : b.typ;
 		level = b.level;
-		launch_time = toMs(b.launch_time); // TODO save/load time
+		launch_time = toMsi(b.launch_time); // TODO save/load time
 		flags = b.flags;
-		duration = toMs(b.duration); // TODO save/load time
+		duration = toMsi(b.duration); // TODO save/load time
 		return *this;
 	}
 	
@@ -339,8 +339,8 @@ struct ARX_CHANGELEVEL_PLAYER {
 	f32 Skill_Close_Combat;
 	f32 Skill_Defense;
 	
-	f32 Critical_Hit;
-	s32 AimTime;
+	f32 Critical_Hit; // TODO remove
+	s32 AimTime; // TODO remove
 	f32 life;
 	f32 maxlife;
 	f32 mana;
@@ -349,13 +349,13 @@ struct ARX_CHANGELEVEL_PLAYER {
 	s16 Attribute_Redistribute;
 	s16 Skill_Redistribute;
 	
-	f32 armor_class;
-	f32 resist_magic;
-	f32 resist_poison;
+	f32 armor_class; // TODO remove
+	f32 resist_magic; // TODO remove
+	f32 resist_poison; // TODO remove
 	s32 xp;
 	s32 skin;
 	u32 rune_flags;
-	f32 damages;
+	f32 damages; // TODO remove
 	f32 poison;
 	f32 hunger;
 	SavedVec3 pos;
@@ -528,7 +528,7 @@ struct SavedSpellcastData {
 		a.spell_flags = SpellcastFlags::load(spell_flags); // TODO save/load flags
 		a.spell_level = spell_level;
 		a.target = EntityHandle(target); // TODO saved internum not valid after loading
-		a.duration = ArxDurationMs(duration); // TODO save/load time
+		a.duration = GameDurationMs(duration); // TODO save/load time
 		return a;
 	}
 	
@@ -539,7 +539,7 @@ struct SavedSpellcastData {
 		spell_flags = b.spell_flags;
 		spell_level = b.spell_level;
 		target = b.target.handleData();
-		duration = toMs(b.duration); // TODO save/load time
+		duration = toMsi(b.duration); // TODO save/load time
 		return *this;
 	}
 	
@@ -798,7 +798,7 @@ struct ARX_CHANGELEVEL_NPC_IO_SAVE {
 	u8 resist_fire;
 	u8 padd;
 	
-	s16 strike_time;
+	s16 strike_time; // TODO Remove
 	s16 walk_start_time;
 	s32 aiming_start;
 	s32 npcflags;
@@ -1038,7 +1038,7 @@ struct SavedCamera {
 	SavedVec3 translatetarget;
 	s32 lastinfovalid;
 	SavedVec3 norm; //TODO Remove
-	SavedColor fadecolor;
+	SavedColor fadecolor; // TODO Remove
 	SavedRect clip;
 	f32 clipz0; //TODO Remove
 	f32 clipz1; //TODO Remove
@@ -1054,7 +1054,7 @@ struct SavedCamera {
 	
 	s32 clip3D;
 	s32 type; //TODO Remove
-	s32 bkgcolor;
+	u32 bkgcolor; // TODO Remove
 	s32 nbdrawn; //TODO Remove
 	f32 cdepth;
 	
@@ -1075,12 +1075,11 @@ struct SavedCamera {
 		a.lasttarget = lasttarget.toVec3(), a.lastpos = lastpos.toVec3();
 		a.translatetarget = translatetarget.toVec3();
 		a.lastinfovalid = lastinfovalid != 0;
-		a.fadecolor = fadecolor, a.clip = clip;
+		a.clip = clip;
 		a.center = Vec2i(centerx, centery);
 		
 		a.smoothing = smoothing;
 		
-		a.bkgcolor = Color::fromBGRA(ColorBGRA(bkgcolor));
 		a.cdepth = cdepth;
 		
 		return a;
@@ -1113,8 +1112,8 @@ struct SavedCamera {
 		lasttarget = b.lasttarget, lastpos = b.lastpos;
 		translatetarget = b.translatetarget;
 		lastinfovalid = b.lastinfovalid;
-		norm = Vec3f(0,0,0); //TODO Remove
-		fadecolor = b.fadecolor, clip = b.clip;
+		norm = Vec3f(0.f, 0.f, 0.f); //TODO Remove
+		fadecolor = Color3f::black, clip = b.clip;
 		clipz0 = 0.0f, clipz1 = 0.0f;
 		centerx = b.center.x, centery = b.center.y;
 		
@@ -1126,7 +1125,7 @@ struct SavedCamera {
 		
 		clip3D = 0;
 		type = CAM_SUBJVIEW;
-		bkgcolor = b.bkgcolor.toBGRA().t;
+		bkgcolor = Color::none.toBGRA().t;
 		nbdrawn = 0;
 		cdepth = b.cdepth;
 		

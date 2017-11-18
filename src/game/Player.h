@@ -51,6 +51,8 @@ ZeniMax Media Inc., Suite 120, Rockville, Maryland 20850 USA.
 #include <string>
 #include <vector>
 
+#include <boost/array.hpp>
+
 #include "game/Entity.h"
 #include "game/Spells.h"
 #include "game/GameTypes.h"
@@ -65,12 +67,12 @@ static const size_t MAX_EQUIPED = 12;
 
 struct ARX_INTERFACE_MEMORIZE_SPELL {
 	bool bSpell;
-	ArxInstant lTimeCreation;
+	GameInstant lTimeCreation;
 	Rune iSpellSymbols[6];
 	
 	ARX_INTERFACE_MEMORIZE_SPELL()
 		: bSpell(false)
-		, lTimeCreation(ArxInstant_ZERO)
+		, lTimeCreation(0)
 	{
 		for(size_t i = 0; i < ARRAY_SIZE(iSpellSymbols); i++) {
 			iSpellSymbols[i] = RUNE_NONE;
@@ -80,7 +82,7 @@ struct ARX_INTERFACE_MEMORIZE_SPELL {
 
 enum PlayerInterfaceFlag
 {
-	INTER_MAP          = (1<<0),
+	INTER_PLAYERBOOK   = (1<<0),
 	INTER_INVENTORY    = (1<<1),
 	INTER_INVENTORYALL = (1<<2),
 	INTER_MINIBOOK     = (1<<3),
@@ -246,7 +248,7 @@ struct ARXCHARACTER {
 	AnimationDuration m_weaponBlocked;
 	
 	// Jump Sub-data
-	ArxInstant jumpstarttime;
+	PlatformInstant jumpstarttime;
 	float jumplastposition;
 	JumpPhase jumpphase;
 	
@@ -274,7 +276,7 @@ struct ARXCHARACTER {
 	Color3f m_torchColor;
 	Entity * torch;
 	
-	EntityHandle equiped[MAX_EQUIPED]; 
+	EntityHandle equiped[MAX_EQUIPED];
 	
 	// Modifier Values (Items, curses, etc...)
 	PlayerAttribute m_attributeMod;
@@ -298,9 +300,6 @@ struct ARXCHARACTER {
 	// true (naked) Player Values
 	PlayerAttribute m_attribute;
 	PlayerSkill m_skill;
-	PlayerMisc m_misc;
-	
-	PlatformDuration AimTime;
 	
 	PlatformDuration m_aimTime;
 	
@@ -324,7 +323,7 @@ struct ARXCHARACTER {
 	}
 	
 	
-	TextureContainer * heads[5];
+	boost::array<TextureContainer *, 5> heads;
 	float poison;
 	float hunger;
 	PlayerFlags playerflags;
@@ -342,7 +341,7 @@ struct ARXCHARACTER {
 	ARXCHARACTER()
 		: m_strikeDirection(0)
 		, m_weaponBlocked(AnimationDuration::ofRaw(-1)) // FIXME inband signaling
-		, jumpstarttime(ArxInstant_ZERO)
+		, jumpstarttime(0)
 		, jumplastposition(0.f)
 		, jumpphase(NotJumping)
 		, climbing(false)
@@ -357,12 +356,11 @@ struct ARXCHARACTER {
 		, torch(NULL)
 		, m_bowAimRatio(0.f)
 		, m_strikeAimRatio(0.f)
-		, Full_AimTime(PlatformDuration_ZERO)
+		, Full_AimTime(0)
 		, Full_life(0)
 		, Full_maxlife(0)
 		, Full_maxmana(0)
-		, AimTime(PlatformDuration_ZERO)
-		, m_aimTime(PlatformDuration_ZERO)
+		, m_aimTime(0)
 		, Attribute_Redistribute(0)
 		, Skill_Redistribute(0)
 		, level(0)
@@ -378,9 +376,7 @@ struct ARXCHARACTER {
 		, m_cheatQuickGenButtonClickCount(0)
 		, m_cheatPnuxActive(0)
 	{
-		for(size_t i = 0; i < ARRAY_SIZE(heads); i++) {
-			heads[i] = NULL;
-		}
+		heads.fill(NULL);
 	}
 	
 	static float baseRadius() { return 52.f; }
@@ -398,7 +394,7 @@ struct ARXCHARACTER {
 		return Cylinder(basePosition(), baseRadius(), baseHeight());
 	}
 	
-	bool isAiming() { return m_aimTime > PlatformDuration_ZERO; }
+	bool isAiming() { return m_aimTime > 0; }
 	
 };
 
@@ -414,7 +410,7 @@ extern std::vector<std::string> g_playerKeyring;
 extern bool BLOCK_PLAYER_CONTROLS;
 extern bool USE_PLAYERCOLLISIONS;
 extern bool WILLRETURNTOCOMBATMODE;
-extern ArxInstant LAST_JUMP_ENDTIME;
+extern PlatformInstant LAST_JUMP_ENDTIME;
 
 void ARX_PLAYER_MakeSpHero();
 void ARX_PLAYER_LoadHeroAnimsAndMesh();
@@ -457,7 +453,7 @@ void ARX_PLAYER_Rune_Add_All();
 void ARX_PLAYER_Restore_Skin();
 float GetPlayerStealth();
 
-void ARX_GAME_Reset(long type = 0);
+void ARX_GAME_Reset();
 long GetXPforLevel(short level);
 bool ARX_PLAYER_IsInFightMode();
 void ARX_PLAYER_Invulnerability(long flag);

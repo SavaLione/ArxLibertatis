@@ -65,13 +65,11 @@ public:
 private:
 	LightHandle m_light;
 	
-	ArxDuration m_elapsed;
-
 	Vec3f eCurPos;
 	Vec3f eMove;
 	bool bExplo;
 	
-	ArxDuration m_createBallDuration;
+	GameDuration m_createBallDuration;
 };
 
 class CreateFoodSpell : public SpellBase {
@@ -85,7 +83,6 @@ public:
 private:
 	Vec3f m_pos;
 	ParticleSystem m_particles;
-	ArxDuration m_elapsed;
 };
 
 
@@ -98,10 +95,7 @@ public:
 	void Update();
 	
 private:
-	ArxDuration m_elapsed;
 	int iNumber;
-	int iMax;
-	float fColor;
 	TextureContainer * tex_p1;
 	TextureContainer * tex_p2;
 	

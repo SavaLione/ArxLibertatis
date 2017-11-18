@@ -119,7 +119,7 @@ static bool EERIECreateSprite(TexturedQuad & sprite, const Vec3f & in, float siz
 			sprite.v[2].p = Vec3f(maxs.x, maxs.y, p.z) * out.w;
 			sprite.v[3].p = Vec3f(mins.x, maxs.y, p.z) * out.w;
 		} else {
-			for(long i=0;i<4;i++) {
+			for(long i = 0; i < 4; i++) {
 				float tt = glm::radians(MAKEANGLE(rot+90.f*i+45+90));
 				sprite.v[i].p.x = std::sin(tt) * t + p.x;
 				sprite.v[i].p.y = std::cos(tt) * t + p.y;
@@ -138,7 +138,7 @@ void EERIEAddSprite(const RenderMaterial & mat, const Vec3f & in, float siz, Col
 	TexturedQuad s;
 
 	if(EERIECreateSprite(s, in, siz, color, Zpos, rot)) {
-		RenderBatcher::getInstance().add(mat, s);
+		g_renderBatcher.add(mat, s);
 	}
 }
 
@@ -168,7 +168,7 @@ static void CreateBitmap(TexturedQuad & s, Rectf rect, float z, TextureContainer
 void EERIEAddBitmap(const RenderMaterial & mat, const Vec3f & p, float sx, float sy, TextureContainer * tex, Color color) {
 	TexturedQuad s;
 	CreateBitmap(s, Rectf(Vec2f(p.x, p.y), sx, sy), p.z, tex, color);
-	RenderBatcher::getInstance().add(mat, s);
+	g_renderBatcher.add(mat, s);
 }
 
 void EERIEDrawBitmap(const Rectf & rect, float z, TextureContainer * tex, Color color) {
@@ -216,7 +216,7 @@ void EERIEDrawBitmap2DecalY(Rectf rect, float z, TextureContainer * tex, Color c
 	rect.top = rect.top + _fDeltaY * rect.height();
 	
 	Vec2f uv = (tex) ? tex->uv : Vec2f_ZERO;
-	float sv = uv.y * _fDeltaY;	
+	float sv = uv.y * _fDeltaY;
 	ColorRGBA col = color.toRGBA();
 	
 	Vec2f uv1(0.f, sv);

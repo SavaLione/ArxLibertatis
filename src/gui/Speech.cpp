@@ -86,35 +86,37 @@ extern bool EXTERNALVIEW;
 extern bool REQUEST_SPEECH_SKIP;
 
 ARX_SPEECH aspeech[MAX_ASPEECH];
-Notification speech[MAX_SPEECH];
+Notification g_speech[MAX_SPEECH];
 
 
 void ARX_SPEECH_Init() {
 
 	for(size_t i = 0 ; i < MAX_SPEECH ; i++ )
-		speech[i].clear();
+		g_speech[i].clear();
 }
 
 static void ARX_SPEECH_MoveUp() {
-
-	if(speech[0].timecreation != ArxInstant_ZERO)
-		speech[0].text.clear();
-
+	
+	if(g_speech[0].timecreation != 0) {
+		g_speech[0].text.clear();
+	}
+	
 	for(size_t j = 0; j < MAX_SPEECH - 1; j++) {
-		speech[j] = speech[j+1];
+		g_speech[j] = g_speech[j+1];
 	}
 
-	speech[MAX_SPEECH-1].clear();
+	g_speech[MAX_SPEECH-1].clear();
 }
 
 void ARX_SPEECH_ClearAll()
 {
 	for(size_t i = 0; i < MAX_SPEECH; i++) {
-
-		if(speech[i].timecreation == ArxInstant_ZERO)
+		
+		if(g_speech[i].timecreation == 0) {
 			continue;
-
-		speech[i].clear();
+		}
+		
+		g_speech[i].clear();
 	}
 }
 
@@ -123,24 +125,22 @@ void ARX_SPEECH_Add(const std::string & text) {
 	if(text.empty())
 		return;
 	
-	ArxInstant now = arxtime.now();
-	if(now == ArxInstant_ZERO) {
-		now = ArxInstantMs(1);
-	}
+	GameInstant now = std::max(g_gameTime.now(), GameInstantMs(1));
 	
-	if(speech[MAX_SPEECH - 1].timecreation != ArxInstant_ZERO) {
+	if(g_speech[MAX_SPEECH - 1].timecreation != 0) {
 		ARX_SPEECH_MoveUp();
 	}
 	
 	for(size_t i = 0; i < MAX_SPEECH; i++) {
-
-		if(speech[i].timecreation != ArxInstant_ZERO)
+		
+		if(g_speech[i].timecreation != 0) {
 			continue;
+		}
 		
 		// Sets creation time
-		speech[i].timecreation = now;
-		speech[i].duration = ArxDurationMs(2000 + text.length() * 60);
-		speech[i].text = text;
+		g_speech[i].timecreation = now;
+		g_speech[i].duration = GameDurationMs(2000 + text.length() * 60);
+		g_speech[i].text = text;
 		return;
 	}
 	
@@ -150,11 +150,12 @@ void ARX_SPEECH_Add(const std::string & text) {
 static bool isLastSpeech(size_t index) {
 	
 	for(size_t i = index + 1; i < MAX_SPEECH; i++) {
-
-		if(speech[i].timecreation == ArxInstant_ZERO)
+		
+		if(g_speech[i].timecreation == 0) {
 			continue;
-
-		if(!speech[i].text.empty())
+		}
+		
+		if(!g_speech[i].text.empty())
 			return false;
 	}
 	
@@ -174,7 +175,7 @@ static void ARX_SPEECH_Render() {
 	
 	for(size_t i = 0; i < MAX_SPEECH; i++) {
 		
-		if(speech[i].timecreation == ArxInstant_ZERO || speech[i].text.empty()) {
+		if(g_speech[i].timecreation == 0 || g_speech[i].text.empty()) {
 			continue;
 		}
 		
@@ -187,7 +188,7 @@ static void ARX_SPEECH_Render() {
 		EERIEDrawBitmap(rect, .00001f, arx_logo_tc, Color::white);
 		
 		igrec += ARX_UNICODE_DrawTextInRect(hFontInBook, Vec2f(120.f * g_sizeRatio.x, igrec), 500 * g_sizeRatio.x,
-		                           ' ' + speech[i].text, Color::white, NULL);
+		                           ' ' + g_speech[i].text, Color::white, NULL);
 		
 		if(igrec > iEnd && !isLastSpeech(i)) {
 			ARX_SPEECH_MoveUp();
@@ -203,11 +204,13 @@ void ARX_SPEECH_Check()
 	long exist = 0;
 
 	for(size_t i = 0; i < MAX_SPEECH; i++) {
-		if(speech[i].timecreation == ArxInstant_ZERO)
-			continue;
 		
-		ArxDuration elapsed = arxtime.now() - speech[i].timecreation;
-		if(elapsed > speech[i].duration) {
+		if(g_speech[i].timecreation == 0) {
+			continue;
+		}
+		
+		GameDuration elapsed = g_gameTime.now() - g_speech[i].timecreation;
+		if(elapsed > g_speech[i].duration) {
 			ARX_SPEECH_MoveUp();
 			i--;
 		} else {
@@ -247,7 +250,7 @@ static void ARX_CONVERSATION_CheckAcceleratedSpeech() {
 	if(REQUEST_SPEECH_SKIP) {
 		for(size_t i = 0; i < MAX_ASPEECH; i++) {
 			if((aspeech[i].exist) && !(aspeech[i].flags & ARX_SPEECH_FLAG_UNBREAKABLE)) {
-				aspeech[i].duration = ArxDuration_ZERO;
+				aspeech[i].duration = 0;
 			}
 		}
 		REQUEST_SPEECH_SKIP = false;
@@ -341,9 +344,9 @@ long ARX_SPEECH_AddSpeech(Entity * io, const std::string & data, long mood,
 	}
 	
 	aspeech[num].exist = 1;
-	aspeech[num].time_creation = arxtime.now();
+	aspeech[num].time_creation = g_gameTime.now();
 	aspeech[num].io = io; // can be NULL
-	aspeech[num].duration = ArxDurationMs(2000); // Minimum value
+	aspeech[num].duration = GameDurationMs(2000); // Minimum value
 	aspeech[num].flags = flags;
 	aspeech[num].sample = audio::INVALID_ID;
 	aspeech[num].fDeltaY = 0.f;
@@ -359,7 +362,7 @@ long ARX_SPEECH_AddSpeech(Entity * io, const std::string & data, long mood,
 		
 		// For non-conversation speech choose a random variant
 		
-		long count = getLocalisedKeyCount(data);  
+		long count = getLocalisedKeyCount(data);
 		long variant = 1;
 		
 		// TODO For some samples there are no corresponding entries
@@ -388,7 +391,7 @@ long ARX_SPEECH_AddSpeech(Entity * io, const std::string & data, long mood,
 		io->lastspeechflag = 0;
 		aspeech[num].text.clear();
 		aspeech[num].text = _output;
-		aspeech[num].duration = std::max(aspeech[num].duration, ArxDurationMs((strlen(_output.c_str()) + 1) * 100));
+		aspeech[num].duration = std::max(aspeech[num].duration, GameDurationMs(s64(_output.length() + 1) * 100));
 		
 		sample = data;
 	}
@@ -404,19 +407,19 @@ long ARX_SPEECH_AddSpeech(Entity * io, const std::string & data, long mood,
 	aspeech[num].duration = ARX_SOUND_GetDuration(aspeech[num].sample);
 
 	if ((io->ioflags & IO_NPC) && !(aspeech[num].flags & ARX_SPEECH_FLAG_OFFVOICE)) {
-		float fDiv = toMs(aspeech[num].duration) / io->_npcdata->speakpitch;
-		aspeech[num].duration = ArxDurationMs(fDiv);
+		float fDiv = toMsf(aspeech[num].duration) / io->_npcdata->speakpitch;
+		aspeech[num].duration = GameDurationMsf(fDiv);
 	}
 
-	if (aspeech[num].duration < ArxDurationMs(500))
-		aspeech[num].duration = ArxDurationMs(2000);
+	if (aspeech[num].duration < GameDurationMs(500))
+		aspeech[num].duration = GameDurationMs(2000);
 	
 	return num;
 }
 
 void ARX_SPEECH_Update() {
 	
-	ArxInstant now = arxtime.now();
+	GameInstant now = g_gameTime.now();
 
 	if(cinematicBorder.isActive() || BLOCK_PLAYER_CONTROLS)
 		ARX_CONVERSATION_CheckAcceleratedSpeech();
@@ -484,7 +487,7 @@ void ARX_SPEECH_Update() {
 		float fDepY				=	((float)g_size.height()) - fStartYY + fStartY - speech->fDeltaY + sSize.y;
 		float fZoneClippY		=	fDepY + speech->fDeltaY;
 
-		float fAdd = fZoneClippY + fZoneClippHeight ;
+		float fAdd = fZoneClippY + fZoneClippHeight;
 
 		Rect::Num y = checked_range_cast<Rect::Num>(fZoneClippY);
 		Rect::Num h = checked_range_cast<Rect::Num>(fAdd);
@@ -519,24 +522,25 @@ void ARX_SPEECH_Update() {
 			float fDTime;
 
 			if(speech->sample) {
-				ArxDuration duration = ARX_SOUND_GetDuration(speech->sample);
-				if(duration == ArxDuration_ZERO) {
-					duration = ArxDurationMs(4000);
+				
+				GameDuration duration = ARX_SOUND_GetDuration(speech->sample);
+				if(duration == 0) {
+					duration = GameDurationMs(4000);
 				}
-
-				fDTime = (height * g_framedelay) / toMs(duration); //speech->duration;
+				
+				fDTime = height * (g_gameTime.lastFrameDuration() / duration);
 				float fTimeOneLine = sSize.y * fDTime;
 
 				if(speech->iTimeScroll >= fTimeOneLine) {
 					float fResteLine = sSize.y - speech->fPixelScroll;
-					float fTimePlus = (fResteLine * g_framedelay) / toMs(duration);
+					float fTimePlus = fResteLine * (g_gameTime.lastFrameDuration() / duration);
 					fDTime -= fTimePlus;
 					speech->fPixelScroll = 0.f;
 					speech->iTimeScroll = 0;
 				}
 				speech->iTimeScroll	+= checked_range_cast<int>(g_framedelay);
 			} else {
-				fDTime = (height * g_framedelay) / 4000.0f;
+				fDTime = height * (g_gameTime.lastFrameDuration() / GameDurationMs(4000));
 			}
 
 			speech->fDeltaY			+= fDTime;

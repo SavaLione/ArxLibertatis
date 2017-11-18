@@ -71,7 +71,7 @@ public:
 	
 	/*!
 	 * Set the panning of this source.
-	 * \param pitch The new source panning. The pan will be clamped to the range [-1,1].
+	 * \param pan The new source panning. The pan will be clamped to the range [-1,1].
 	 */
 	virtual aalError setPan(float pan) = 0;
 	
@@ -81,12 +81,6 @@ public:
 	virtual aalError setCone(const SourceCone & cone) = 0;
 	virtual aalError setFalloff(const SourceFalloff & falloff) = 0;
 	aalError setMixer(MixerId mixer);
-	
-	/*!
-	 * Get the current play position in the sample.
-	 * Updates to the return value may be deferred to calles to the update() methos.
-	 */
-	size_t getTime(TimeUnit unit = UNIT_MS) const;
 	
 	/*!
 	 * Play the source. A source that is already playing is not stopped / rewinded, but the playCount increased by the provided amount.
@@ -114,7 +108,7 @@ public:
 	 */
 	virtual aalError updateVolume() = 0;
 	
-	void addCallback(Callback * callback, size_t time, TimeUnit unit = UNIT_MS);
+	void addCallback(Callback * callback, size_t position);
 	
 protected:
 	

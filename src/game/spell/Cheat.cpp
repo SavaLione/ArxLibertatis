@@ -58,7 +58,7 @@ static long cur_sos = 0;
 static long cur_console = 0;
 
 long cur_mega=0;
-static PlatformInstant sp_max_start = PlatformInstant_ZERO;
+static PlatformInstant sp_max_start = 0;
 long sp_wep=0;
 short uw_mode=0;
 
@@ -72,14 +72,14 @@ static std::string sp_max_ch;
 
 void CheatDrawText() {
 	
-	if(sp_max_start == PlatformInstant_ZERO) {
+	if(sp_max_start == 0) {
 		return;
 	}
 	
 	PlatformDuration elapsed = g_platformTime.frameStart() - sp_max_start;
 	
 	if(elapsed < PlatformDurationMs(20000)) {
-		float modi = float(toMs(PlatformDurationMs(20000) - elapsed)) * ( 1.0f / 2000 ) * ( 1.0f / 10 );
+		float modi = (PlatformDurationMs(20000) - elapsed) / PlatformDurationMs(2000) * ( 1.0f / 10 );
 		float sizX = 16;
 		
 		Vec2f p = Vec2f(g_size.center());
@@ -88,11 +88,11 @@ void CheatDrawText() {
 		for(size_t i = 0; i < sp_max_ch.length(); i++) {
 			Vec2f d = p + Vec2f(sizX * i, sp_max_y[i]);
 			
-			sp_max_y[i] = std::sin(d.x + toMs(elapsed) * (1.0f / 100)) * 30.f * modi;
+			sp_max_y[i] = std::sin(d.x + elapsed / PlatformDurationMs(100)) * 30.f * modi;
 			std::string tex(1, sp_max_ch[i]);
 			
-			UNICODE_ARXDrawTextCenter(hFontInBook, d + Vec2f(-1,-1), tex, Color::none);
-			UNICODE_ARXDrawTextCenter(hFontInBook, d + Vec2f( 1, 1), tex, Color::none);
+			UNICODE_ARXDrawTextCenter(hFontInBook, d + Vec2f(-1, -1), tex, Color::none);
+			UNICODE_ARXDrawTextCenter(hFontInBook, d + Vec2f(1, 1), tex, Color::none);
 			UNICODE_ARXDrawTextCenter(hFontInBook, d, tex, sp_max_col[i]);
 		}
 	}
@@ -135,7 +135,7 @@ static void MakeSpCol() {
 
 void CheatReset() {
 	
-	sp_max_start = PlatformInstant_ZERO;
+	sp_max_start = 0;
 	
 	sp_arm = 0;
 	cur_arm = 0;
@@ -353,7 +353,7 @@ static void ApplySPMax() {
 		ARX_SPEECH_Add(text);
 		player.Attribute_Redistribute+=10;
 		player.Skill_Redistribute+=50;
-		player.level = std::max(short(player.level), short(10));
+		player.level = std::max(player.level, short(10));
 		player.xp=GetXPforLevel(10);
 	} else {
 		TextureContainer * tcm;

@@ -68,17 +68,19 @@ struct FLARETC
 static FLARETC g_magicFlareTextures;
 
 void MagicFlareLoadTextures() {
-
-	g_magicFlareTextures.lumignon=	TextureContainer::LoadUI("graph/particles/lumignon");
-	g_magicFlareTextures.lumignon2=	TextureContainer::LoadUI("graph/particles/lumignon2");
-	g_magicFlareTextures.plasm=		TextureContainer::LoadUI("graph/particles/plasm");
-
+	
+	TextureContainer::TCFlags flags = TextureContainer::NoColorKey;
+	
+	g_magicFlareTextures.lumignon = TextureContainer::LoadUI("graph/particles/lumignon", flags);
+	g_magicFlareTextures.lumignon2 = TextureContainer::LoadUI("graph/particles/lumignon2", flags);
+	g_magicFlareTextures.plasm = TextureContainer::LoadUI("graph/particles/plasm", flags);
+	
 	char temp[256];
-
 	for(long i = 1; i < 10; i++) {
-		sprintf(temp,"graph/particles/shine%ld", i);
-		g_magicFlareTextures.shine[i]=TextureContainer::LoadUI(temp);
+		sprintf(temp, "graph/particles/shine%ld", i);
+		g_magicFlareTextures.shine[i] = TextureContainer::LoadUI(temp, flags);
 	}
+	
 }
 
 static short shinum = 1;
@@ -120,7 +122,7 @@ static void removeFlare(MagicFlare & flare) {
 
 	lightHandleDestroy(flare.dynlight);
 	
-	flare.tolive = PlatformDuration_ZERO;
+	flare.tolive = 0;
 	flare.exist = 0;
 	g_magicFlaresCount--;
 	
@@ -192,8 +194,8 @@ void AddFlare(const Vec2f & pos, float sm, short typ, Entity * io, bool bookDraw
 			flare.p += angleToVectorXZ(io->angle.getYaw() + vx) * 100.f;
 			flare.p.y += std::sin(glm::radians(MAKEANGLE(io->angle.getPitch() + vy))) * 100.f - 150.f;
 		} else {
-			flare.p.x = 1.0f  * float(pos.x - (g_size.width()  / 2)) * 156.f / (640.f * g_sizeRatio.y);
-			flare.p.y = 0.75f * float(pos.y - (g_size.height() / 2)) * 156.f / (480.f * g_sizeRatio.y);
+			flare.p.x = 1.0f  * (pos.x - float(g_size.width()  / 2)) * 156.f / (640.f * g_sizeRatio.y);
+			flare.p.y = 0.75f * (pos.y - float(g_size.height() / 2)) * 156.f / (480.f * g_sizeRatio.y);
 			flare.p.z = 75.f;
 			float temp = (flare.p.y * -ACTIVECAM->orgTrans.xsin) + (flare.p.z * ACTIVECAM->orgTrans.xcos);
 			flare.p.y = (flare.p.y * ACTIVECAM->orgTrans.xcos) - (-flare.p.z * ACTIVECAM->orgTrans.xsin);
@@ -227,20 +229,20 @@ void AddFlare(const Vec2f & pos, float sm, short typ, Entity * io, bool bookDraw
 		if(zz < 0.2f) {
 			flare.type = 2;
 			flare.size = Random::getf(42.f, 84.f);
-			flare.tolive = PlatformDurationMs(Random::getf(800.f, 1600.f) * FLARE_MUL);
+			flare.tolive = PlatformDurationMsf(Random::getf(800.f, 1600.f) * FLARE_MUL);
 		} else if(zz < 0.5f) {
 			flare.type = 3;
 			flare.size = Random::getf(16.f, 68.f);
-			flare.tolive = PlatformDurationMs(Random::getf(800.f, 1600.f) * FLARE_MUL);
+			flare.tolive = PlatformDurationMsf(Random::getf(800.f, 1600.f) * FLARE_MUL);
 		} else {
 			flare.type = 1;
 			flare.size = Random::getf(32.f, 56.f) * sm;
-			flare.tolive = PlatformDurationMs(Random::getf(1700.f, 2200.f) * FLARE_MUL);
+			flare.tolive = PlatformDurationMsf(Random::getf(1700.f, 2200.f) * FLARE_MUL);
 		}
 	} else {
 		flare.type = (Random::getf() > 0.8f) ? 1 : 4;
 		flare.size = Random::getf(64.f, 102.f) * sm;
-		flare.tolive = PlatformDurationMs(Random::getf(1700.f, 2200.f) * FLARE_MUL);
+		flare.tolive = PlatformDurationMsf(Random::getf(1700.f, 2200.f) * FLARE_MUL);
 	}
 
 	flare.dynlight = LightHandle();
@@ -310,7 +312,7 @@ void FlareLine(Vec2f tmpPos0, Vec2f tmpPos1, Entity * io) {
 			long z = Random::get(0, FLARELINERND);
 			z += FLARELINESTEP;
 			if(!io) {
-				z *= g_sizeRatio.y;
+				z = long(z * g_sizeRatio.y);
 			}
 			i += z;
 			tmpPos0.y += m * z;
@@ -330,7 +332,7 @@ void FlareLine(Vec2f tmpPos0, Vec2f tmpPos1, Entity * io) {
 			long z = Random::get(0, FLARELINERND);
 			z += FLARELINESTEP;
 			if(!io) {
-				z *= g_sizeRatio.y;
+				z = long(z * g_sizeRatio.y);
 			}
 			i += z;
 			tmpPos0.x += m * z;
@@ -387,7 +389,7 @@ void ARX_MAGICAL_FLARES_Update() {
 				flare.tolive -= diff * 6;
 			}
 
-			float z = toMs(flare.tolive) * 0.00025f;
+			float z = flare.tolive / PlatformDurationMs(4000);
 			float size;
 			if(flare.type == 1) {
 				size = flare.size * 2 * z;
@@ -397,7 +399,7 @@ void ARX_MAGICAL_FLARES_Update() {
 				size = flare.size;
 			}
 
-			if(flare.tolive <= PlatformDuration_ZERO || flare.pos.y < -64.f || size < 3.f) {
+			if(flare.tolive <= 0 || flare.pos.y < -64.f || size < 3.f) {
 				removeFlare(flare);
 				continue;
 			}

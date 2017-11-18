@@ -181,11 +181,10 @@ void ParticleSystem::SetParticleParams(Particle * pP) {
 	pP->p3Pos *= m_parameters.m_pos;
 	
 	float fTTL = m_parameters.m_life + Random::getf() * m_parameters.m_lifeRandom;
-	pP->m_timeToLive = ArxDurationMs(fTTL);
-	pP->fOneOnTTL = 1.0f / toMs(pP->m_timeToLive);
-
+	pP->m_timeToLive = GameDurationMsf(fTTL);
+	
 	float fAngleX = Random::getf() * m_parameters.m_angle; //*0.5f;
- 
+	
 	Vec3f vv1, vvz;
 	
 	// ici modifs ----------------------------------
@@ -246,12 +245,13 @@ bool ParticleSystem::IsAlive() {
 	return true;
 }
 
-void ParticleSystem::Update(ArxDuration delta) {
-
-	if(arxtime.is_paused())
+void ParticleSystem::Update(GameDuration delta) {
+	
+	if(g_gameTime.isPaused()) {
 		return;
-
-	float fTimeSec = toMs(delta) * ( 1.0f / 1000 );
+	}
+	
+	float fTimeSec = delta / GameDurationMs(1000);
 	
 	iParticleNbAlive = 0;
 	
@@ -272,7 +272,7 @@ void ParticleSystem::Update(ArxDuration delta) {
 				pP->Regen();
 				SetParticleParams(pP);
 				pP->Validate();
-				pP->Update(ArxDuration_ZERO);
+				pP->Update(0);
 				iParticleNbAlive++;
 				++i;
 			}
@@ -291,7 +291,7 @@ void ParticleSystem::Update(ArxDuration delta) {
 			Particle * pP  = new Particle();
 			SetParticleParams(pP);
 			pP->Validate();
-			pP->Update(ArxDuration_ZERO);
+			pP->Update(0);
 			listParticle.insert(listParticle.end(), pP);
 			iParticleNbAlive++;
 		}
@@ -325,7 +325,7 @@ void ParticleSystem::Render() {
 				inumtex = p->iTexNum;
 
 				if(iTexTime == 0) {
-					float fNbTex = (toMs(p->m_age) * p->fOneOnTTL) * (iNbTex);
+					float fNbTex = (p->m_age / p->m_timeToLive) * (iNbTex);
 
 					inumtex = checked_range_cast<int>(fNbTex);
 					if(inumtex >= iNbTex) {
@@ -352,15 +352,15 @@ void ParticleSystem::Render() {
 			Vec3f p3pos;
 			p3pos = p->p3Pos;
 			p3pos += m_nextPosition;
-            
+			
 			mat.setTexture(tex_tab[inumtex]);
 			
 			if(m_parameters.m_rotation != 0) {
 				float fRot;
 				if(p->iRot == 1)
-					fRot = (m_parameters.m_rotation) * toMs(p->m_age) + p->fRotStart;
+					fRot = (m_parameters.m_rotation) * toMsf(p->m_age) + p->fRotStart;
 				else
-					fRot = (-m_parameters.m_rotation) * toMs(p->m_age) + p->fRotStart;
+					fRot = (-m_parameters.m_rotation) * toMsf(p->m_age) + p->fRotStart;
 
 				float size = std::max(p->fSize, 0.f);
 				
