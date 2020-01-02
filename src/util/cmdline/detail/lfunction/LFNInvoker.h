@@ -1,5 +1,5 @@
 /*
- * Copyright 2013-2014 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2013-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -66,6 +66,8 @@ struct lfn_invoker<void(BOOST_PP_ENUM_PARAMS(N, ARG))> {
 		function(BOOST_PP_REPEAT_FROM_TO(0, N, BOOST_COMMAND_LINE_LFN_INVOKER, ~));
 		
 		#undef BOOST_COMMAND_LINE_LFN_INVOKER
+		
+		ARX_UNUSED(args);
 	}
 };
 

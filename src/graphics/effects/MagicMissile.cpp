@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2017 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -68,32 +68,22 @@ ZeniMax Media Inc., Suite 120, Rockville, Maryland 20850 USA.
 #include "scene/Object.h"
 #include "scene/Interactive.h"
 
-
 CMagicMissile::CMagicMissile()
-	: CSpellFx()
-	, bExplo(false)
+	: bExplo(false)
 	, bMove(true)
-	, eCurPos()
-	, lightIntensityFactor()
-	, iLength()
-	, iBezierPrecision()
-	, fTrail()
-	, snd_loop()
+	, eCurPos(0.f)
+	, m_trailColor(Color3f(0.9f, 0.9f, 0.7f) + Color3f(0.1f, 0.1f, 0.3f) * randomColor3f())
+	, m_projectileColor(0.3f, 0.3f, 0.5f)
+	, tex_mm(TextureContainer::Load("graph/obj3d/textures/(fx)_bandelette_blue"))
+	, iLength(0)
+	, iBezierPrecision(0)
+	, fTrail(0.f)
 {
 	SetDuration(GameDurationMs(2000));
 	m_elapsed = m_duration + GameDurationMs(1);
-	
-	m_trailColor = Color3f(0.9f, 0.9f, 0.7f) + Color3f(0.1f, 0.1f, 0.3f) * randomColor3f();
-	m_projectileColor = Color3f(0.3f, 0.3f, 0.5f);
-	tex_mm = TextureContainer::Load("graph/obj3d/textures/(fx)_bandelette_blue");
 }
 
-CMagicMissile::~CMagicMissile() {
-
-	lLightId = LightHandle();
-
-	ARX_SOUND_Stop(snd_loop);
-}
+CMagicMissile::~CMagicMissile() { }
 
 void CMagicMissile::Create(const Vec3f & startPos, const Anglef & angles)
 {
@@ -101,10 +91,10 @@ void CMagicMissile::Create(const Vec3f & startPos, const Anglef & angles)
 	
 	eCurPos = startPos;
 	
-	short i = 40.f;
+	size_t i = 40;
 	Vec3f endPos = startPos;
-	endPos += angleToVectorXZ(angles.getYaw()) * (50.f * i);
-	endPos.y += std::sin(glm::radians(MAKEANGLE(angles.getPitch()))) * (50.f * i);
+	endPos += angleToVectorXZ(angles.getYaw()) * (50.f * float(i));
+	endPos.y += std::sin(glm::radians(MAKEANGLE(angles.getPitch()))) * (50.f * float(i));
 	
 	pathways[0] = startPos;
 	pathways[5] = endPos;
@@ -122,10 +112,6 @@ void CMagicMissile::Create(const Vec3f & startPos, const Anglef & angles)
 	iBezierPrecision = BEZIERPrecision;
 	bExplo = false;
 	bMove = true;
-
-	ARX_SOUND_PlaySFX(SND_SPELL_MM_CREATE, &eCurPos);
-	ARX_SOUND_PlaySFX(SND_SPELL_MM_LAUNCH, &eCurPos);
-	snd_loop = ARX_SOUND_PlaySFX(SND_SPELL_MM_LOOP, &eCurPos, 1.0F, ARX_SOUND_PLAY_LOOPED);
 }
 
 void CMagicMissile::SetTTL(GameDuration aulTTL)
@@ -134,28 +120,18 @@ void CMagicMissile::SetTTL(GameDuration aulTTL)
 	m_duration = std::min(m_elapsed + aulTTL, m_duration);
 	SetDuration(m_duration);
 	m_elapsed = t;
-	
-	lLightId = LightHandle();
 }
 
 void CMagicMissile::Update(GameDuration timeDelta)
 {
-	ARX_SOUND_RefreshPosition(snd_loop, eCurPos);
-
 	m_elapsed += timeDelta;
-
-	if(m_elapsed >= m_duration)
-		lightIntensityFactor = 0.f;
-	else
-		lightIntensityFactor = Random::getf(0.5f, 1.0f);
 }
 
 void CMagicMissile::Render() {
 	
-	Vec3f lastpos, newpos;
-	
-	if(m_elapsed >= m_duration)
+	if(m_elapsed >= m_duration) {
 		return;
+	}
 	
 	RenderMaterial mat;
 	mat.setCulling(CullNone);
@@ -169,7 +145,8 @@ void CMagicMissile::Render() {
 		fTrail = (m_elapsed / m_duration) * (iBezierPrecision + 2) * 5;
 	}
 	
-	newpos = lastpos = pathways[0];
+	Vec3f lastpos = pathways[0];
+	Vec3f newpos = pathways[0];
 	
 	for(int i = 0; i < 5; i++) {
 		
@@ -187,33 +164,19 @@ void CMagicMissile::Render() {
 			newpos = arx::catmullRom(v1, v2, v3, v4, t);
 
 			if(!((fTrail - (i * iBezierPrecision + toto)) > iLength)) {
-				float c;
-
-				if(fTrail < iLength) {
-					c = 1.0f - ((fTrail - (i * iBezierPrecision + toto)) / fTrail);
+				
+				float fsize = 1.f - (fTrail - i * iBezierPrecision + toto) / std::min(fTrail, float(iLength));
+				float alpha = std::max(fsize - 0.2f, 0.2f);
+				Color color(m_trailColor * (glm::clamp(fsize + Random::getf(-0.1f, 0.1f), 0.f, 1.f) * alpha));
+				
+				if(fsize < 0.5f) {
+					fsize = fsize * 6.f;
 				} else {
-					c = 1.0f - ((fTrail - (i * iBezierPrecision + toto)) / (float)iLength);
+					fsize = (1.f - fsize + 0.5f) * 3.f;
 				}
-
-				float fsize = c;
-				float alpha = c - 0.2f;
-
-				if(alpha < 0.2f)
-					alpha = 0.2f;
-
-				c += Random::getf(-0.1f, 0.1f);
 				
-				c = glm::clamp(c, 0.f, 1.f);
-				
-				Color color = (m_trailColor * (c * alpha)).to<u8>();
-
-				if(fsize < 0.5f)
-					fsize = fsize * 2 * 3;
-				else
-					fsize = (1.0f - fsize + 0.5f) * 2 * (3 * 0.5f);
-
-				float fs = fsize * 6 + Random::getf(0.f, 0.3f);
-				float fe = fsize * 6 + Random::getf(0.f, 0.3f);
+				float fs = fsize * 6.f + Random::getf(0.f, 0.3f);
+				float fe = fsize * 6.f + Random::getf(0.f, 0.3f);
 				Draw3DLineTexNew(mat, lastpos, newpos, color, color, fs, fe);
 			}
 
@@ -244,13 +207,11 @@ void CMagicMissile::Render() {
 	if(stiteangle.getRoll() < 0)
 		stiteangle.setRoll(stiteangle.getRoll() + 360.0f);
 
-	Draw3DObject(smissile, stiteangle, eCurPos, Vec3f_ONE, m_projectileColor, mat);
+	Draw3DObject(smissile, stiteangle, eCurPos, Vec3f(1.f), m_projectileColor, mat);
 }
 
 
-MrMagicMissileFx::MrMagicMissileFx()
-	: CMagicMissile()
-{
+MrMagicMissileFx::MrMagicMissileFx() {
 	m_trailColor = Color3f(0.9f, 0.2f, 0.5f);
 	m_projectileColor = Color3f(1.f, 0.f, 0.2f);
 	tex_mm = NULL;

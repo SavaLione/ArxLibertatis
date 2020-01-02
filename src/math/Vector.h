@@ -1,5 +1,5 @@
 /*
- * Copyright 2013-2016 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2013-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -48,34 +48,5 @@ bool isallfinite(const V & vec) {
 	
 	return true;
 }
-
-// Constants
-
-const Vec2i Vec2i_ZERO(0, 0);
-const Vec2i Vec2i_ONE(1, 1);
-const Vec2i Vec2i_X_AXIS(1, 0);
-const Vec2i Vec2i_Y_AXIS(0, 1);
-
-const Vec2s Vec2s_ZERO(0, 0);
-const Vec2s Vec2s_ONE(1, 1);
-const Vec2s Vec2s_X_AXIS(1, 0);
-const Vec2s Vec2s_Y_AXIS(0, 1);
-
-const Vec2f Vec2f_ZERO(0, 0);
-const Vec2f Vec2f_ONE(1, 1);
-const Vec2f Vec2f_X_AXIS(1, 0);
-const Vec2f Vec2f_Y_AXIS(0, 1);
-
-const Vec3i Vec3i_ZERO(0, 0, 0);
-const Vec3i Vec3i_ONE(1, 1, 1);
-const Vec3i Vec3i_X_AXIS(1, 0, 0);
-const Vec3i Vec3i_Y_AXIS(0, 1, 0);
-const Vec3i Vec3i_Z_AXIS(0, 0, 1);
-
-const Vec3f Vec3f_ZERO(0.f, 0.f, 0.f);
-const Vec3f Vec3f_ONE(1.f, 1.f, 1.f);
-const Vec3f Vec3f_X_AXIS(1.f, 0.f, 0.f);
-const Vec3f Vec3f_Y_AXIS(0.f, 1.f, 0.f);
-const Vec3f Vec3f_Z_AXIS(0.f, 0.f, 1.f);
 
 #endif // ARX_MATH_VECTOR_H

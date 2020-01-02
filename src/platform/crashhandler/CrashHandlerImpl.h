@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2016 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -53,13 +53,13 @@ public:
 	virtual bool initialize();
 	virtual void shutdown();
 
-	bool addAttachedFile(const fs::path& file);
-	bool setVariable(const std::string& name, const std::string& value);
+	bool addAttachedFile(const fs::path & file);
+	bool setVariable(const std::string & name, const std::string & value);
 	void setWindow(u64 window);
 	
 	bool addText(const char * text);
 
-	bool setReportLocation(const fs::path& location);
+	bool setReportLocation(const fs::path & location);
 	bool deleteOldReports(size_t nbReportsToKeep);
 
 	void registerCrashCallback(CrashHandler::CrashCallback crashCallback);

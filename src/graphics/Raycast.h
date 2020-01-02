@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2016-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -22,13 +22,15 @@
 #include "math/Types.h"
 
 struct RaycastResult {
+	
 	int hit;
 	Vec3f pos;
 	
-	RaycastResult(int hit, Vec3f pos)
-		: hit(hit)
-		, pos(pos)
+	RaycastResult(int hit_, Vec3f pos_)
+		: hit(hit_)
+		, pos(pos_)
 	{ }
+	
 };
 
 bool RaycastLightFlare(const Vec3f & start, const Vec3f & end);

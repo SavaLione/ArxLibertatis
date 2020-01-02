@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2014 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -60,16 +60,18 @@ namespace {
 struct CinematicSound {
 	
 	CinematicSound()
-		: exists(false), isSpeech(false), handle(audio::INVALID_ID) { }
+		: exists(false)
+		, isSpeech(false)
+	{ }
 	
 	bool exists;
 	bool isSpeech;
 	res::path file;
-	audio::SourceId handle;
+	audio::SourcedSample handle;
 	
 };
 
-static boost::array<CinematicSound, 256> TabSound;
+boost::array<CinematicSound, 256> TabSound;
 
 } // anonymous namespace
 
@@ -97,8 +99,7 @@ static bool DeleteFreeSound(size_t num) {
 	return true;
 }
 
-void DeleteAllSound(void) {
-	
+void DeleteAllSound() {
 	for(size_t i = 0; i < TabSound.size(); i++) {
 		DeleteFreeSound(i);
 	}
@@ -135,9 +136,9 @@ bool PlaySoundKeyFramer(size_t index) {
 void StopSoundKeyFramer() {
 	
 	for(size_t i = 0; i < TabSound.size(); i++) {
-		if(TabSound[i].exists && TabSound[i].handle != audio::INVALID_ID) {
+		if(TabSound[i].exists) {
 			ARX_SOUND_Stop(TabSound[i].handle);
-			TabSound[i].handle = audio::INVALID_ID;
+			TabSound[i].handle = audio::SourcedSample();
 		}
 	}
 }

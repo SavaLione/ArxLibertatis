@@ -1,5 +1,5 @@
 /*
- * Copyright 2013-2016 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2013-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -48,6 +48,7 @@ typedef pid_t process_handle;
  * \param exe  the program to run, either an absolute path or a program name in the PATH.
  * \param args program arguments. The first argument should be the program name/path and
  *             the last argument must be NULL.
+ * \param detach Detach the child process from the parent
  *
  * \return the programs exit code or a negative value on error.
  */
@@ -60,6 +61,7 @@ int run(const char * exe, const char * const args[], bool detach = false);
  *
  * \param args program arguments. The first argument is the program to run, either an
  *             absolute path or a program name in the PATH. The last argument must be NULL.
+ * \param detach Detach the child process from the parent
  *
  * \return the programs exit code or a negative value on error.
  */
@@ -75,6 +77,7 @@ inline int run(const char * const args[], bool detach = false) {
  * \param exe  the program to run, either an absolute path or a program name in the PATH.
  * \param args program arguments. The first argument should be the program name/path and
  *             the last argument must be NULL.
+ * \param detach Detach the child process from the parent
  *
  * \return the programs exit code or a negative value on error.
  */
@@ -90,6 +93,7 @@ inline int run(const std::string & exe, const char * const args[], bool detach =
  * \param exe  the program to run, either an absolute path or a program name in the PATH.
  * \param args program arguments. The first argument should be the program name/path and
  *             the last argument must be NULL.
+ * \param detach Detach the child process from the parent
  *
  * \return a process handle that should be closed with \ref closeProcessHandle
  *         if no longer needed.
@@ -103,6 +107,7 @@ process_handle runAsync(const char * exe, const char * const args[], bool detach
  *
  * \param args program arguments. The first argument is the program to run, either an
  *             absolute path or a program name in the PATH. The last argument must be NULL.
+ * \param detach Detach the child process from the parent
  *
  * \return a process handle that should be closed with \ref closeProcessHandle
  *         if no longer needed.
@@ -119,6 +124,7 @@ inline process_handle runAsync(const char * const args[], bool detach = false) {
  * \param exe  the program to run, either an absolute path or a program name in the PATH.
  * \param args program arguments. The first argument should be the program name/path and
  *             the last argument must be NULL.
+ * \param detach Detach the child process from the parent
  *
  * \return a process handle that should be closed with \ref closeProcessHandle
  *         if no longer needed.
@@ -157,6 +163,7 @@ enum ProcessExitCode {
  *
  * This function implicitly closes the process handle if the process exited.
  *
+ * \param process process handle
  * \param wait whether we should wait for the process to exit or return immediately.
  *
  * \return the process exit code, or \ref StillRunning if the process is still running or
@@ -173,14 +180,17 @@ void reapZombies();
 /*!
  * \brief Run a helper executable
  *
+ * \param args program arguments. The first argument should be the program name/path and
+ *             the last argument must be NULL.
  * \param wait true if the helper should be run synchronously
+ * \param detach Detach the child process from the parent
  *
- * If \ref wait is \c false this call is equivalent to
+ * If \p wait is \c false this call is equivalent to
  * \code platform::runAsync(getHelperExecutable(args[0]).string(), args); \endcode
  * Otherwise it is equivalent to
  * \code platform::run(getHelperExecutable(args[0]).string(), args); \endcode
  *
- * \return if \ref wait is \c true, the return code of the executed program.
+ * \return if \p wait is \c true, the return code of the executed program.
  */
 int runHelper(const char * const args[], bool wait = false, bool detach = false);
 

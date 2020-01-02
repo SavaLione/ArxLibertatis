@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2013 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -55,7 +55,5 @@ namespace res { class path; }
  * Load a FTL file
  */
 EERIE_3DOBJ * ARX_FTL_Load(const res::path & file);
-
-void MCache_ClearAll();
 
 #endif // ARX_GRAPHICS_DATA_FTL_H

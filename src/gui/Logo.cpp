@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2014 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -41,9 +41,7 @@ ZeniMax Media Inc., Suite 120, Rockville, Maryland 20850 USA.
 ===========================================================================
 */
 
-// TODO header file
-
-#include "animation/Intro.h"
+#include "gui/Logo.h"
 
 #include <algorithm>
 #include <cstdio>
@@ -70,10 +68,6 @@ ZeniMax Media Inc., Suite 120, Rockville, Maryland 20850 USA.
 static TextureContainer * FISHTANK_img = NULL;
 static TextureContainer * ARKANE_img = NULL;
 
-void LoadScreen() {
-	GRenderer->Clear(Renderer::ColorBuffer);
-}
-
 bool ARX_INTERFACE_InitFISHTANK() {
 	if(FISHTANK_img == NULL) {
 		FISHTANK_img = TextureContainer::LoadUI("misc/logo", TextureContainer::NoColorKey);
@@ -99,31 +93,23 @@ void ARX_INTERFACE_KillARKANE() {
 	ARKANE_img = NULL;
 }
 
-static void DrawCenteredImage(TextureContainer * tc) {
-	
-	UseRenderState state(render2D().noBlend());
-	
-	Vec2f size = Vec2f(tc->size());
-	
-	Vec2f pos = Vec2f(g_size.center());
-	pos += -size * 0.5f;
-	
-	EERIEDrawBitmap(Rectf(pos, size.x, size.y), 0.001f, tc, Color::white);
-}
-
 static void ARX_INTERFACE_ShowLogo(TextureContainer * logo) {
 	
 	if(logo == NULL) {
 		return;
 	}
 	
-	GRenderer->GetTextureStage(0)->setWrapMode(TextureStage::WrapClamp);
-	
 	GRenderer->Clear(Renderer::ColorBuffer);
 	
-	DrawCenteredImage(logo);
+	UseRenderState state(render2D().noBlend());
+	UseTextureState textureState(TextureStage::FilterLinear, TextureStage::WrapClamp);
 	
-	GRenderer->GetTextureStage(0)->setWrapMode(TextureStage::WrapRepeat);
+	Vec2f size = Vec2f(logo->size());
+	
+	Vec2f pos = Vec2f(g_size.center()) - size / 2.f;
+	
+	EERIEDrawBitmap(Rectf(pos, size.x, size.y), 0.001f, logo, Color::white);
+	
 }
 
 void ARX_INTERFACE_ShowFISHTANK() {
@@ -132,13 +118,4 @@ void ARX_INTERFACE_ShowFISHTANK() {
 
 void ARX_INTERFACE_ShowARKANE() {
 	ARX_INTERFACE_ShowLogo(ARKANE_img);
-}
-
-
-
-//-----------------------------------------------------------------------------
-void ARX_INTERFACE_EndIntro()
-{
-	ARX_SOUND_MixerStop(ARX_SOUND_MixerGame);
-	ARX_MENU_Launch(false);
 }

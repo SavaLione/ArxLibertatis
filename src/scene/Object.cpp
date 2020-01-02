@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2017 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -47,6 +47,7 @@ ZeniMax Media Inc., Suite 120, Rockville, Maryland 20850 USA.
 #include "scene/Object.h"
 
 #include <cstdio>
+#include <vector>
 
 #include <boost/algorithm/string/case_conv.hpp>
 #include <boost/algorithm/string/predicate.hpp>
@@ -127,34 +128,29 @@ ObjVertGroup GetActionPointGroup(const EERIE_3DOBJ * eobj, ActionPoint idx) {
 	return ObjVertGroup();
 }
 
-void EERIE_Object_Precompute_Fast_Access(EERIE_3DOBJ * eerie) {
+void EERIE_Object_Precompute_Fast_Access(EERIE_3DOBJ * object) {
 	
-	if(!eerie)
+	if(!object) {
 		return;
-
-	// GetActionPointIdx(eerie, "v_right");
-	// GetActionPointIdx(eerie, "u_right");
-	// GetActionPointIdx(eerie, "carry_attach");
-	// EERIE_OBJECT_GetGroup(eerie, "jaw");
-	// EERIE_OBJECT_GetGroup(eerie, "mouth all");
-	
-	eerie->fastaccess.view_attach       = GetActionPointIdx(eerie, "view_attach");
-	eerie->fastaccess.primary_attach    = GetActionPointIdx(eerie, "primary_attach");
-	eerie->fastaccess.left_attach       = GetActionPointIdx(eerie, "left_attach");
-	eerie->fastaccess.weapon_attach     = GetActionPointIdx(eerie, "weapon_attach");
-	eerie->fastaccess.secondary_attach  = GetActionPointIdx(eerie, "secondary_attach");
-	eerie->fastaccess.fire              = GetActionPointIdx(eerie, "fire");
-	
-	eerie->fastaccess.head_group = EERIE_OBJECT_GetGroup(eerie, "head");
-
-	if(eerie->fastaccess.head_group != ObjVertGroup()) {
-		ObjVertHandle lHeadOrigin = ObjVertHandle(eerie->grouplist[eerie->fastaccess.head_group.handleData()].origin);
-		eerie->fastaccess.head_group_origin = lHeadOrigin;
 	}
 	
-	eerie->fastaccess.sel_head     = EERIE_OBJECT_GetSelection(eerie, "head");
-	eerie->fastaccess.sel_chest    = EERIE_OBJECT_GetSelection(eerie, "chest");
-	eerie->fastaccess.sel_leggings = EERIE_OBJECT_GetSelection(eerie, "leggings");
+	object->fastaccess.view_attach       = GetActionPointIdx(object, "view_attach");
+	object->fastaccess.primary_attach    = GetActionPointIdx(object, "primary_attach");
+	object->fastaccess.left_attach       = GetActionPointIdx(object, "left_attach");
+	object->fastaccess.weapon_attach     = GetActionPointIdx(object, "weapon_attach");
+	object->fastaccess.secondary_attach  = GetActionPointIdx(object, "secondary_attach");
+	object->fastaccess.fire              = GetActionPointIdx(object, "fire");
+	
+	object->fastaccess.head_group = EERIE_OBJECT_GetGroup(object, "head");
+	
+	if(object->fastaccess.head_group != ObjVertGroup()) {
+		ObjVertHandle lHeadOrigin = ObjVertHandle(object->grouplist[object->fastaccess.head_group.handleData()].origin);
+		object->fastaccess.head_group_origin = lHeadOrigin;
+	}
+	
+	object->fastaccess.sel_head     = EERIE_OBJECT_GetSelection(object, "head");
+	object->fastaccess.sel_chest    = EERIE_OBJECT_GetSelection(object, "chest");
+	object->fastaccess.sel_leggings = EERIE_OBJECT_GetSelection(object, "leggings");
 }
 
 void MakeUserFlag(TextureContainer * tc) {
@@ -197,12 +193,12 @@ void MakeUserFlag(TextureContainer * tc) {
 // Warning Clear3DObj don't release Any pointer Just Clears Structures
 void EERIE_3DOBJ::clear() {
 	
-		point0 = pos = Vec3f_ZERO;
-		angle = Anglef::ZERO;
+		point0 = pos = Vec3f(0.f);
+		angle = Anglef();
 
 		origin = 0;
 
-		vertexlocal = NULL;
+		vertexlocal.clear();
 		vertexlist.clear();
 		vertexWorldPositions.clear();
 
@@ -210,9 +206,9 @@ void EERIE_3DOBJ::clear() {
 		grouplist.clear();
 		texturecontainer.clear();
 
-		originaltextures = NULL;
+		originaltextures.clear();
 		
-		quat = glm::quat();
+		quat = quat_identity();
 		linked.clear();
 
 		pbox = 0;
@@ -228,15 +224,8 @@ void EERIE_3DOBJ::clear() {
 
 // TODO move to destructor?
 EERIE_3DOBJ::~EERIE_3DOBJ() {
-	
-	free(originaltextures);
-	originaltextures = NULL;
-	
 	EERIE_RemoveCedricData(this);
 	EERIE_PHYSICS_BOX_Release(this);
-	
-	grouplist.clear();
-	linked.clear();
 }
 
 EERIE_3DOBJ * Eerie_Copy(const EERIE_3DOBJ * obj) {
@@ -250,7 +239,6 @@ EERIE_3DOBJ * Eerie_Copy(const EERIE_3DOBJ * obj) {
 	
 	nouvo->pbox = NULL;
 	nouvo->m_skeleton = NULL;
-	nouvo->vertexlocal = NULL;
 	
 	nouvo->angle = obj->angle;
 	nouvo->pos = obj->pos;
@@ -289,7 +277,8 @@ EERIE_3DOBJ * Eerie_Copy(const EERIE_3DOBJ * obj) {
 	}
 	
 	nouvo->linked.clear();
-	nouvo->originaltextures = NULL;
+	nouvo->originaltextures.clear();
+	
 	return nouvo;
 }
 
@@ -340,143 +329,92 @@ void EERIE_RemoveCedricData(EERIE_3DOBJ * eobj) {
 		return;
 	
 	delete eobj->m_skeleton, eobj->m_skeleton = NULL;
-	delete[] eobj->vertexlocal, eobj->vertexlocal = NULL;
+	eobj->vertexlocal.clear();
+	
 }
 
 void EERIE_CreateCedricData(EERIE_3DOBJ * eobj) {
 	
 	eobj->m_skeleton = new Skeleton();
-
-	if(eobj->grouplist.size() <= 0) {
+	
+	if(eobj->grouplist.empty()) {
 		// If no groups were specified
-
-		// Make one bone
+		
 		eobj->m_skeleton->bones.resize(1);
 		
 		Bone & bone = eobj->m_skeleton->bones[0];
-
+		
 		// Add all vertices to the bone
 		for(size_t i = 0; i < eobj->vertexlist.size(); i++) {
 			bone.idxvertices.push_back(i);
 		}
-
-		// Initialize the bone
-		bone.init.quat = glm::quat();
-		bone.anim.quat = glm::quat();
-		bone.init.scale = Vec3f_ZERO;
-		bone.anim.scale = Vec3f_ZERO;
-		bone.init.trans = Vec3f_ZERO;
-		bone.transinit_global = bone.init.trans;
+		
 		bone.father = -1;
+		bone.anim.scale = Vec3f(1.f);
+		
 	} else {
 		// Groups were specified
-
-		// Alloc the bones
+		
 		eobj->m_skeleton->bones.resize(eobj->grouplist.size());
 		
-		bool * temp = new bool[eobj->vertexlist.size()];
-		memset(temp, 0, eobj->vertexlist.size());
-
+		// Create one bone for each vertex group and assign vertices to the inner-most group
+		std::vector<bool> vertexAssigned(eobj->vertexlist.size(), false);
 		for(long i = eobj->grouplist.size() - 1; i >= 0; i--) {
 			VertexGroup & group = eobj->grouplist[i];
 			Bone & bone = eobj->m_skeleton->bones[i];
-
-			EERIE_VERTEX * v_origin = &eobj->vertexlist[group.origin];
-
+			
 			for(size_t j = 0; j < group.indexes.size(); j++) {
-				if(!temp[group.indexes[j]]) {
-					temp[group.indexes[j]] = true;
+				if(!vertexAssigned[group.indexes[j]]) {
+					vertexAssigned[group.indexes[j]] = true;
 					bone.idxvertices.push_back(group.indexes[j]);
 				}
 			}
-
-			bone.init.quat = glm::quat();
-			bone.anim.quat = glm::quat();
-			bone.init.scale = Vec3f_ZERO;
-			bone.anim.scale = Vec3f_ZERO;
-			bone.init.trans = Vec3f(v_origin->v.x, v_origin->v.y, v_origin->v.z);
-			bone.transinit_global = bone.init.trans;
+			
+			bone.anim.trans = eobj->vertexlist[group.origin].v;
 			bone.father = GetFather(eobj, group.origin, i - 1);
+			bone.anim.scale = Vec3f(1.f);
+			
 		}
-
-		delete[] temp;
-
-		// Try to correct lonely vertex
+		
+		// Assign vertices that are not in any group to the root bone
 		for(size_t i = 0; i < eobj->vertexlist.size(); i++) {
-			long ok = 0;
-
-			for(size_t j = 0; j < eobj->grouplist.size(); j++) {
-				for(size_t k = 0; k < eobj->grouplist[j].indexes.size(); k++) {
-					if(eobj->grouplist[j].indexes[k] == i) {
-						ok = 1;
+			bool found = false;
+			BOOST_FOREACH(const VertexGroup & group, eobj->grouplist) {
+				BOOST_FOREACH(u32 index, group.indexes) {
+					if(index == i) {
+						found = true;
 						break;
 					}
 				}
-
-				if(ok)
+				if(found) {
 					break;
+				}
 			}
-
-			if(!ok) {
+			if(!found) {
 				eobj->m_skeleton->bones[0].idxvertices.push_back(i);
 			}
 		}
 		
-		for(long i = eobj->grouplist.size() - 1; i >= 0; i--) {
-			Bone & bone = eobj->m_skeleton->bones[i];
-
+		// Calculate relative bone positions
+		BOOST_FOREACH(Bone & bone, eobj->m_skeleton->bones) {
 			if(bone.father >= 0) {
-				long father = bone.father;
-				bone.init.trans -= eobj->m_skeleton->bones[father].init.trans;
-			}
-			bone.transinit_global = bone.init.trans;
-		}
-
-	}
-
-	/* Build proper mesh */
-	{
-		Skeleton* obj = eobj->m_skeleton;
-
-		for(size_t i = 0; i != obj->bones.size(); i++) {
-			Bone & bone = obj->bones[i];
-
-			if(bone.father >= 0) {
-				size_t parentIndex = size_t(bone.father);
-				Bone & parent = obj->bones[parentIndex];
-				/* Rotation*/
-				bone.anim.quat = parent.anim.quat * bone.init.quat;
-				/* Translation */
-				bone.anim.trans = parent.anim.quat * bone.init.trans;
-				bone.anim.trans = parent.anim.trans + bone.anim.trans;
+				Bone & parent = eobj->m_skeleton->bones[size_t(bone.father)];
+				bone.transinit_global = bone.init.trans = bone.anim.trans - parent.anim.trans;
 			} else {
-				/* Rotation*/
-				bone.anim.quat = bone.init.quat;
-				/* Translation */
-				bone.anim.trans = bone.init.trans;
+				bone.transinit_global = bone.init.trans = bone.anim.trans;
 			}
-			bone.anim.scale = Vec3f_ONE;
 		}
-
-		eobj->vertexlocal = new Vec3f[eobj->vertexlist.size()];
-		// TODO constructor is better than memset
-		memset(eobj->vertexlocal, 0, sizeof(Vec3f)*eobj->vertexlist.size());
-
-		for(size_t i = 0; i != obj->bones.size(); i++) {
-			const Bone & bone = obj->bones[i];
-			Vec3f vector = bone.anim.trans;
-			
-			for(size_t v = 0; v != bone.idxvertices.size(); v++) {
-				
-				size_t idx = bone.idxvertices[v];
-				const EERIE_VERTEX & inVert = eobj->vertexlist[idx];
-				Vec3f & outVert = eobj->vertexlocal[idx];
-				
-				Vec3f temp = inVert.v - vector;
-				outVert = glm::inverse(bone.anim.quat) * temp;
-			}
+		
+	}
+	
+	// Calculate relative vertex positions
+	eobj->vertexlocal.resize(eobj->vertexlist.size());
+	BOOST_FOREACH(const Bone & bone, eobj->m_skeleton->bones) {
+		BOOST_FOREACH(u32 index, bone.idxvertices) {
+			eobj->vertexlocal[index] = eobj->vertexlist[index].v - bone.anim.trans;
 		}
 	}
+
 }
 
 EERIE_3DOBJ * loadObject(const res::path & file, bool pbox) {

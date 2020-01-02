@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2017 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2014-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -58,14 +58,10 @@ void SummonCreatureSpell::GetTargetAndBeta(Vec3f & target, float & beta) {
 }
 
 SummonCreatureSpell::SummonCreatureSpell()
-	: m_targetPos(Vec3f_ZERO)
+	: m_targetPos(0.f)
 	, m_megaCheat(false)
 	, m_requestSummon(false)
-	, m_summonedEntity()
-{
-	
-}
-
+{ }
 
 bool SummonCreatureSpell::CanLaunch() {
 	
@@ -74,7 +70,7 @@ bool SummonCreatureSpell::CanLaunch() {
 	GetTargetAndBeta(target, beta);
 	
 	if(!ARX_INTERACTIVE_ConvertToValidPosForIO(NULL, &target)) {
-		ARX_SOUND_PlaySFX(SND_MAGIC_FIZZLE);
+		ARX_SOUND_PlaySFX(g_snd.MAGIC_FIZZLE);
 		return false;
 	}
 	
@@ -95,7 +91,7 @@ void SummonCreatureSpell::Launch() {
 	
 	m_megaCheat = (m_caster == EntityHandle_Player && cur_mega == 10);
 	m_targetPos = target;
-	ARX_SOUND_PlaySFX(SND_SPELL_SUMMON_CREATURE, &m_targetPos);
+	ARX_SOUND_PlaySFX(g_snd.SPELL_SUMMON_CREATURE, &m_targetPos);
 	
 	m_fissure.Create(target, MAKEANGLE(player.angle.getYaw()));
 	m_fissure.SetDuration(GameDurationMs(2000), GameDurationMs(500), GameDurationMs(1500));
@@ -120,11 +116,11 @@ void SummonCreatureSpell::End() {
 	
 	Entity * io = entities.get(m_summonedEntity);
 	if(io) {
-		ARX_SOUND_PlaySFX(SND_SPELL_ELECTRIC, &io->pos);
+		ARX_SOUND_PlaySFX(g_snd.SPELL_ELECTRIC, &io->pos);
 		
 		if(io->scriptload && (io->ioflags & IO_NOSAVE)) {
 			
-			AddRandomSmoke(io, 100);
+			AddRandomSmoke(*io, 100);
 			Vec3f posi = io->pos;
 			posi.y -= 100.f;
 			MakeCoolFx(posi);
@@ -168,7 +164,7 @@ void SummonCreatureSpell::Update() {
 		lightHandleDestroy(m_light);
 		
 		m_requestSummon = false;
-		ARX_SOUND_PlaySFX(SND_SPELL_ELECTRIC, &m_targetPos);
+		ARX_SOUND_PlaySFX(g_snd.SPELL_ELECTRIC, &m_targetPos);
 		
 		Cylinder phys = Cylinder(m_targetPos, 50, -200);
 		
@@ -227,20 +223,13 @@ void SummonCreatureSpell::Update() {
 				SendInitScriptEvent(io);
 				
 				if(tokeep < 0) {
-					io->scale=1.65f;
-					io->physics.cyl.radius=25;
-					io->physics.cyl.height=-43;
-					io->speed_modif=1.f;
+					io->scale = 1.65f;
+					io->physics.cyl.radius = 25;
+					io->physics.cyl.height = -43;
+					io->speed_modif = 1.f;
 				}
 				
-				Entity * caster = entities.get(m_caster);
-				if(caster) {
-					EVENT_SENDER = caster;
-				} else {
-					EVENT_SENDER = NULL;
-				}
-				
-				SendIOScriptEvent(io, SM_SUMMONED);
+				SendIOScriptEvent(entities.get(m_caster), io, SM_SUMMONED);
 				
 				for(long j = 0; j < 3; j++) {
 					Vec3f pos = m_fissure.m_eSrc;
@@ -255,19 +244,18 @@ void SummonCreatureSpell::Update() {
 				} else {
 					m_summonedEntity = EntityHandle();
 				}
+				
 			}
 		}
+		
 	} else if(m_summonedEntity == EntityHandle()) {
-		m_duration = 0;
+		requestEnd();
 	}
+	
 }
 
 bool FakeSummonSpell::CanLaunch() {
-	if(m_caster.handleData() <= EntityHandle_Player.handleData() || !ValidIONum(m_target)) {
-		return false;
-	}
-	
-	return true;
+	return (m_caster.handleData() > EntityHandle_Player.handleData() && ValidIONum(m_target));
 }
 
 void FakeSummonSpell::Launch() {
@@ -281,7 +269,7 @@ void FakeSummonSpell::Launch() {
 		target.y += player.baseHeight();
 	}
 	m_targetPos = target;
-	ARX_SOUND_PlaySFX(SND_SPELL_SUMMON_CREATURE, &m_targetPos);
+	ARX_SOUND_PlaySFX(g_snd.SPELL_SUMMON_CREATURE, &m_targetPos);
 	
 	m_fissure.Create(target, MAKEANGLE(player.angle.getYaw()));
 	m_fissure.SetDuration(GameDurationMs(2000), GameDurationMs(500), GameDurationMs(1500));
@@ -300,7 +288,7 @@ void FakeSummonSpell::Launch() {
 }
 
 void FakeSummonSpell::End() {
-	ARX_SOUND_PlaySFX(SND_SPELL_ELECTRIC, &m_targetPos);
+	ARX_SOUND_PlaySFX(g_snd.SPELL_ELECTRIC, &m_targetPos);
 	
 	lightHandleDestroy(m_light);
 }
@@ -318,9 +306,9 @@ void FakeSummonSpell::Update() {
 	m_fissure.Render();
 }
 
-
 NegateMagicSpell::NegateMagicSpell()
-	: tex_p2(NULL)
+	: m_pos(0.f)
+	, tex_p2(NULL)
 	, tex_sol(NULL)
 { }
 
@@ -330,7 +318,7 @@ void NegateMagicSpell::Launch() {
 		m_target = EntityHandle_Player;
 	}
 	
-	ARX_SOUND_PlaySFX(SND_SPELL_NEGATE_MAGIC, &entities[m_target]->pos);
+	ARX_SOUND_PlaySFX(g_snd.SPELL_NEGATE_MAGIC, &entities[m_target]->pos);
 	
 	m_fManaCostPerSecond = 2.f;
 	m_hasDuration = m_launchDuration >= 0;
@@ -415,7 +403,7 @@ void NegateMagicSpell::LaunchAntiMagicField() {
 	for(size_t i = 0; i < MAX_SPELLS; i++) {
 		SpellBase * spell = spells[SpellHandle(i)];
 		
-		if(   !spell || this == spell || m_level < spell->m_level) {
+		if(!spell || this == spell || m_level < spell->m_level) {
 			continue;
 		}
 		
@@ -431,22 +419,17 @@ void NegateMagicSpell::LaunchAntiMagicField() {
 }
 
 bool IncinerateSpell::CanLaunch() {
-	
 	Entity * tio = entities[m_target];
-	if((tio->ioflags & IO_NPC) && tio->_npcdata->lifePool.current <= 0.f) {
-		return false;
-	}
-	
-	return true;
+	return (!(tio->ioflags & IO_NPC) || tio->_npcdata->lifePool.current > 0.f);
 }
 
 void IncinerateSpell::Launch() {
 	
 	Entity * tio = entities[m_target];
 	
-	ARX_SOUND_PlaySFX(SND_SPELL_INCINERATE, &tio->pos);
+	ARX_SOUND_PlaySFX(g_snd.SPELL_INCINERATE, &tio->pos);
 	
-	m_snd_loop = ARX_SOUND_PlaySFX(SND_SPELL_INCINERATE_LOOP, &tio->pos, 1.f, ARX_SOUND_PLAY_LOOPED);
+	m_snd_loop = ARX_SOUND_PlaySFX_loop(g_snd.SPELL_INCINERATE_LOOP, &tio->pos, 1.f);
 	
 	m_duration = GameDurationMs(20000);
 	m_hasDuration = true;
@@ -460,8 +443,11 @@ void IncinerateSpell::Launch() {
 void IncinerateSpell::End() {
 	
 	m_targets.clear();
+	
 	ARX_SOUND_Stop(m_snd_loop);
-	ARX_SOUND_PlaySFX(SND_SPELL_INCINERATE_END);
+	m_snd_loop = audio::SourcedSample();
+	
+	ARX_SOUND_PlaySFX(g_snd.SPELL_INCINERATE_END);
 }
 
 void IncinerateSpell::Update() {
@@ -481,7 +467,7 @@ Vec3f IncinerateSpell::getPosition() {
 
 void MassParalyseSpell::Launch() {
 	
-	ARX_SOUND_PlaySFX(SND_SPELL_MASS_PARALYSE);
+	ARX_SOUND_PlaySFX(g_snd.SPELL_MASS_PARALYSE);
 	
 	m_duration = (m_launchDuration >= 0) ? m_launchDuration : GameDurationMs(10000);
 	m_hasDuration = true;
@@ -517,6 +503,6 @@ void MassParalyseSpell::End() {
 	
 	m_targets.clear();
 	
-	ARX_SOUND_PlaySFX(SND_SPELL_PARALYSE_END);
+	ARX_SOUND_PlaySFX(g_snd.SPELL_PARALYSE_END);
 }
 

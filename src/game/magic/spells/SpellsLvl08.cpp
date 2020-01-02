@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2017 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2014-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -53,7 +53,7 @@ void InvisibilitySpell::Launch() {
 	entities[m_target]->gameFlags |= GFLAG_INVISIBILITY;
 	entities[m_target]->invisibility = 0.f;
 	
-	ARX_SOUND_PlaySFX(SND_SPELL_INVISIBILITY_START, &m_caster_pos);
+	ARX_SOUND_PlaySFX(g_snd.SPELL_INVISIBILITY_START, &m_caster_pos);
 	
 	m_targets.push_back(m_target);
 }
@@ -62,7 +62,7 @@ void InvisibilitySpell::End() {
 	Entity * target = entities.get(m_target);
 	if(target) {
 		target->gameFlags &= ~GFLAG_INVISIBILITY;
-		ARX_SOUND_PlaySFX(SND_SPELL_INVISIBILITY_END, &target->pos);
+		ARX_SOUND_PlaySFX(g_snd.SPELL_INVISIBILITY_END, &target->pos);
 		m_targets.clear();
 	}
 }
@@ -86,11 +86,7 @@ Vec3f InvisibilitySpell::getPosition() {
 }
 
 
-ManaDrainSpell::ManaDrainSpell()
-	: m_damage()
-{
-	
-}
+ManaDrainSpell::ManaDrainSpell() { }
 
 bool ManaDrainSpell::CanLaunch() {
 	return !spells.ExistAnyInstanceForThisCaster(m_type, m_caster);
@@ -104,7 +100,7 @@ void ManaDrainSpell::Launch() {
 	m_duration = m_hasDuration ? m_launchDuration : 0;
 	m_fManaCostPerSecond = 2.f;
 	
-	m_snd_loop = ARX_SOUND_PlaySFX(SND_SPELL_MAGICAL_SHIELD, &m_caster_pos, 1.2f, ARX_SOUND_PLAY_LOOPED);
+	m_snd_loop = ARX_SOUND_PlaySFX_loop(g_snd.SPELL_MAGICAL_SHIELD_LOOP, &m_caster_pos, 1.2f);
 	
 	DamageParameters damage;
 	damage.radius = 150.f;
@@ -133,6 +129,7 @@ void ManaDrainSpell::End() {
 	m_cabal.end();
 	
 	ARX_SOUND_Stop(m_snd_loop);
+	m_snd_loop = audio::SourcedSample();
 }
 
 void ManaDrainSpell::Update() {
@@ -163,14 +160,10 @@ Vec3f ManaDrainSpell::getPosition() {
 }
 
 
-ExplosionSpell::ExplosionSpell()
-	: m_light()
-	, m_damage()
-{
-}
+ExplosionSpell::ExplosionSpell() { }
 
 void ExplosionSpell::Launch() {
-	ARX_SOUND_PlaySFX(SND_SPELL_EXPLOSION);
+	ARX_SOUND_PlaySFX(g_snd.SPELL_EXPLOSION);
 	
 	m_duration = GameDurationMs(2000);
 	m_hasDuration = true;
@@ -203,7 +196,7 @@ void ExplosionSpell::Launch() {
 		light->duration = GameDurationMs(200);
 	}
 	
-	AddQuakeFX(300, 2000, 400, true);
+	AddQuakeFX(300, GameDurationMs(2000), 400, true);
 	
 	for(long i_angle = 0 ; i_angle < 360 ; i_angle += 12) {
 		for(long j = -100 ; j < 100 ; j += 50) {
@@ -216,56 +209,46 @@ void ExplosionSpell::Launch() {
 		}
 	}
 	
-	ARX_SOUND_PlaySFX(SND_SPELL_FIRE_WIND);
+	ARX_SOUND_PlaySFX(g_snd.SPELL_FIRE_WIND_LOOP);
 }
 
 void ExplosionSpell::Update() {
 	
 	EERIE_LIGHT * light = dynLightCreate(m_light);
 	if(light) {
-		light->rgb = Color3f(0.1f, 0.1f, 0.8f) + randomColor3f() * Color3f(1.f/3, 1.f/3, 1.f/5);
+		
+		light->rgb = Color3f(0.1f, 0.1f, 0.8f) + randomColor3f() * Color3f(1.f / 3, 1.f / 3, 0.2f);
 		light->duration = GameDurationMs(200);
 		
 		float choice = Random::getf();
 		if(choice > .8f) {
 			long lvl = Random::get(9, 13);
-			
 			Vec3f pos = light->pos + arx::sphericalRand(260.f);
-			
-			Color3f color = Color3f(0.1f, 0.1f, 0.8f) + randomColor3f() * Color3f(1.f/3, 1.f/3, 1.f/5);
-			
+			Color3f color = Color3f(0.1f, 0.1f, 0.8f) + randomColor3f() * Color3f(1.f / 3, 1.f / 3, 0.2f);
 			LaunchFireballBoom(pos, static_cast<float>(lvl), NULL, &color);
 		} else if(choice > .6f) {
 			Vec3f pos = light->pos + arx::sphericalRand(260.f);
-			
 			MakeCoolFx(pos);
 		} else if(choice > 0.4f) {
 			Vec3f pos = light->pos + arx::sphericalRand(160.f);
-
 			ARX_PARTICLES_Add_Smoke(pos, 2, 20); // flag 1 = randomize pos
 		}
+		
 	}
 	
 }
 
-
-void EnchantWeaponSpell::Launch()
-{
+void EnchantWeaponSpell::Launch() {
 	m_duration = GameDurationMs(20);
+	m_hasDuration = true;
 }
 
-void EnchantWeaponSpell::End() {
+void EnchantWeaponSpell::End() { }
 
-}
-
-void EnchantWeaponSpell::Update() {
-}
+void EnchantWeaponSpell::Update() { }
 
 
-LifeDrainSpell::LifeDrainSpell()
-	: m_damage()
-{
-}
+LifeDrainSpell::LifeDrainSpell() { }
 
 bool LifeDrainSpell::CanLaunch() {
 	return !spells.ExistAnyInstanceForThisCaster(m_type, m_caster);
@@ -279,7 +262,7 @@ void LifeDrainSpell::Launch() {
 	m_duration = m_hasDuration ? m_launchDuration : 0;
 	m_fManaCostPerSecond = 12.f;
 	
-	m_snd_loop = ARX_SOUND_PlaySFX(SND_SPELL_MAGICAL_SHIELD, &m_caster_pos, 0.8f, ARX_SOUND_PLAY_LOOPED);
+	m_snd_loop = ARX_SOUND_PlaySFX_loop(g_snd.SPELL_MAGICAL_SHIELD_LOOP, &m_caster_pos, 0.8f);
 	
 	DamageParameters damage;
 	damage.radius = 150.f;
@@ -306,6 +289,7 @@ void LifeDrainSpell::End() {
 	DamageRequestEnd(m_damage);
 	
 	ARX_SOUND_Stop(m_snd_loop);
+	m_snd_loop = audio::SourcedSample();
 	
 	m_cabal.end();
 }

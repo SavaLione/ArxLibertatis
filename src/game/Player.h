@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2017 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -52,6 +52,7 @@ ZeniMax Media Inc., Suite 120, Rockville, Maryland 20850 USA.
 #include <vector>
 
 #include <boost/array.hpp>
+#include <boost/range/size.hpp>
 
 #include "game/Entity.h"
 #include "game/Spells.h"
@@ -74,71 +75,70 @@ struct ARX_INTERFACE_MEMORIZE_SPELL {
 		: bSpell(false)
 		, lTimeCreation(0)
 	{
-		for(size_t i = 0; i < ARRAY_SIZE(iSpellSymbols); i++) {
+		for(size_t i = 0; i < size_t(boost::size(iSpellSymbols)); i++) {
 			iSpellSymbols[i] = RUNE_NONE;
 		}
 	}
 };
 
-enum PlayerInterfaceFlag
-{
-	INTER_PLAYERBOOK   = (1<<0),
-	INTER_INVENTORY    = (1<<1),
-	INTER_INVENTORYALL = (1<<2),
-	INTER_MINIBOOK     = (1<<3),
-	INTER_MINIBACK     = (1<<4),
-	INTER_LIFE_MANA    = (1<<5),
-	INTER_COMBATMODE   = (1<<6),
-	INTER_NOTE         = (1<<7),
-	INTER_STEAL        = (1<<8),
-	INTER_NO_STRIKE    = (1<<9)
+enum PlayerInterfaceFlag {
+	INTER_PLAYERBOOK   = 1 << 0,
+	INTER_INVENTORY    = 1 << 1,
+	INTER_INVENTORYALL = 1 << 2,
+	INTER_MINIBOOK     = 1 << 3,
+	INTER_MINIBACK     = 1 << 4,
+	INTER_LIFE_MANA    = 1 << 5,
+	INTER_COMBATMODE   = 1 << 6,
+	INTER_NOTE         = 1 << 7, // TODO remove
+	INTER_STEAL        = 1 << 8,
+	INTER_NO_STRIKE    = 1 << 9
 };
 DECLARE_FLAGS(PlayerInterfaceFlag, PlayerInterfaceFlags)
 DECLARE_FLAGS_OPERATORS(PlayerInterfaceFlags)
 
 enum PlayerMovementFlag {
-	PLAYER_MOVE_WALK_FORWARD  = (1<<0),
-	PLAYER_MOVE_WALK_BACKWARD = (1<<1),
-	PLAYER_MOVE_STRAFE_LEFT   = (1<<2),
-	PLAYER_MOVE_STRAFE_RIGHT  = (1<<3),
-	PLAYER_MOVE_JUMP          = (1<<4),
-	PLAYER_MOVE_STEALTH       = (1<<5),
-	PLAYER_ROTATE             = (1<<6),
-	PLAYER_CROUCH             = (1<<7),
-	PLAYER_LEAN_LEFT          = (1<<8),
-	PLAYER_LEAN_RIGHT         = (1<<9)
+	PLAYER_MOVE_WALK_FORWARD  = 1 << 0,
+	PLAYER_MOVE_WALK_BACKWARD = 1 << 1,
+	PLAYER_MOVE_STRAFE_LEFT   = 1 << 2,
+	PLAYER_MOVE_STRAFE_RIGHT  = 1 << 3,
+	PLAYER_MOVE_JUMP          = 1 << 4,
+	PLAYER_MOVE_STEALTH       = 1 << 5,
+	PLAYER_ROTATE             = 1 << 6,
+	PLAYER_CROUCH             = 1 << 7,
+	PLAYER_LEAN_LEFT          = 1 << 8,
+	PLAYER_LEAN_RIGHT         = 1 << 9
 };
 DECLARE_FLAGS(PlayerMovementFlag, PlayerMovement)
 DECLARE_FLAGS_OPERATORS(PlayerMovement)
 
 enum PlayerFlag {
-	PLAYERFLAGS_NO_MANA_DRAIN   = (1<<0),
-	PLAYERFLAGS_INVULNERABILITY = (1<<1)
+	PLAYERFLAGS_NO_MANA_DRAIN   = 1 << 0,
+	PLAYERFLAGS_INVULNERABILITY = 1 << 1
 };
 DECLARE_FLAGS(PlayerFlag, PlayerFlags)
 DECLARE_FLAGS_OPERATORS(PlayerFlags)
 
 enum RuneFlag {
-	FLAG_AAM         = (1<<(RUNE_AAM)),
-	FLAG_CETRIUS     = (1<<(RUNE_CETRIUS)),
-	FLAG_COMUNICATUM = (1<<(RUNE_COMUNICATUM)),
-	FLAG_COSUM       = (1<<(RUNE_COSUM)),
-	FLAG_FOLGORA     = (1<<(RUNE_FOLGORA)),
-	FLAG_FRIDD       = (1<<(RUNE_FRIDD)),
-	FLAG_KAOM        = (1<<(RUNE_KAOM)),
-	FLAG_MEGA        = (1<<(RUNE_MEGA)),
-	FLAG_MORTE       = (1<<(RUNE_MORTE)),
-	FLAG_MOVIS       = (1<<(RUNE_MOVIS)),
-	FLAG_NHI         = (1<<(RUNE_NHI)),
-	FLAG_RHAA        = (1<<(RUNE_RHAA)),
-	FLAG_SPACIUM     = (1<<(RUNE_SPACIUM)),
-	FLAG_STREGUM     = (1<<(RUNE_STREGUM)),
-	FLAG_TAAR        = (1<<(RUNE_TAAR)),
-	FLAG_TEMPUS      = (1<<(RUNE_TEMPUS)),
-	FLAG_TERA        = (1<<(RUNE_TERA)),
-	FLAG_VISTA       = (1<<(RUNE_VISTA)),
-	FLAG_VITAE       = (1<<(RUNE_VITAE)),
-	FLAG_YOK         = (1<<(RUNE_YOK))
+	FLAG_AAM         = 1 << RUNE_AAM,
+	FLAG_CETRIUS     = 1 << RUNE_CETRIUS,
+	FLAG_COMUNICATUM = 1 << RUNE_COMUNICATUM,
+	FLAG_COSUM       = 1 << RUNE_COSUM,
+	FLAG_FOLGORA     = 1 << RUNE_FOLGORA,
+	FLAG_FRIDD       = 1 << RUNE_FRIDD,
+	FLAG_KAOM        = 1 << RUNE_KAOM,
+	FLAG_MEGA        = 1 << RUNE_MEGA,
+	FLAG_MORTE       = 1 << RUNE_MORTE,
+	FLAG_MOVIS       = 1 << RUNE_MOVIS,
+	FLAG_NHI         = 1 << RUNE_NHI,
+	FLAG_RHAA        = 1 << RUNE_RHAA,
+	FLAG_SPACIUM     = 1 << RUNE_SPACIUM,
+	FLAG_STREGUM     = 1 << RUNE_STREGUM,
+	FLAG_TAAR        = 1 << RUNE_TAAR,
+	FLAG_TEMPUS      = 1 << RUNE_TEMPUS,
+	FLAG_TERA        = 1 << RUNE_TERA,
+	FLAG_VISTA       = 1 << RUNE_VISTA,
+	FLAG_VITAE       = 1 << RUNE_VITAE,
+	FLAG_YOK         = 1 << RUNE_YOK
 };
 DECLARE_FLAGS(RuneFlag, RuneFlags)
 DECLARE_FLAGS_OPERATORS(RuneFlags)
@@ -319,7 +319,7 @@ struct ARXCHARACTER {
 	
 	RuneFlags rune_flags;
 	bool hasRune(Rune rune) {
-		return (rune_flags & (RuneFlag)(1 << rune)) != 0;
+		return (rune_flags & RuneFlag(1 << rune)) != 0;
 	}
 	
 	
@@ -328,18 +328,23 @@ struct ARXCHARACTER {
 	float hunger;
 	PlayerFlags playerflags;
 	long gold;
-	short bag;
+	short m_bags;
 	ARX_INTERFACE_MEMORIZE_SPELL SpellToMemorize;
 
 	float TRAP_DETECT;
 	float TRAP_SECRET;
 	
-	s8 m_cheatSkinButtonClickCount;
-	char m_cheatQuickGenButtonClickCount;
 	long m_cheatPnuxActive;
 	
+	GameDuration DeadTime;
+	
+	audio::SourcedSample magic_ambient;
+	audio::SourcedSample magic_draw;
+	audio::SourcedSample torch_loop;
+	
 	ARXCHARACTER()
-		: m_strikeDirection(0)
+		: pos(0.f)
+		, m_strikeDirection(0)
 		, m_weaponBlocked(AnimationDuration::ofRaw(-1)) // FIXME inband signaling
 		, jumpstarttime(0)
 		, jumplastposition(0.f)
@@ -349,6 +354,7 @@ struct ARXCHARACTER {
 		, levitate(false)
 		, m_telekinesis(false)
 		, m_improve(false)
+		, size(0.f)
 		, inzone(NULL)
 		, falling(false)
 		, doingmagic(0)
@@ -369,12 +375,11 @@ struct ARXCHARACTER {
 		, poison(0)
 		, hunger(0)
 		, gold(0)
-		, bag(0)
+		, m_bags(0)
 		, TRAP_DETECT(0)
 		, TRAP_SECRET(0)
-		, m_cheatSkinButtonClickCount(0)
-		, m_cheatQuickGenButtonClickCount(0)
 		, m_cheatPnuxActive(0)
+		, DeadTime(0)
 	{
 		heads.fill(NULL);
 	}
@@ -442,7 +447,6 @@ bool ARX_PLAYER_CanStealItem(Entity * item);
 
 void ARX_KEYRING_Init();
 void ARX_KEYRING_Add(const std::string & key);
-void ARX_KEYRING_Combine(Entity * io);
 
 void ARX_PLAYER_Reset_Fall();
 void ARX_PLAYER_KillTorch();

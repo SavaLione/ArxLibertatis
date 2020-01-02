@@ -1,5 +1,5 @@
 /*
- * Copyright 2016-2017 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2016-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -21,11 +21,13 @@
 
 #include <limits>
 
+#include <boost/foreach.hpp>
+
 #include "graphics/data/Mesh.h"
 #include "platform/Platform.h"
 #include "platform/profiler/Profiler.h"
 
-static RaycastResult RaycastMiss() { return RaycastResult(false, Vec3f_ZERO); }
+static RaycastResult RaycastMiss() { return RaycastResult(false, Vec3f(0.f)); }
 static RaycastResult RaycastHit(Vec3f hit) { return RaycastResult(true, hit); }
 
 void dbg_addRay(Vec3f start, Vec3f end);
@@ -44,12 +46,10 @@ static bool WalkTiles(const Vec3f & start, const Vec3f & end, F func) {
 	Vec2f dir = p2 - p1;
 	
 	// Side dimensions of the square cell
-	const Vec2f cellSide = Vec2f(ACTIVEBKG->m_tileSize.x, ACTIVEBKG->m_tileSize.y);
+	const Vec2f cellSide = g_backgroundTileSize;
 	
 	// Determine in which primary direction to step
-	Vec2i d;
-	d.x = ((p1.x < p2.x) ? 1 : ((p1.x > p2.x) ? -1 : 0));
-	d.y = ((p1.y < p2.y) ? 1 : ((p1.y > p2.y) ? -1 : 0));
+	Vec2i d((p1.x <= p2.x) - (p1.x >= p2.x), (p1.y <= p2.y) - (p1.y >= p2.y));
 	
 	// Determine start grid cell coordinates
 	Vec2i tile = Vec2i(glm::floor(p1 / cellSide));
@@ -158,8 +158,6 @@ static float linePolyIntersection(const Vec3f & start, const Vec3f & dir, const 
 	return std::numeric_limits<float>::max();
 }
 
-//#define RAYCAST_DEBUG 1
-
 namespace {
 
 struct AnyHitRaycast {
@@ -169,19 +167,19 @@ struct AnyHitRaycast {
 		Vec3f dir = end - start;
 		
 		const BackgroundTileData & eg = ACTIVEBKG->m_tileData[tile.x][tile.y];
-		for(long k = 0; k < eg.nbpolyin; k++) {
-			EERIEPOLY & ep = *eg.polyin[k];
+		BOOST_FOREACH(EERIEPOLY * ep, eg.polyin) {
 			
-			if(ep.type & POLY_TRANS) {
+			if(ep->type & POLY_TRANS) {
 				continue;
 			}
 			
-			float relDist = linePolyIntersection(start, dir, ep);
+			float relDist = linePolyIntersection(start, dir, *ep);
 			if(relDist <= 1.f) {
 				Vec3f hitPos = start + relDist * dir;
-				dbg_addPoly(&ep, hitPos, Color::green);
+				dbg_addPoly(ep, hitPos, Color::green);
 				return true;
 			}
+			
 		}
 		
 		return false;
@@ -210,20 +208,20 @@ struct ClosestHitRaycast {
 		bool previouslyHadHit = (closestHit <= 1.f);
 		
 		const BackgroundTileData & eg = ACTIVEBKG->m_tileData[tile.x][tile.y];
-		for(long k = 0; k < eg.nbpolyin; k++) {
-			EERIEPOLY & ep = *eg.polyin[k];
+		BOOST_FOREACH(EERIEPOLY * ep, eg.polyin) {
 			
-			if(ep.type & POLY_TRANS) {
+			if(ep->type & POLY_TRANS) {
 				continue;
 			}
 			
-			float relDist = linePolyIntersection(start, dir, ep);
+			float relDist = linePolyIntersection(start, dir, *ep);
 			if(relDist < closestHit) {
 				closestHit = relDist;
 				#ifdef RAYCAST_DEBUG
-				hitPoly = &ep;
+				hitPoly = ep;
 				#endif
 			}
+			
 		}
 		
 		if(previouslyHadHit) {
@@ -235,17 +233,14 @@ struct ClosestHitRaycast {
 		}
 		
 		// Determine hit grid cell coordinates
-		const Vec2f cellSide = Vec2f(ACTIVEBKG->m_tileSize.x, ACTIVEBKG->m_tileSize.y);
+		const Vec2f cellSide = g_backgroundTileSize;
 		Vec3f hitPos = start + closestHit * dir;
 		Vec2i hitTile = Vec2i(glm::floor(Vec2f(hitPos.x, hitPos.z) / cellSide));
-		if(hitTile == tile) {
-			// Hit in this tile, abort the search
-			return true;
-		} else {
-			// Hit in next tile, need to check other polygons in that tile
-			// first, which may not all be in this tile.
-			return false;
-		}
+		
+		// Abort the search if hit in this tile
+		// Otherwise hit is in the next tile, need to check other polygons in that tile
+		// first, which may not all be in this tile.
+		return (hitTile == tile);
 	}
 	
 };
@@ -283,17 +278,16 @@ RaycastResult RaycastLine(const Vec3f & start, const Vec3f & end) {
 		dbg_addPoly(raycast.hitPoly, hitPos, Color::green);
 		#endif
 		return RaycastHit(hitPos);
-	} else {
-		return RaycastMiss();
 	}
+	return RaycastMiss();
 }
 
 
 #ifndef RAYCAST_DEBUG
 
-void dbg_addRay(Vec3f start, Vec3f end) { ARX_UNUSED(start); ARX_UNUSED(end); }
+void dbg_addRay(Vec3f start, Vec3f end) { ARX_UNUSED(start), ARX_UNUSED(end); }
 void dbg_addTile(Vec2i tile){ ARX_UNUSED(tile); }
-void dbg_addPoly(EERIEPOLY * poly, Vec3f hit, Color c){ ARX_UNUSED(poly); ARX_UNUSED(hit); ARX_UNUSED(c);}
+void dbg_addPoly(EERIEPOLY * poly, Vec3f hit, Color c){ ARX_UNUSED(poly), ARX_UNUSED(hit), ARX_UNUSED(c); }
 void RaycastDebugClear() {}
 void RaycastDebugDraw() {}
 
@@ -345,11 +339,11 @@ void RaycastDebugDraw() {
 	}
 	
 	for(auto & tile: dbg_tiles) {
-		Vec3f foo = Vec3f(tile.x *100, ACTIVECAM->orgTrans.pos.y + 80, tile.y*100);
-		drawLine(foo, foo + Vec3f(100, 0, 0), Color::white);
-		drawLine(foo + Vec3f(100, 0, 0)  , foo + Vec3f(100, 0, 100), Color::white);
-		drawLine(foo + Vec3f(100, 0, 100), foo + Vec3f(  0, 0, 100), Color::white);
-		drawLine(foo, foo + Vec3f(  0, 0, 100), Color::white);
+		Vec3f foo = Vec3f(tile.x * 100.f, g_camera->pos.y + 80.f, tile.y * 100.f);
+		drawLine(foo, foo + Vec3f(100.f, 0.f, 0.f), Color::white);
+		drawLine(foo + Vec3f(100.f, 0.f, 0.f), foo + Vec3f(100.f, 0.f, 100.f), Color::white);
+		drawLine(foo + Vec3f(100.f, 0.f, 100.f), foo + Vec3f(0.f, 0.f, 100.f), Color::white);
+		drawLine(foo, foo + Vec3f(0.f, 0.f, 100.f), Color::white);
 	}
 	
 	for(auto hit : dbg_hits) {

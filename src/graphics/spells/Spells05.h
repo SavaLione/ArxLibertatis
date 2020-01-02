@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2016 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -48,15 +48,17 @@ ZeniMax Media Inc., Suite 120, Rockville, Maryland 20850 USA.
 #include "graphics/effects/RotatingCone.h"
 #include "graphics/effects/SpellEffects.h"
 #include "graphics/particle/ParticleSystem.h"
+#include "platform/Platform.h"
 
 
 // Done By : Didier Pédreno
-class CPoisonProjectile : public CSpellFx {
+class CPoisonProjectile arx_final : public CSpellFx {
 	
 public:
+	
 	CPoisonProjectile();
 	
-	void Create(Vec3f, float afBeta = 0);
+	void Create(Vec3f _eSrc, float _fBeta = 0);
 	void Update(GameDuration timeDelta);
 	void Render();
 	
@@ -65,17 +67,13 @@ public:
 	float lightIntensityFactor;
 	
 	LightHandle lLightId;
-private:
-	float	fBetaRadCos;
-	float	fBetaRadSin;
 	
-	bool  bOk;
+private:
+	
 	float fTrail;
 	
 	Vec3f eMove;
 	Vec3f pathways[40];
-	ParticleSystem pPS;
-	ParticleSystem pPSStream;
 };
 
 #endif // ARX_GRAPHICS_SPELLS_SPELLS05_H

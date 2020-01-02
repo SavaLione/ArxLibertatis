@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2017 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2014-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -39,17 +39,16 @@
 #include "scene/GameSound.h"
 #include "scene/Interactive.h"
 
-
 RuneOfGuardingSpell::RuneOfGuardingSpell()
-	: SpellBase()
+	: m_pos(0.f)
 	, tex_p2(NULL)
-{}
+{ }
 
 void RuneOfGuardingSpell::Launch() {
 	
 	spells.endByCaster(m_caster, SPELL_RUNE_OF_GUARDING);
 	
-	ARX_SOUND_PlaySFX(SND_SPELL_RUNE_OF_GUARDING);
+	ARX_SOUND_PlaySFX(g_snd.SPELL_RUNE_OF_GUARDING);
 	
 	m_hasDuration = m_launchDuration >= 0;
 	m_duration = m_hasDuration ? m_launchDuration : 0;
@@ -138,26 +137,26 @@ void RuneOfGuardingSpell::Update() {
 	
 	
 	Sphere sphere = Sphere(m_pos, std::max(m_level * 15.f, 50.f));
-	if(CheckAnythingInSphere(sphere, m_caster, CAS_NO_SAME_GROUP | CAS_NO_BACKGROUND_COL | CAS_NO_ITEM_COL| CAS_NO_FIX_COL | CAS_NO_DEAD_COL)) {
+	if(CheckAnythingInSphere(sphere, m_caster, CAS_NO_SAME_GROUP | CAS_NO_BACKGROUND_COL | CAS_NO_ITEM_COL
+	                                           | CAS_NO_FIX_COL | CAS_NO_DEAD_COL)) {
 		spawnFireHitParticle(m_pos, 0);
 		PolyBoomAddScorch(m_pos);
 		LaunchFireballBoom(m_pos, m_level);
-		DoSphericDamage(Sphere(m_pos, 30.f * m_level), 4.f * m_level, DAMAGE_AREA, DAMAGE_TYPE_FIRE | DAMAGE_TYPE_MAGICAL, m_caster);
-		ARX_SOUND_PlaySFX(SND_SPELL_RUNE_OF_GUARDING_END, &m_pos);
-		m_duration = 0;
+		DoSphericDamage(Sphere(m_pos, 30.f * m_level), 4.f * m_level,
+		                DAMAGE_AREA, DAMAGE_TYPE_FIRE | DAMAGE_TYPE_MAGICAL, m_caster);
+		ARX_SOUND_PlaySFX(g_snd.SPELL_RUNE_OF_GUARDING_END, &m_pos);
+		requestEnd();
 	}
 }
 
 Vec3f RuneOfGuardingSpell::getPosition() {
-	
 	return m_pos;
 }
 
-
 LevitateSpell::LevitateSpell()
-	: SpellBase()
+	: m_pos(0.f)
 	, m_baseRadius(50.f)
-{}
+{ }
 
 void LevitateSpell::Launch() {
 	
@@ -167,7 +166,7 @@ void LevitateSpell::Launch() {
 		m_target = EntityHandle_Player;
 	}
 	
-	ARX_SOUND_PlaySFX(SND_SPELL_LEVITATE_START, &entities[m_target]->pos);
+	ARX_SOUND_PlaySFX(g_snd.SPELL_LEVITATE_START, &entities[m_target]->pos);
 	
 	m_fManaCostPerSecond = 1.f;
 	
@@ -192,7 +191,7 @@ void LevitateSpell::Launch() {
 	cone2.Init(m_baseRadius, rhaut * 1.5f, hauteur * 0.5f);
 	m_stones.Init(m_baseRadius);
 	
-	m_snd_loop = ARX_SOUND_PlaySFX(SND_SPELL_LEVITATE_LOOP, &entities[m_target]->pos, 0.7f, ARX_SOUND_PLAY_LOOPED);
+	m_snd_loop = ARX_SOUND_PlaySFX_loop(g_snd.SPELL_LEVITATE_LOOP, &entities[m_target]->pos, 0.7f);
 	
 	m_targets.push_back(m_target);
 }
@@ -200,10 +199,11 @@ void LevitateSpell::Launch() {
 void LevitateSpell::End() {
 	
 	ARX_SOUND_Stop(m_snd_loop);
+	m_snd_loop = audio::SourcedSample();
 	
 	Entity * target = entities.get(m_target);
 	if(target) {
-		ARX_SOUND_PlaySFX(SND_SPELL_LEVITATE_END, &target->pos);
+		ARX_SOUND_PlaySFX(g_snd.SPELL_LEVITATE_END, &target->pos);
 	}
 	
 	m_targets.clear();
@@ -272,11 +272,9 @@ void LevitateSpell::createDustParticle() {
 	pd->m_rotation = 0.0000001f;
 }
 
-
-
 CurePoisonSpell::CurePoisonSpell()
-	: SpellBase()
-{}
+	: m_pos(0.f)
+{ }
 
 void CurePoisonSpell::Launch() {
 	
@@ -287,12 +285,12 @@ void CurePoisonSpell::Launch() {
 	float cure = m_level * 10;
 	if(m_target == EntityHandle_Player) {
 		player.poison -= std::min(player.poison, cure);
-		ARX_SOUND_PlaySFX(SND_SPELL_CURE_POISON);
+		ARX_SOUND_PlaySFX(g_snd.SPELL_CURE_POISON);
 	} else if(Entity * io = entities.get(m_target)) {
 		if(io->ioflags & IO_NPC) {
 			io->_npcdata->poisonned -= std::min(io->_npcdata->poisonned, cure);
 		}
-		ARX_SOUND_PlaySFX(SND_SPELL_CURE_POISON, &io->pos);
+		ARX_SOUND_PlaySFX(g_snd.SPELL_CURE_POISON, &io->pos);
 	}
 	
 	m_duration = GameDurationMs(3500);
@@ -328,7 +326,7 @@ void CurePoisonSpell::Update() {
 	
 	if(ff < GameDurationMs(1500)) {
 		m_particles.m_parameters.m_spawnFlags = PARTICLE_CIRCULAR;
-		m_particles.m_parameters.m_gravity = Vec3f_ZERO;
+		m_particles.m_parameters.m_gravity = Vec3f(0.f);
 
 		std::list<Particle *>::iterator i;
 
@@ -363,12 +361,11 @@ void CurePoisonSpell::Update() {
 	m_particles.Render();
 }
 
-
 RepelUndeadSpell::RepelUndeadSpell()
-	: SpellBase()
+	: m_pos(0.f)
 	, m_yaw(0.f)
 	, tex_p2(NULL)
-{}
+{ }
 
 void RepelUndeadSpell::Launch() {
 	
@@ -378,9 +375,9 @@ void RepelUndeadSpell::Launch() {
 		m_target = EntityHandle_Player;
 	}
 	
-	ARX_SOUND_PlaySFX(SND_SPELL_REPEL_UNDEAD, &entities[m_target]->pos);
+	ARX_SOUND_PlaySFX(g_snd.SPELL_REPEL_UNDEAD, &entities[m_target]->pos);
 	if(m_target == EntityHandle_Player) {
-		m_snd_loop = ARX_SOUND_PlaySFX(SND_SPELL_REPEL_UNDEAD_LOOP, &entities[m_target]->pos, 1.f, ARX_SOUND_PLAY_LOOPED);
+		m_snd_loop = ARX_SOUND_PlaySFX_loop(g_snd.SPELL_REPEL_UNDEAD_LOOP, &entities[m_target]->pos, 1.f);
 	}
 	
 	m_hasDuration = m_launchDuration >= 0;
@@ -393,7 +390,9 @@ void RepelUndeadSpell::Launch() {
 }
 
 void RepelUndeadSpell::End() {
+	
 	ARX_SOUND_Stop(m_snd_loop);
+	m_snd_loop = audio::SourcedSample();
 	
 	endLightDelayed(m_light, GameDurationMs(500));
 }
@@ -424,9 +423,7 @@ void RepelUndeadSpell::Update() {
 	
 	float wave = timeWaveSin(g_gameTime.now(), GameDurationMsf(6283.185307f));
 	
-	float vv = 1.f + wave;
-	vv *= ( 1.0f / 2 );
-	vv += 1.1f;
+	float vv = (1.f + wave) * 0.5f + 1.1f;
 	
 	Draw3DObject(ssol, eObjAngle, m_pos + Vec3f(0.f, -5.f, 0.f), Vec3f(vv), Color3f(0.6f, 0.6f, 0.8f), mat);
 	
@@ -481,10 +478,10 @@ PoisonProjectileSpell::~PoisonProjectileSpell() {
 
 void PoisonProjectileSpell::Launch() {
 	
-	ARX_SOUND_PlaySFX(SND_SPELL_POISON_PROJECTILE_LAUNCH,
+	ARX_SOUND_PlaySFX(g_snd.SPELL_POISON_PROJECTILE_LAUNCH,
 	                  &m_caster_pos);
 	
-	Vec3f srcPos = Vec3f_ZERO;
+	Vec3f srcPos(0.f);
 	float afBeta = 0.f;
 	
 	Entity * caster = entities[m_caster];
@@ -591,12 +588,10 @@ void PoisonProjectileSpell::Update() {
 		AddPoisonFog(projectile->eCurPos, m_level + 7);
 
 		if(m_elapsed > GameDurationMs(1600)) {
-			
 			DamageParameters damage;
 			damage.pos = projectile->eCurPos;
 			damage.radius = 120.f;
-			float v = 4.f + m_level * ( 1.0f / 10 ) * 6.f;
-			damage.damages = v * ( 1.0f / 1000 ) * g_framedelay;
+			damage.damages = (4.f + m_level * 0.6f) * 0.001f * g_framedelay;
 			damage.area = DAMAGE_FULL;
 			damage.duration = g_gameTime.lastFrameDuration();
 			damage.source = m_caster;
@@ -604,7 +599,9 @@ void PoisonProjectileSpell::Update() {
 			damage.type = DAMAGE_TYPE_MAGICAL | DAMAGE_TYPE_POISON;
 			DamageCreate(damage);
 		}
+		
 	}
+	
 }
 
 void PoisonProjectileSpell::AddPoisonFog(const Vec3f & pos, float power) {
@@ -635,7 +632,9 @@ void PoisonProjectileSpell::AddPoisonFog(const Vec3f & pos, float power) {
 		pd->tolive = Random::getu(4500, 9000);
 		pd->tc = TC_smoke;
 		pd->siz = (80.f + Random::getf(0.f, 160.f)) * (1.f / 3);
-		pd->rgb = Color3f(Random::getf(0.f, 1.f/3), 1.f, Random::getf(0.f, 0.1f));
+		pd->rgb = Color3f(Random::getf(0.f, 1.f / 3), 1.f, Random::getf(0.f, 0.1f));
 		pd->m_rotation = 0.001f;
+		
 	}
+	
 }

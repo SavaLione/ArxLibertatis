@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2012 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -48,38 +48,28 @@ ZeniMax Media Inc., Suite 120, Rockville, Maryland 20850 USA.
 
 namespace audio {
 
-CodecRAW::CodecRAW() : stream(NULL), cursor(0) {
-}
+CodecRAW::CodecRAW() : m_stream(NULL) { }
 
-CodecRAW::~CodecRAW() {
-}
-
-aalError CodecRAW::setHeader(void * _header) {
-	ARX_UNUSED(_header);
+aalError CodecRAW::setHeader(void * header) {
+	ARX_UNUSED(header);
 	return AAL_OK;
 }
 
-void CodecRAW::setStream(PakFileHandle * _stream) {
-	stream = _stream;
+void CodecRAW::setStream(PakFileHandle * stream) {
+	m_stream = stream;
 }
 
-aalError CodecRAW::setPosition(size_t _position) {
+aalError CodecRAW::setPosition(size_t position) {
 	
-	if(stream->seek(SeekCur, _position) == -1) {
+	if(m_stream->seek(SeekCur, position) == -1) {
 		return AAL_ERROR_FILEIO;
 	}
 	
-	cursor = _position;
-	
 	return AAL_OK;
 }
 
-size_t CodecRAW::getPosition() {
-	return cursor;
-}
-
-aalError CodecRAW::read(void * buffer, size_t to_read, size_t & read) {
-	read = stream->read(buffer, to_read);
+aalError CodecRAW::read(void * buffer, size_t bufferSize, size_t & read) {
+	read = m_stream->read(buffer, bufferSize);
 	return AAL_OK;
 }
 

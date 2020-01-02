@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2017 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -65,10 +65,9 @@ ZeniMax Media Inc., Suite 120, Rockville, Maryland 20850 USA.
 #include "scene/Scene.h"
 
 CCreateField::CCreateField()
-	: eSrc(Vec3f_ZERO)
+	: eSrc(0.f)
 	, youp(true)
 	, fwrap(0.f)
-	, ysize(0.1f)
 	, size(0.1f)
 	, ft(0.0f)
 	, fglow(0.f)
@@ -80,32 +79,27 @@ CCreateField::CCreateField()
 void CCreateField::Create(Vec3f aeSrc) {
 	
 	eSrc = aeSrc;
-	ysize = 0.1f;
 	size = 0.1f;
 	ft = 0.0f;
 	fglow = 0;
 	youp = true;
 }
 
-void CCreateField::RenderQuad(const Vec3f & p1, const Vec3f & p2, const Vec3f & p3, const Vec3f & p4, int rec, Vec3f norm, RenderMaterial & mat)
-{
+void CCreateField::RenderQuad(const Vec3f & p1, const Vec3f & p2, const Vec3f & p3, const Vec3f & p4, int rec, Vec3f norm, RenderMaterial & mat) {
+	
 	if(rec < 3) {
-		rec ++;
 		
-		Vec3f v[5];
-		// milieu
-		v[0] = p1 + (p3 - p1) * 0.5f;
-		// gauche
-		v[1] = p1 + (p4 - p1) * 0.5f;
-		// droite
-		v[2] = p2 + (p3 - p2) * 0.5f;
-		// haut
-		v[3] = p4 + (p3 - p4) * 0.5f;
-		// bas
-		v[4] = p1 + (p2 - p1) * 0.5f;
-
+		rec++;
+		
+		Vec3f v[5] = {
+			p1 + (p3 - p1) * 0.5f,
+			p1 + (p4 - p1) * 0.5f,
+			p2 + (p3 - p2) * 0.5f,
+			p4 + (p3 - p4) * 0.5f,
+			p1 + (p2 - p1) * 0.5f,
+		};
+		
 		float patchsize = 0.005f;
-
 		v[0].x += glm::sin(glm::radians((v[0].x - eSrc.x) * patchsize + fwrap)) * 5;
 		v[0].y += glm::sin(glm::radians((v[0].y - eSrc.y) * patchsize + fwrap)) * 5;
 		v[0].z += glm::sin(glm::radians((v[0].z - eSrc.z) * patchsize + fwrap)) * 5;
@@ -183,9 +177,9 @@ void CCreateField::Render()
 			youp = true;
 		}
 	}
-
-	ysize = std::min(1.0f, m_elapsed / GameDurationMs(1000));
-
+	
+	float ysize = std::min(1.0f, m_elapsed / GameDurationMs(1000));
+	
 	if(ysize >= 1.0f) {
 		size = std::min(1.0f, (m_elapsed - GameDurationMs(1000)) / GameDurationMs(1000));
 		size = std::max(size, 0.1f);
@@ -204,16 +198,20 @@ void CCreateField::Render()
 	float smul = 100 * size;
 
 	// bottom points
-	b[0] = eSrc + Vec3f(-smul, 0.f, -smul);
-	b[1] = eSrc + Vec3f(smul, 0.f, -smul);
-	b[2] = eSrc + Vec3f(smul, 0.f, smul);
-	b[3] = eSrc + Vec3f(-smul, 0.f, smul);
+	Vec3f b[4] = {
+		eSrc + Vec3f(-smul, 0.f, -smul),
+		eSrc + Vec3f(smul, 0.f, -smul),
+		eSrc + Vec3f(smul, 0.f, smul),
+		eSrc + Vec3f(-smul, 0.f, smul)
+	};
 	
 	// top points
-	t[0] = b[0] + Vec3f(0.f, -250 * ysize, 0.f);
-	t[1] = b[1] + Vec3f(0.f, -250 * ysize, 0.f);
-	t[2] = b[2] + Vec3f(0.f, -250 * ysize, 0.f);
-	t[3] = b[3] + Vec3f(0.f, -250 * ysize, 0.f);
+	Vec3f t[4] = {
+		b[0] + Vec3f(0.f, -250 * ysize, 0.f),
+		b[1] + Vec3f(0.f, -250 * ysize, 0.f),
+		b[2] + Vec3f(0.f, -250 * ysize, 0.f),
+		b[3] + Vec3f(0.f, -250 * ysize, 0.f)
+	};
 	
 	fwrap -= 5.0f; // TODO ignores the frame delay
 	while(fwrap < 0) {
@@ -241,7 +239,5 @@ void CCreateField::Render()
 		light->pos = eSrc + Vec3f(0.f, -150.f, 0.f);
 		light->duration = GameDurationMs(800);
 	}
-
-	//return falpha;
+	
 }
-

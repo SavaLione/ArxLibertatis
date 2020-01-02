@@ -22,6 +22,7 @@
 #cmakedefine01 ARX_HAVE_SETPGID
 #cmakedefine01 ARX_HAVE_EXECVP
 #cmakedefine01 ARX_HAVE_POSIX_SPAWNP
+#cmakedefine01 ARX_HAVE_UNISTD_ENVIRON
 #cmakedefine01 ARX_HAVE_WAITPID
 #cmakedefine01 ARX_HAVE_SIGACTION
 #cmakedefine01 ARX_HAVE_GETPID
@@ -35,11 +36,16 @@
 #cmakedefine01 ARX_HAVE_MACH_CLOCK
 
 // Filesystem & I/O
+#cmakedefine01 ARX_HAVE_POSIX_FILESYSTEM
+#cmakedefine01 ARX_HAVE_WIN32_FILESYSTEM
+#cmakedefine01 ARX_HAVE_BOOST_FILESYSTEM_V3
 #cmakedefine01 ARX_HAVE_READLINK
 #cmakedefine01 ARX_HAVE_OPEN
+#cmakedefine01 ARX_HAVE_O_CLOEXEC
 #cmakedefine01 ARX_HAVE_FCNTL
 #cmakedefine01 ARX_HAVE_DUP2
 #cmakedefine01 ARX_HAVE_PIPE
+#cmakedefine01 ARX_HAVE_PIPE2
 #cmakedefine01 ARX_HAVE_READ
 #cmakedefine01 ARX_HAVE_CLOSE
 #cmakedefine01 ARX_HAVE_ISATTY
@@ -51,11 +57,15 @@
 #cmakedefine01 ARX_HAVE_PC_CASE_SENSITIVE
 #cmakedefine01 ARX_HAVE_DIRFD
 #cmakedefine01 ARX_HAVE_FSTATAT
+#cmakedefine01 ARX_HAVE_AT_SYMLINK_NOFOLLOW
 #cmakedefine01 ARX_HAVE_CHDIR
 
 // Video backend
 #cmakedefine01 ARX_HAVE_EPOXY
 #cmakedefine01 ARX_HAVE_GLEW
+#cmakedefine01 ARX_HAVE_GLX
+#cmakedefine01 ARX_HAVE_EGL
+#cmakedefine01 ARX_HAVE_GL_STATIC
 
 // Audio backend
 #cmakedefine01 ARX_HAVE_OPENAL
@@ -79,6 +89,7 @@
 #cmakedefine01 ARX_HAVE_BSWAP_64
 
 // Misc POSIX / Linux features
+#cmakedefine01 ARX_HAVE_DLSYM
 #cmakedefine01 ARX_HAVE_BACKTRACE
 #cmakedefine01 ARX_HAVE_WORDEXP
 #cmakedefine01 ARX_HAVE_UNAME
@@ -89,6 +100,7 @@
 #cmakedefine01 ARX_HAVE_SYSCTLBYNAME
 #cmakedefine01 ARX_HAVE_SETENV
 #cmakedefine01 ARX_HAVE_UNSETENV
+#cmakedefine01 ARX_HAVE_CONFSTR
 
 // Architure-specific features
 #cmakedefine01 ARX_HAVE_GET_CPUID

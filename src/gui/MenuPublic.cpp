@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2017 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -53,6 +53,7 @@ ZeniMax Media Inc., Suite 120, Rockville, Maryland 20850 USA.
 #include "animation/AnimationRender.h"
 
 #include "core/Application.h"
+#include "core/ArxGame.h"
 #include "core/Config.h"
 #include "core/Core.h"
 #include "core/GameTime.h"
@@ -85,43 +86,13 @@ ZeniMax Media Inc., Suite 120, Rockville, Maryland 20850 USA.
 
 extern bool bQuickGenFirstClick;
 
-extern SavegameHandle LOADQUEST_SLOT;
-
-void ARXMenu_Private_Options_Video_SetResolution(bool fullscreen, int _iWidth, int _iHeight) {
-	
-	if(!GRenderer) {
-		return;
-	}
-	
-	config.video.resolution = Vec2i(_iWidth, _iHeight);
-	
-	if(!fullscreen) {
-		if(config.video.resolution == Vec2i_ZERO) {
-			LogInfo << "Configuring automatic fullscreen resolution selection";
-		} else {
-			LogInfo << "Configuring fullscreen resolution to " << DisplayMode(config.video.resolution);
-		}
-	}
-	
-	RenderWindow * window = mainApp->getWindow();
-	
-	if(window->isFullScreen() != fullscreen || fullscreen) {
-		
-		GRenderer->Clear(Renderer::ColorBuffer);
-		
-		mainApp->getWindow()->showFrame();
-		
-		mainApp->setWindowSize(fullscreen);
-		
-	}
-}
-
 void ARXMenu_Options_Video_SetFogDistance(float distance) {
 	config.video.fogDistance = glm::clamp(distance, 0.f, 10.f);
 }
 
-void ARXMenu_Options_Video_SetDetailsQuality(int _iQuality) {
-	config.video.levelOfDetail = glm::clamp(_iQuality, 0, 2);
+void ARXMenu_Options_Video_SetDetailsQuality(int lod) {
+	
+	config.video.levelOfDetail = glm::clamp(lod, 0, 2);
 	
 	switch(config.video.levelOfDetail) {
 		case 0: {
@@ -137,6 +108,7 @@ void ARXMenu_Options_Video_SetDetailsQuality(int _iQuality) {
 			break;
 		}
 	}
+	
 }
 
 void ARXMenu_Options_Video_SetGamma(float gamma) {
@@ -181,7 +153,10 @@ void ARXMenu_Options_Audio_SetAmbianceVolume(float volume) {
 }
 
 void ARXMenu_Options_Audio_ApplyGameVolumes() {
-	ARX_SOUND_MixerSwitch(ARX_SOUND_MixerMenu, ARX_SOUND_MixerGame);
+	
+	ARX_SOUND_MixerPause(ARX_SOUND_MixerMenu);
+	ARX_SOUND_MixerResume(ARX_SOUND_MixerGame);
+	
 	float volume = config.audio.volume * 0.1f;
 	if(config.audio.muteOnFocusLost && !mainApp->getWindow()->hasFocus()) {
 		volume = 0.f;
@@ -208,33 +183,33 @@ void ARXMenu_Options_Audio_SetDevice(const std::string & device) {
 	 * should be able to switch backends internally.
 	 */
 	
-	ARX_SOUND_PushAnimSamples();
-	size_t ulSizeAmbiancePlayList;
-	char * pAmbiancePlayList = ARX_SOUND_AmbianceSavePlayList(ulSizeAmbiancePlayList);
+	std::vector< std::pair<res::path, size_t> > animationSamples = ARX_SOUND_PushAnimSamples();
+	
+	std::string playlist = ARX_SOUND_AmbianceSavePlayList();
 	
 	ARX_SOUND_Release();
 	ARX_SOUND_Init();
 	
-	ARX_SOUND_MixerSwitch(ARX_SOUND_MixerGame, ARX_SOUND_MixerMenu);
+	ARX_SOUND_MixerPause(ARX_SOUND_MixerGame);
+	ARX_SOUND_MixerResume(ARX_SOUND_MixerMenu);
+	
 	ARX_SOUND_PlayMenuAmbiance(AMB_MENU);
 	
 	ARXMenu_Options_Audio_SetMasterVolume(config.audio.volume);
 	ARXMenu_Options_Audio_SetSfxVolume(config.audio.sfxVolume);
 	ARXMenu_Options_Audio_SetSpeechVolume(config.audio.speechVolume);
 	ARXMenu_Options_Audio_SetAmbianceVolume(config.audio.ambianceVolume);
-
-	if(pAmbiancePlayList) {
-		ARX_SOUND_AmbianceRestorePlayList(pAmbiancePlayList, ulSizeAmbiancePlayList);
-		free(pAmbiancePlayList);
-	}
-
-	ARX_SOUND_PopAnimSamples();
+	
+	ARX_SOUND_AmbianceRestorePlayList(playlist.data(), playlist.size());
+	
+	ARX_SOUND_PopAnimSamples(animationSamples);
 }
 
 void ARXMenu_ResumeGame() {
 	ARX_Menu_Resources_Release();
 	g_gameTime.resume(GameTime::PauseMenu);
 	EERIEMouseButton = 0;
+	ARXmenu.requestMode(Mode_InGame);
 }
 
 void ARXMenu_NewQuest() {
@@ -242,22 +217,4 @@ void ARXMenu_NewQuest() {
 	bQuickGenFirstClick = true;
 	player.gold = 0;
 	ARX_PLAYER_MakeFreshHero();
-}
-
-void ARXMenu_LoadQuest(SavegameHandle num) {
-	
-	LOADQUEST_SLOT = num;
-
-	ARX_SOUND_PlayMenu(SND_MENU_CLICK);
-	g_canResumeGame = true;
-	ARX_MENU_Clicked_QUIT();
-}
-
-void ARXMenu_SaveQuest(const std::string & name, SavegameHandle num) {
-	
-	ARX_SOUND_MixerPause(ARX_SOUND_MixerMenu);
-	
-	savegames.save(name, num.handleData(), savegame_thumbnail);
-	
-	ARX_SOUND_MixerResume(ARX_SOUND_MixerMenu);
 }

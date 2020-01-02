@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2017 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -49,6 +49,7 @@ ZeniMax Media Inc., Suite 120, Rockville, Maryland 20850 USA.
 
 #include <stddef.h>
 #include <string>
+#include <vector>
 
 #include "game/Entity.h"
 #include "game/EntityId.h"
@@ -63,13 +64,13 @@ namespace res { class path; }
 enum TargetInfo {
 	TARGET_PATH = -3,
 	TARGET_NONE = -2,
-	TARGET_PLAYER = 0, //-1
+	TARGET_PLAYER = 0,
 };
 
 enum AddInteractiveFlag {
-	NO_MESH          = (1<<0),
-	NO_ON_LOAD       = (1<<1),
-	IO_IMMEDIATELOAD = (1<<2)
+	NO_MESH          = 1 << 0,
+	NO_ON_LOAD       = 1 << 1,
+	IO_IMMEDIATELOAD = 1 << 2
 };
 DECLARE_FLAGS(AddInteractiveFlag, AddInteractiveFlags)
 DECLARE_FLAGS_OPERATORS(AddInteractiveFlags)
@@ -84,7 +85,7 @@ DECLARE_FLAGS_OPERATORS(DeleteByIndexFlags)
 void ARX_INTERACTIVE_TWEAK_Icon(Entity * io, const res::path & s1);
 void ARX_INTERACTIVE_DestroyDynamicInfo(Entity * io);
 void ARX_INTERACTIVE_HideGore(Entity * io, long flag = 0);
-bool ARX_INTERACTIVE_Attach(EntityHandle n_source, EntityHandle n_target, const std::string & ap_source, const std::string & ap_target);
+void ARX_INTERACTIVE_Attach(EntityHandle n_source, EntityHandle n_target, const std::string & ap_source, const std::string & ap_target);
 void ARX_INTERACTIVE_Detach(EntityHandle n_source, EntityHandle n_target);
 void ARX_INTERACTIVE_Show_Hide_1st(Entity * io, long state);
 
@@ -157,21 +158,21 @@ void SetWeapon_On(Entity * io);
 void Prepare_SetWeapon(Entity * io, const res::path & temp);
 void ComputeVVPos(Entity * io);
 void SetYlsideDeath(Entity * io);
-std::string GetMaterialString(const res::path & origin );
+std::string GetMaterialString(const res::path & texture);
 Entity * CloneIOItem(Entity * src);
 
 float ARX_INTERACTIVE_GetArmorClass(Entity * io);
-long  ARX_INTERACTIVE_GetPrice(Entity * io, Entity * shop);
+long ARX_INTERACTIVE_GetPrice(Entity * io, Entity * shop);
+long ARX_INTERACTIVE_GetSellValue(Entity * item, Entity * shop, long count = 1);
 void IO_UnlinkAllLinkedObjects(Entity * io);
 
 struct TREATZONE_IO {
 	Entity * io;
 	EntityFlags ioflags;
-	long show;
+	EntityVisilibity show;
 };
 
-extern TREATZONE_IO * treatio;
-extern long TREATZONE_CUR;
+extern std::vector<TREATZONE_IO> treatio;
 
 void TREATZONE_Clear();
 void TREATZONE_Release();
@@ -187,5 +188,7 @@ void ARX_INTERACTIVE_ActivatePhysics(EntityHandle t);
 void ResetVVPos(Entity * io);
 
 void UpdateGoldObject(Entity * io);
+
+extern long HERO_SHOW_1ST;
 
 #endif // ARX_SCENE_INTERACTIVE_H

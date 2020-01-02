@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2016 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -78,7 +78,7 @@ EntityManager::~EntityManager() {
 	
 #ifdef ARX_DEBUG
 	for(size_t i = 0; i < size(); i++) {
-		arx_assert_msg(entries[i] == NULL, "object %lu not cleared", (unsigned long)i);
+		arx_assert_msg(entries[i] == NULL, "object %lu not cleared", static_cast<unsigned long>(i));
 	}
 #endif
 	
@@ -109,9 +109,11 @@ EntityHandle EntityManager::getById(const std::string & idString) const {
 	
 	if(idString.empty() || idString == "none") {
 		return EntityHandle();
-	} else if(idString == "self" || idString == "me") {
+	}
+	if(idString == "self" || idString == "me") {
 		return EntityHandle_Self;
-	} else if(idString == "player") {
+	}
+	if(idString == "player") {
 		return EntityHandle_Player;
 	}
 	
@@ -123,9 +125,11 @@ EntityHandle EntityManager::getById(const EntityId & id) const {
 	if(id.isSpecial()) {
 		if(id.className().empty()) {
 			return EntityHandle();
-		} else if(id.className() == "self" || id.className() == "me") {
+		}
+		if(id.className() == "self" || id.className() == "me") {
 			return EntityHandle_Self;
-		} else if(id.className() == "player") {
+		}
+		if(id.className() == "player") {
 			return EntityHandle_Player;
 		}
 	}
@@ -133,16 +137,16 @@ EntityHandle EntityManager::getById(const EntityId & id) const {
 	return m_impl->getById(id.string());
 }
 
-Entity * EntityManager::getById(const std::string & name, Entity * self) const {
+Entity * EntityManager::getById(const std::string & idString, Entity * self) const {
 	
-	EntityHandle handle = getById(name);
+	EntityHandle handle = getById(idString);
 	if(handle == EntityHandle()) {
 		return NULL;
-	} else if(handle == EntityHandle_Self) {
-		return self;
-	} else {
-		return entries[handle.handleData()];
 	}
+	if(handle == EntityHandle_Self) {
+		return self;
+	}
+	return entries[handle.handleData()];
 }
 
 void EntityManager::autocomplete(const std::string & prefix, AutocompleteHandler handler, void * context) {
@@ -184,7 +188,7 @@ size_t EntityManager::add(Entity * entity) {
 void EntityManager::remove(size_t index) {
 	
 	arx_assert_msg(index < size() && entries[index] != NULL,
-	               "double free or memory corruption detected: index=%lu", (unsigned long)index);
+	               "double free or memory corruption detected: index=%lu", static_cast<unsigned long>(index));
 	
 	m_impl->m_index.erase(entries[index]->idString());
 	

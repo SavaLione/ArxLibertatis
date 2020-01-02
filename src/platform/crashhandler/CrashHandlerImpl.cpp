@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2017 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -97,10 +97,10 @@ bool CrashHandlerImpl::createSharedMemory() {
 		m_MemoryMappedRegion = bip::mapped_region(m_SharedMemory, bip::read_write);
 		
 		// Our CrashInfo will be stored in this shared memory.
-		m_pCrashInfo = new (m_MemoryMappedRegion.get_address()) CrashInfo;
+		m_pCrashInfo = new(m_MemoryMappedRegion.get_address()) CrashInfo;
 		m_textLength = 0;
 		
-	} catch(bip::interprocess_exception) {
+	} catch(const bip::interprocess_exception &) {
 		return false;
 	}
 	
@@ -120,7 +120,7 @@ void CrashHandlerImpl::fillBasicCrashInfo() {
 	m_pCrashInfo->memoryUsage = 0;
 	m_pCrashInfo->runningTime = 0.0;
 
-	strcpy(m_pCrashInfo->crashReportFolder, "crashes");
+	util::storeStringTerminated(m_pCrashInfo->crashReportFolder, "crashes");
 	
 	std::string exe = platform::getExecutablePath().string();
 	util::storeStringTerminated(m_pCrashInfo->executablePath, exe);
@@ -289,8 +289,8 @@ bool CrashHandlerImpl::deleteOldReports(size_t nbReportsToKeep) {
 	
 	for(fs::directory_iterator it(location); !it.end(); ++it) {
 		fs::path path = location / it.name();
-		if(fs::is_directory(path)) {
-			oldCrashes.insert(CrashReportMap::value_type(fs::last_write_time(path), path));
+		if(it.is_directory()) {
+			oldCrashes.insert(CrashReportMap::value_type(it.last_write_time(), path));
 		} else {
 			fs::remove(path);
 		}

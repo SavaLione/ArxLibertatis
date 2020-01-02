@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2016 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -21,12 +21,12 @@
 
 #include "Configure.h"
 
-#define try
-#define catch(a) if(false)
+//#define try
+//#define catch(a) if(false)
 #include <boost/filesystem/operations.hpp>
 #include <boost/filesystem/convenience.hpp>
-#undef try
-#undef catch
+//#undef try
+//#undef catch
 
 #include "io/fs/FilePath.h"
 
@@ -34,19 +34,53 @@ namespace fs {
 
 namespace fs_boost = boost::filesystem;
 
-bool exists(const path & p) {
-	boost::system::error_code ec;
-	return fs_boost::exists(p.string(), ec) && !ec;
+static FileType status_to_filetype(const fs_boost::file_status & buf) {
+	
+	if(!fs_boost::exists(buf)) {
+		return DoesNotExist;
+	}
+	if(fs_boost::is_directory(buf)) {
+		return Directory;
+	}
+	if(fs_boost::is_regular_file(buf)) {
+		return RegularFile;
+	}
+	
+	return SpecialFile;
 }
 
-bool is_directory(const path & p) {
+FileType get_type(const path & p) {
+	
+	if(p.empty()) {
+		return Directory;
+	}
+	
 	boost::system::error_code ec;
-	return fs_boost::is_directory(p.string(), ec) && !ec;
+	fs_boost::file_status buf = fs_boost::status(p.string(), ec);
+	if(ec) {
+		return DoesNotExist;
+	}
+	
+	return status_to_filetype(buf);
 }
 
-bool is_regular_file(const path & p) {
+FileType get_link_type(const path & p) {
+	
+	if(p.empty()) {
+		return Directory;
+	}
+	
 	boost::system::error_code ec;
-	return fs_boost::is_regular_file(p.string(), ec) && !ec;
+	fs_boost::file_status buf = fs_boost::symlink_status(p.string(), ec);
+	if(ec) {
+		return DoesNotExist;
+	}
+	
+	if(fs_boost::is_symlink(buf)) {
+		return SymbolicLink;
+	}
+	
+	return status_to_filetype(buf);
 }
 
 std::time_t last_write_time(const path & p) {
@@ -58,30 +92,22 @@ std::time_t last_write_time(const path & p) {
 u64 file_size(const path & p) {
 	boost::system::error_code ec;
 	uintmax_t size = fs_boost::file_size(p.string(), ec);
-	return ec ? (u64)-1 : (u64)size;
+	return ec ? u64(-1) : u64(size);
 }
 
 bool remove(const path & p) {
 	boost::system::error_code ec;
 	fs_boost::remove(p.string(), ec);
-	return !ec;
+	return !ec || ec == boost::system::errc::no_such_file_or_directory || ec == boost::system::errc::not_a_directory;
 }
 
-bool remove_all(const path & p) {
-	boost::system::error_code ec;
-	fs_boost::remove_all(p.string(), ec);
-	return !ec;
+bool remove_directory(const path & p) {
+	return remove(p);
 }
 
 bool create_directory(const path & p) {
 	boost::system::error_code ec;
 	fs_boost::create_directory(p.string(), ec);
-	return !ec;
-}
-
-bool create_directories(const path & p) {
-	boost::system::error_code ec;
-	fs_boost::create_directories(p.string(), ec);
 	return !ec;
 }
 
@@ -112,47 +138,81 @@ path current_path() {
 
 directory_iterator::directory_iterator(const path & p) {
 	boost::system::error_code ec;
-	m_handle = new fs_boost::directory_iterator(p.empty() ? "./" : p.string(), ec);
+	m_it = fs_boost::directory_iterator(p.empty() ? "./" : p.string(), ec);
 	if(ec) {
-		delete reinterpret_cast<fs_boost::directory_iterator *>(m_handle);
-		m_handle = new fs_boost::directory_iterator();
+		m_it = fs_boost::directory_iterator();
 	}
 }
 
 directory_iterator::~directory_iterator() {
-	delete reinterpret_cast<fs_boost::directory_iterator *>(m_handle);
+	// nothing to do
 }
 
 directory_iterator & directory_iterator::operator++() {
 	arx_assert(!end());
 	boost::system::error_code ec;
-	(*reinterpret_cast<fs_boost::directory_iterator *>(m_handle)).increment(ec);
+	m_it.increment(ec);
 	if(ec) {
-		delete reinterpret_cast<fs_boost::directory_iterator *>(m_handle);
-		m_handle = new fs_boost::directory_iterator();
+		m_it = fs_boost::directory_iterator();
 	}
 	return *this;
 }
 
 bool directory_iterator::end() {
-	return (*reinterpret_cast<fs_boost::directory_iterator *>(m_handle) == fs_boost::directory_iterator());
+	return (m_it == fs_boost::directory_iterator());
 }
 
 std::string directory_iterator::name() {
 	arx_assert(!end());
-	return (*reinterpret_cast<fs_boost::directory_iterator *>(m_handle))->path().filename().string();
+	return m_it->path().filename().string();
 }
 
-bool directory_iterator::is_directory() {
+FileType directory_iterator::type() {
+	
 	arx_assert(!end());
+	
 	boost::system::error_code ec;
-	return fs_boost::is_directory((*reinterpret_cast<fs_boost::directory_iterator *>(m_handle))->status(ec)) && !ec;
+	fs_boost::file_status buf = m_it->status(ec);
+	if(ec) {
+		return DoesNotExist;
+	}
+	
+	return status_to_filetype(buf);
 }
 
-bool directory_iterator::is_regular_file() {
+FileType directory_iterator::link_type() {
+	
 	arx_assert(!end());
+	
 	boost::system::error_code ec;
-	return fs_boost::is_regular_file((*reinterpret_cast<fs_boost::directory_iterator *>(m_handle))->status(ec)) && !ec;
+	fs_boost::file_status buf = m_it->symlink_status(ec);
+	if(ec) {
+		return DoesNotExist;
+	}
+	
+	if(fs_boost::is_symlink(buf)) {
+		return SymbolicLink;
+	}
+	
+	return status_to_filetype(buf);
+}
+
+std::time_t directory_iterator::last_write_time() {
+	
+	arx_assert(!end());
+	
+	boost::system::error_code ec;
+	std::time_t time = fs_boost::last_write_time(m_it->path(), ec);
+	return ec ? 0 : time;
+}
+
+u64 directory_iterator::file_size() {
+	
+	arx_assert(!end());
+	
+	boost::system::error_code ec;
+	uintmax_t size = fs_boost::file_size(m_it->path(), ec);
+	return ec ? u64(-1) : u64(size);
 }
 
 } // namespace fs

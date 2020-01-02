@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2016-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -30,6 +30,7 @@
 #include "game/GameTypes.h"
 #include "input/TextInput.h"
 #include "io/log/LogBackend.h"
+#include "platform/Platform.h"
 
 class Entity;
 
@@ -77,7 +78,7 @@ public:
 	
 };
 
-class ScriptConsole : protected BasicTextInput {
+class ScriptConsole arx_final : protected BasicTextInput {
 	typedef BasicTextInput  Base;
 	
 	static const size_t MaxSuggestions = 1000;
@@ -101,8 +102,6 @@ class ScriptConsole : protected BasicTextInput {
 	Suggestion m_error; //!< Error message and corresponding position in \ref text()
 	int m_selection; //!< The selected suggestion (positive) history item (negative) or current line (0)
 	EntityHandle m_lastSelectedEntity;
-	PlatformDuration m_blinkTime;
-	bool m_blink;
 	
 	size_t m_contextBegin; //!< Start of the context entity ID in \ref text()
 	size_t m_contextEnd; //!< End of the context entity ID in \ref text()
@@ -145,8 +144,6 @@ public:
 		, m_originalCursorPos(true)
 		, m_selection(0)
 		, m_lastSelectedEntity(EntityHandle_Player)
-		, m_blinkTime(0)
-		, m_blink(true)
 		, m_contextBegin(0)
 		, m_contextEnd(0)
 		, m_commandBegin(0)

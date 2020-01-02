@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2016 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -24,6 +24,7 @@
 #include <vector>
 
 #include "graphics/Color.h"
+#include "graphics/texture/TextureStage.h"
 #include "math/Types.h"
 #include "platform/Platform.h"
 #include "util/Flags.h"
@@ -32,7 +33,6 @@ struct TexturedVertex;
 struct SMY_VERTEX;
 struct SMY_VERTEX3;
 class TextureContainer;
-class TextureStage;
 class Image;
 class Texture;
 template <class Vertex> class VertexBuffer;
@@ -77,7 +77,7 @@ class RenderState {
 		End = BlendDst + BlendSize
 	};
 	
-	// We coul use bitfields here instead but they are missing (an efficient) operator==.
+	// We could use bitfields here instead but they are missing (an efficient) operator==.
 	u32 m_state;
 	
 	template <size_t Offset, size_t Size>
@@ -256,8 +256,8 @@ public:
 		
 		virtual ~Listener() { }
 		
-		virtual void onRendererInit(Renderer &) { }
-		virtual void onRendererShutdown(Renderer &) { }
+		virtual void onRendererInit(Renderer & renderer) { ARX_UNUSED(renderer); }
+		virtual void onRendererShutdown(Renderer & renderer) { ARX_UNUSED(renderer); }
 		
 	};
 	
@@ -280,8 +280,8 @@ public:
 	
 	//! Target surface
 	enum BufferType {
-		ColorBuffer   = (1<<0),
-		DepthBuffer   = (1<<1)
+		ColorBuffer = 1 << 0,
+		DepthBuffer = 1 << 1
 	};
 	DECLARE_FLAGS(BufferType, BufferFlags)
 	
@@ -337,9 +337,7 @@ public:
 	
 	// Matrices
 	virtual void SetViewMatrix(const glm::mat4x4 & matView) = 0;
-	virtual void GetViewMatrix(glm::mat4x4 & matView) const = 0;
 	virtual void SetProjectionMatrix(const glm::mat4x4 & matProj) = 0;
-	virtual void GetProjectionMatrix(glm::mat4x4 & matProj) const = 0;
 	
 	// Texture management
 	virtual void ReleaseAllTextures() = 0;
@@ -351,7 +349,6 @@ public:
 	
 	// Viewport
 	virtual void SetViewport(const Rect & viewport) = 0;
-	virtual Rect GetViewport() = 0;
 	
 	// Scissor
 	virtual void SetScissor(const Rect & rect) = 0;
@@ -430,7 +427,7 @@ extern Renderer * GRenderer;
  */
 class UseRenderState {
 	
-	RenderState  m_old;
+	RenderState m_old;
 	
 public:
 	
@@ -442,6 +439,49 @@ public:
 	
 	~UseRenderState() {
 		GRenderer->setRenderState(m_old);
+	}
+	
+};
+
+/*!
+ * RAII helper class to set a texture state for the current scope
+ *
+ * Sets the requested texture state on construction and restores the old texture state
+ * on destruction.
+ */
+class UseTextureState {
+	
+	TextureStage::WrapMode m_oldWrapMode;
+	TextureStage::FilterMode m_oldMinFilter;
+	TextureStage::FilterMode m_oldMagFilter;
+	
+public:
+	
+	UseTextureState(TextureStage::FilterMode minFilter, TextureStage::FilterMode magFilter,
+	                TextureStage::WrapMode wrapMode)
+		: m_oldWrapMode(GRenderer->GetTextureStage(0)->getWrapMode())
+		, m_oldMinFilter(GRenderer->GetTextureStage(0)->getMinFilter())
+		, m_oldMagFilter(GRenderer->GetTextureStage(0)->getMagFilter())
+	{
+		GRenderer->GetTextureStage(0)->setWrapMode(wrapMode);
+		GRenderer->GetTextureStage(0)->setMinFilter(minFilter);
+		GRenderer->GetTextureStage(0)->setMagFilter(magFilter);
+	}
+	
+	UseTextureState(TextureStage::FilterMode filter, TextureStage::WrapMode wrapMode)
+		: m_oldWrapMode(GRenderer->GetTextureStage(0)->getWrapMode())
+		, m_oldMinFilter(GRenderer->GetTextureStage(0)->getMinFilter())
+		, m_oldMagFilter(GRenderer->GetTextureStage(0)->getMagFilter())
+	{
+		GRenderer->GetTextureStage(0)->setWrapMode(wrapMode);
+		GRenderer->GetTextureStage(0)->setMinFilter(filter);
+		GRenderer->GetTextureStage(0)->setMagFilter(filter);
+	}
+	
+	~UseTextureState() {
+		GRenderer->GetTextureStage(0)->setWrapMode(m_oldWrapMode);
+		GRenderer->GetTextureStage(0)->setMinFilter(m_oldMinFilter);
+		GRenderer->GetTextureStage(0)->setMagFilter(m_oldMagFilter);
 	}
 	
 };

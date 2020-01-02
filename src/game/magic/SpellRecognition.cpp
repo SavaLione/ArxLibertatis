@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2016 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2014-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -23,6 +23,7 @@
 #include <string>
 
 #include <boost/lexical_cast.hpp>
+#include <boost/range/size.hpp>
 
 #include "core/Config.h"
 #include "game/Equipment.h"
@@ -39,7 +40,7 @@
 static std::vector<Vec2f> plist;
 bool bPrecastSpell = false;
 
-static void handleRuneDetection(Rune);
+static void handleRuneDetection(Rune rune);
 
 typedef struct RunePattern{
 	Rune runeId;
@@ -69,7 +70,7 @@ const RunePattern patternData[] = {
 	{RUNE_VISTA,       CheatRune_None,        "31"},
 	{RUNE_VITAE,       CheatRune_None,        "68"},
 	{RUNE_YOK,         CheatRune_None,        "268"},
-	//cheat runes
+	// Cheat runes
 	{RUNE_NONE,        CheatRune_O,          "9317"},
 	{RUNE_NONE,        CheatRune_M,          "8392"},
 	{RUNE_NONE,        CheatRune_A,          "934"},
@@ -87,15 +88,16 @@ const RunePattern patternData[] = {
 };
 
 class RuneRecognitionAlt {
+	
 	static const size_t s_requiredPointCount = 20;
 	static const size_t s_directionCount = s_requiredPointCount - 1;
 	static const size_t s_patternCount = ARRAY_SIZE(patternData);
 	static const int s_maxTolerance = 2;
-
+	
 	int m_dirs[s_directionCount];
 	std::vector<Vec2f> m_points;
 	std::vector<size_t> m_indices;
-
+	
 	int findMatchingPattern();
 	void resampleInput(const std::vector<Vec2f> &in);
 	void inputToDirs();
@@ -107,10 +109,11 @@ class RuneRecognitionAlt {
 	static int quantizeAngleToDir(float angle);
 	static int angleDiff(int angle1, int angle2);
 	static float angleVectorX(Vec2f v);
-
+	
 public:
+	
 	void analyze();
-
+	
 };
 
 /*!
@@ -138,12 +141,13 @@ void RuneRecognitionAlt::callRuneHandlers(int index) {
  * https://depts.washington.edu/aimgroup/proj/dollar/
  */
 void RuneRecognitionAlt::resampleInput(const std::vector<Vec2f> &in) {
-	//find the total length
+	
+	// Find the total length
 	float totalLen = 0.0;
 	for(size_t i = 1; i < in.size(); i++) {
-		totalLen += glm::distance(in[i-1], in[i]);
+		totalLen += glm::distance(in[i - 1], in[i]);
 	}
-
+	
 	m_points.push_back(in[0]);
 	
 	size_t segmentCount = m_indices.size() - 1;
@@ -152,7 +156,7 @@ void RuneRecognitionAlt::resampleInput(const std::vector<Vec2f> &in) {
 	
 	for(size_t segment = 0; segment < segmentCount; segment++) {
 		
-		//distance along curve from key point 1 to key point 2
+		// Distance along curve from key point 1 to key point 2
 		float segLen = 0.0;
 		for(size_t index = m_indices[segment]; index < m_indices[segment + 1]; index++) {
 			segLen += glm::distance(in[index], in[index + 1]);
@@ -177,17 +181,17 @@ void RuneRecognitionAlt::resampleInput(const std::vector<Vec2f> &in) {
 		float interval = segLen / pointsToAdd;
 		float remains = 0.0;
 		
-		bool newPointAdded = false; //was a new point added?
-		bool endOfSegment = false; //at the end of segment
+		bool newPointAdded = false; // Was a new point added?
+		bool endOfSegment = false; // At the end of segment
 		
 		size_t index = m_indices[segment] + 1;
 		int reallyAdded = 0;
 		size_t endIndex = m_indices[segment + 1];
 		
 		Vec2f prevPoint = in[m_indices[segment]];
-		Vec2f thisPoint;
+		Vec2f thisPoint(0.f);
 		
-		//add points in between key points while retaining curvature
+		// Add points in between key points while retaining curvature
 		while(!endOfSegment || newPointAdded) {
 			if(!newPointAdded) {
 				if(!endOfSegment) {
@@ -219,7 +223,7 @@ void RuneRecognitionAlt::resampleInput(const std::vector<Vec2f> &in) {
 			prevPoint = thisPoint;
 		}
 		if(reallyAdded == pointsToAdd - 1) {
-			//fell short of one point due to rounding error
+			// Fell short of one point due to rounding error
 			m_points.push_back(in[endIndex]);
 		}
 	}
@@ -250,9 +254,9 @@ float RuneRecognitionAlt::angleVectorX(Vec2f v) {
  */
 void RuneRecognitionAlt::inputToDirs() {
 	for(size_t i = 1; i < m_points.size(); i++) {
-		int dir = quantizeAngleToDir(angleVectorX(m_points[i] - m_points[i-1]));
+		int dir = quantizeAngleToDir(angleVectorX(m_points[i] - m_points[i - 1]));
 		arx_assert(dir >= 0 && dir < 8);
-		m_dirs[i-1] = dir;
+		m_dirs[i - 1] = dir;
 	}
 }
 
@@ -265,7 +269,7 @@ void RuneRecognitionAlt::findKeyPoints(std::vector<Vec2f> &in) {
 	const float TOLERANCE = 0.30f;
 	size_t inputSize = in.size();
 	
-	//calculate tolerance based on the overall size of the drawing
+	// Calculate tolerance based on the overall size of the drawing
 	Vec2f max = in[0];
 	Vec2f min = in[0];
 	for(size_t i = 1; i < inputSize; i++) {
@@ -301,26 +305,15 @@ void RuneRecognitionAlt::findKeyPoints(std::vector<Vec2f> &in) {
  */
 char RuneRecognitionAlt::angle2arx(int dir) {
 	switch(dir) {
-		case 0:
-			return '6';
-		case 1:
-			return '9';
-		case 2:
-			return '8';
-		case 3:
-			return '7';
-		case 4:
-			return '4';
-		case 5:
-			return '1';
-		case 6:
-			return '2';
-		case 7:
-			return '3';
-		default: {
-			ARX_DEAD_CODE();
-			return '\0';
-		}
+		case 0: return '6';
+		case 1: return '9';
+		case 2: return '8';
+		case 3: return '7';
+		case 4: return '4';
+		case 5: return '1';
+		case 6: return '2';
+		case 7: return '3';
+		default: arx_unreachable();
 	}
 }
 
@@ -329,26 +322,15 @@ char RuneRecognitionAlt::angle2arx(int dir) {
  */
 int RuneRecognitionAlt::arx2angle(char dir) {
 	switch(dir) {
-		case '6':
-			return 0;
-		case '9':
-			return 1;
-		case '8':
-			return 2;
-		case '7':
-			return 3;
-		case '4':
-			return 4;
-		case '1':
-			return 5;
-		case '2':
-			return 6;
-		case '3':
-			return 7;
-		default: {
-			ARX_DEAD_CODE();
-			return -1;
-		}
+		case '6': return 0;
+		case '9': return 1;
+		case '8': return 2;
+		case '7': return 3;
+		case '4': return 4;
+		case '1': return 5;
+		case '2': return 6;
+		case '3': return 7;
+		default: arx_unreachable();
 	}
 }
 
@@ -370,7 +352,7 @@ int RuneRecognitionAlt::findMatchingPattern(){
 	int index = -1;
 	int min = std::numeric_limits<int>::max();
 	for(size_t rune = 0; rune < s_patternCount; rune++) {
-		bool refuse = 0;
+		bool refuse = false;
 		int errors = 0;
 		size_t patternIndex = 0, inputIndex = 0;
 		size_t patternSize = patternData[rune].dirs.size();
@@ -385,12 +367,12 @@ int RuneRecognitionAlt::findMatchingPattern(){
 			errors += diff;
 			
 			if(diff > 1 || errors > s_maxTolerance) {
-				refuse = 1;
+				refuse = true;
 				break;
 			}
 			
 			if(patternIndex < patternSize - 1 && nextInputDir >= 0 && nextInputDir != curInputDir) {
-				//if the pattern deviates, move to the next pattern dir only if the difference is smaller
+				// If the pattern deviates, move to the next pattern dir only if the difference is smaller
 				if(nextPatternDir >= 0  && (nextPatternDir == nextInputDir
 					|| angleDiff(nextInputDir, curPatternDir) > angleDiff(nextInputDir, nextPatternDir))) {
 					patternIndex++;
@@ -422,6 +404,7 @@ int RuneRecognitionAlt::findMatchingPattern(){
 }
 
 void RuneRecognitionAlt::analyze() {
+	
 	if(plist.size() < 2) {
 		plist.clear();
 		return;
@@ -431,12 +414,13 @@ void RuneRecognitionAlt::analyze() {
 	m_indices.clear();
 	
 	findKeyPoints(plist);
-	if(m_indices.size() > s_requiredPointCount) { //too deformed
+	if(m_indices.size() > s_requiredPointCount) {
+		// Too deformed
 		return;
 	}
 	resampleInput(plist);
 	inputToDirs();
-
+	
 	int index = findMatchingPattern();
 	if(index >= 0) {
 		callRuneHandlers(index);
@@ -446,10 +430,10 @@ void RuneRecognitionAlt::analyze() {
 	
 	bPrecastSpell = false;
 	
-	// wanna precast?
 	if(GInput->actionPressed(CONTROLS_CUST_STEALTHMODE)) {
 		bPrecastSpell = true;
 	}
+	
 }
 
 RuneRecognitionAlt g_altRecognizer;
@@ -463,7 +447,7 @@ static const size_t MAX_POINTS(200);
 Rune SpellSymbol[MAX_SPELL_SYMBOLS];
 
 size_t CurrSpellSymbol = 0;
-std::string SpellMoves;
+std::string SpellMoves; // Rune directions encoded as numpad keys
 
 std::string LAST_FAILED_SEQUENCE = "none";
 
@@ -565,7 +549,7 @@ static void addSpell(const Rune symbols[MAX_SPELL_SYMBOLS], SpellType spell, con
 		if(symbols[i] == RUNE_NONE) {
 			break;
 		}
-		arx_assert(symbols[i] >= 0 && (size_t)symbols[i] < RUNE_COUNT);
+		arx_assert(symbols[i] >= 0 && size_t(symbols[i]) < RUNE_COUNT);
 		if(def->next[symbols[i]] == NULL) {
 			def->next[symbols[i]] = new SpellDefinition();
 		}
@@ -579,7 +563,7 @@ static void addSpell(const Rune symbols[MAX_SPELL_SYMBOLS], SpellType spell, con
 
 void spellRecognitionInit() {
 	
-	for(size_t i = 0; i < ARRAY_SIZE(allSpells); i++) {
+	for(size_t i = 0; i < size_t(boost::size(allSpells)); i++) {
 		addSpell(allSpells[i].symbols, allSpells[i].spell, allSpells[i].name);
 	}
 
@@ -609,14 +593,14 @@ void spellRecognitionPointsReset() {
 // Adds a 2D point to currently drawn spell symbol
 void ARX_SPELLS_AddPoint(const Vec2s & pos) {
 	
-	if(plist.size() && Vec2f(pos) == plist.back()) {
+	if(!plist.empty() && Vec2f(pos) == plist.back()) {
 		return;
 	}
-
+	
 	if(plist.size() == MAX_POINTS) {
 		plist.pop_back();
 	}
-
+	
 	plist.push_back(Vec2f(pos));
 }
 
@@ -654,7 +638,7 @@ static SpellType getSpell(const Rune symbols[MAX_SPELL_SYMBOLS]) {
 		if(symbols[i] == RUNE_NONE) {
 			break;
 		}
-		arx_assert(symbols[i] >= 0 && (size_t)symbols[i] < RUNE_COUNT);
+		arx_assert(symbols[i] >= 0 && size_t(symbols[i]) < RUNE_COUNT);
 		if(def->next[symbols[i]] == NULL) {
 			return SPELL_NONE;
 		}
@@ -741,7 +725,7 @@ void ARX_SPELLS_Analyse() {
 			switch ( dirs[i] )
 			{
 				case AUP:
-					SpellMoves += "8"; //uses PAD values
+					SpellMoves += "8";
 					break;
 
 				case ADOWN:
@@ -782,8 +766,19 @@ static void handleRuneDetection(Rune rune) {
 	if(CurrSpellSymbol >= MAX_SPELL_SYMBOLS) {
 		CurrSpellSymbol = MAX_SPELL_SYMBOLS - 1;
 	}
+	
+	ARX_SOUND_PlaySFX(g_snd.SYMB[rune]);
+}
 
-	ARX_SOUND_PlaySFX(SND_SYMB[rune]);
+static void unrecognizedRune() {
+	
+	if(SpellMoves.length() >= 127) {
+		SpellMoves.resize(127);
+	}
+	
+	LAST_FAILED_SEQUENCE = SpellMoves;
+	LogDebug("Unknown Symbol - " + SpellMoves);
+	
 }
 
 void ARX_SPELLS_AnalyseSYMBOL() {
@@ -798,102 +793,102 @@ void ARX_SPELLS_AnalyseSYMBOL() {
 	switch(sm) {
 		
 		// COSUM
-		case 62148  :
-		case 632148 :
-		case 62498  :
-		case 62748  :
-		case 6248   :
+		case 62148:
+		case 632148:
+		case 62498:
+		case 62748:
+		case 6248:
 			handleRuneDetection(RUNE_COSUM);
 			break;
 		// COMUNICATUM
-		case 632426 :
-		case 627426 :
-		case 634236 :
-		case 624326 :
-		case 62426  :
+		case 632426:
+		case 627426:
+		case 634236:
+		case 624326:
+		case 62426:
 			handleCheatRuneDetection(CheatRune_COMUNICATUM);
 			handleRuneDetection(RUNE_COMUNICATUM);
 			break;
 		// FOLGORA
-		case 9823   :
-		case 9232   :
-		case 983    :
-		case 963    :
-		case 923    :
-		case 932    :
-		case 93     :
+		case 9823:
+		case 9232:
+		case 983:
+		case 963:
+		case 923:
+		case 932:
+		case 93:
 			handleRuneDetection(RUNE_FOLGORA);
 			break;
 		// SPACIUM
-		case 42368  :
-		case 42678  :
-		case 42698  :
-		case 4268   :
+		case 42368:
+		case 42678:
+		case 42698:
+		case 4268:
 			handleCheatRuneDetection(CheatRune_SPACIUM);
 			handleRuneDetection(RUNE_SPACIUM);
 			break;
 		// TERA
-		case 9826   :
-		case 92126  :
-		case 9264   :
-		case 9296   :
-		case 926    :
+		case 9826:
+		case 92126:
+		case 9264:
+		case 9296:
+		case 926:
 			handleRuneDetection(RUNE_TERA);
 			break;
 		// CETRIUS
-		case 286   :
-		case 3286  :
-		case 23836 :
-		case 38636 :
-		case 2986  :
-		case 2386  :
-		case 386   :
+		case 286:
+		case 3286:
+		case 23836:
+		case 38636:
+		case 2986:
+		case 2386:
+		case 386:
 			handleRuneDetection(RUNE_CETRIUS);
 			break;
 		// RHAA
-		case 28    :
-		case 2     :
+		case 28:
+		case 2:
 			handleRuneDetection(RUNE_RHAA);
 			break;
 		// FRIDD
-		case 98362	:
-		case 8362	:
-		case 8632	:
-		case 8962	:
-		case 862	:
+		case 98362:
+		case 8362:
+		case 8632:
+		case 8962:
+		case 862:
 			handleRuneDetection(RUNE_FRIDD);
 			break;
 		// KAOM
-		case 41236	:
-		case 23		:
-		case 236	:
-		case 2369	:
-		case 136	:
-		case 12369	:
-		case 1236	:
+		case 41236:
+		case 23:
+		case 236:
+		case 2369:
+		case 136:
+		case 12369:
+		case 1236:
 			handleCheatRuneDetection(CheatRune_KAOM);
 			handleRuneDetection(RUNE_KAOM);
 			break;
 		// STREGUM
-		case 82328 :
-		case 8328  :
-		case 2328  :
-		case 8938  :
-		case 8238  :
-		case 838   :
+		case 82328:
+		case 8328:
+		case 2328:
+		case 8938:
+		case 8238:
+		case 838:
 			handleCheatRuneDetection(CheatRune_STREGUM);
 			handleRuneDetection(RUNE_STREGUM);
 			break;
 		// MORTE
-		case 628   :
-		case 621   :
-		case 62    :
+		case 628:
+		case 621:
+		case 62:
 			handleRuneDetection(RUNE_MORTE);
 			break;
 		// TEMPUS
-		case 962686  :
-		case 862686  :
-		case 8626862 :
+		case 962686:
+		case 862686:
+		case 8626862:
 			handleRuneDetection(RUNE_TEMPUS);
 			break;
 		// MOVIS
@@ -961,8 +956,8 @@ void ARX_SPELLS_AnalyseSYMBOL() {
 		case 68:
 			handleRuneDetection(RUNE_VITAE);
 			break;
-//-----------------------------------------------
-// Cheat spells
+		//-----------------------------------------------
+		// Cheat spells
 		// Special UW mode
 		case 238:
 		case 2398:
@@ -970,7 +965,8 @@ void ARX_SPELLS_AnalyseSYMBOL() {
 		case 236987:
 		case 23698:
 			handleCheatRuneDetection(CheatRune_U);
-			goto failed;
+			unrecognizedRune();
+			break;
 		case 2382398:
 		case 2829:
 		case 23982398:
@@ -1029,12 +1025,14 @@ void ARX_SPELLS_AnalyseSYMBOL() {
 		case 238298:
 		case 3939:
 			handleCheatRuneDetection(CheatRune_W);
-			goto failed;
+			unrecognizedRune();
+			break;
 		case 161:
 		case 1621:
 		case 1261:
 			handleCheatRuneDetection(CheatRune_S);
-			goto failed;
+			unrecognizedRune();
+			break;
 		case 83614:
 		case 8361:
 		case 8341:
@@ -1050,7 +1048,8 @@ void ARX_SPELLS_AnalyseSYMBOL() {
 		case 8234:
 		case 8231:
 			handleCheatRuneDetection(CheatRune_P);
-			goto failed;
+			unrecognizedRune();
+			break;
 		case 83692:
 		case 823982:
 		case 83982:
@@ -1060,7 +1059,8 @@ void ARX_SPELLS_AnalyseSYMBOL() {
 		case 823282:
 		case 8392:
 			handleCheatRuneDetection(CheatRune_M);
-			goto failed;
+			unrecognizedRune();
+			break;
 		case 98324:
 		case 92324:
 		case 89324:
@@ -1069,7 +1069,8 @@ void ARX_SPELLS_AnalyseSYMBOL() {
 		case 9234:
 		case 934:
 			handleCheatRuneDetection(CheatRune_A);
-			goto failed;
+			unrecognizedRune();
+			break;
 		case 3249:
 		case 2349:
 		case 323489:
@@ -1078,10 +1079,12 @@ void ARX_SPELLS_AnalyseSYMBOL() {
 		case 32498:
 		case 349:
 			handleCheatRuneDetection(CheatRune_X);
-			goto failed;
+			unrecognizedRune();
+			break;
 		case 26:
 			handleCheatRuneDetection(CheatRune_26);
-			goto failed;
+			unrecognizedRune();
+			break;
 		case 9232187:
 		case 93187:
 		case 9234187:
@@ -1091,42 +1094,34 @@ void ARX_SPELLS_AnalyseSYMBOL() {
 		case 93217:
 		case 9317:
 			handleCheatRuneDetection(CheatRune_O);
-			goto failed;
+			unrecognizedRune();
+			break;
 		case 82313:
 		case 8343:
 		case 82343:
 		case 83413:
 		case 8313:
 			handleCheatRuneDetection(CheatRune_R);
-			goto failed;
+			unrecognizedRune();
+			break;
 		case 86:
 			handleCheatRuneDetection(CheatRune_F);
-			goto failed;
+			unrecognizedRune();
+			break;
 		case 626262:
 			handleCheatRuneDetection(CheatRune_Passwall);
 			break;
 		case 828282:
 			handleCheatRuneDetection(CheatRune_ChangeSkin);
-			goto failed;
+			unrecognizedRune();
+			break;
 		default: {
-		failed:
-			std::string tex;
-
-			if(SpellMoves.length()>=127)
-				SpellMoves.resize(127);
-
-			LAST_FAILED_SEQUENCE = SpellMoves;
-
-			LogDebug("Unknown Symbol - " + SpellMoves);
+			unrecognizedRune();
 		}
 	}
-
-	bPrecastSpell = false;
-
-	// wanna precast?
-	if(GInput->actionPressed(CONTROLS_CUST_STEALTHMODE)) {
-		bPrecastSpell = true;
-	}
+	
+	bPrecastSpell = GInput->actionPressed(CONTROLS_CUST_STEALTHMODE);
+	
 }
 
 bool ARX_SPELLS_AnalyseSPELL() {
@@ -1151,7 +1146,7 @@ bool ARX_SPELLS_AnalyseSPELL() {
 	}
 	
 	if(spell == SPELL_NONE) {
-		ARX_SOUND_PlaySFX(SND_MAGIC_FIZZLE);
+		ARX_SOUND_PlaySFX(g_snd.MAGIC_FIZZLE);
 		
 		if(player.SpellToMemorize.bSpell) {
 			CurrSpellSymbol = 0;

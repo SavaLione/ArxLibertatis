@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2016 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -54,6 +54,7 @@ ZeniMax Media Inc., Suite 120, Rockville, Maryland 20850 USA.
 #include "audio/AudioTypes.h"
 #include "graphics/BaseGraphicsTypes.h"
 #include "graphics/Color.h"
+#include "math/Angle.h"
 #include "math/Types.h"
 #include "math/Quantizer.h"
 #include "util/Flags.h"
@@ -89,15 +90,16 @@ enum EERIE_TYPES_EXTRAS_MODE
 	EXTRAS_FIXFLARESIZE      = 0x00000100,
 	EXTRAS_FIREPLACE         = 0x00000200,
 	EXTRAS_NO_IGNIT          = 0x00000400,
-	EXTRAS_FLARE	         = 0x00000800
+	EXTRAS_FLARE             = 0x00000800
 };
 DECLARE_FLAGS(EERIE_TYPES_EXTRAS_MODE, ExtrasType)
 DECLARE_FLAGS_OPERATORS(ExtrasType)
 
 struct EERIE_LIGHT {
-	char exist;
+	
+	bool m_exists;
 	bool m_isIgnitionLight; // TODO refactor special case
-	char treat;
+	bool m_isVisible;
 	ExtrasType extras;
 	bool m_ignitionStatus; // on/off
 	Vec3f pos;
@@ -123,8 +125,32 @@ struct EERIE_LIGHT {
 	// will start to fade before the end of duration...
 	GameDuration duration;
 	
-	audio::SourceId sample;
+	audio::SourcedSample sample;
 	math::Quantizer m_storedFlameTime;
+	
+	EERIE_LIGHT()
+		: m_exists(false)
+		, m_isIgnitionLight(false)
+		, m_isVisible(false)
+		, extras(0)
+		, m_ignitionStatus(false)
+		, pos(0)
+		, fallstart(0.f)
+		, fallend(0.f)
+		, falldiffmul(0.f)
+		, rgb255(Color3f::black)
+		, intensity(0.f)
+		, rgb(Color3f::black)
+		, m_screenRect(Rectf::ZERO)
+		, m_flareFader(0.f)
+		, ex_flicker(Color3f::black)
+		, ex_radius(0.f)
+		, ex_frequency(0.f)
+		, ex_size(0.f)
+		, ex_speed(0.f)
+		, ex_flaresize(0.f)
+	{ }
+	
 };
 
 struct ColorMod {
@@ -157,10 +183,11 @@ void endLightDelayed(LightHandle & handle, GameDuration delay);
 void resetDynLights();
 
 void ClearDynLights();
-void PrecalcDynamicLighting(long x0, long x1, long z0, long z1, const Vec3f & camPos, float camDepth);
+void PrecalcDynamicLighting(const Vec3f & camPos, float camDepth);
 
 
 struct ShaderLight {
+	
 	Vec3f pos;
 	float fallstart;
 	float fallend;
@@ -168,19 +195,29 @@ struct ShaderLight {
 	float intensity;
 	Color3f rgb;
 	Color3f rgb255;
+	
+	ShaderLight()
+		: pos(0.f)
+		, fallstart(0.f)
+		, fallend(0.f)
+		, falldiffmul(0.f)
+		, intensity(0.f)
+		, rgb(Color3f::black)
+		, rgb255(Color3f::black)
+	{ }
+	
 };
 
 static const size_t llightsSize = 16;
 
 void setMaxLLights(size_t count);
-void UpdateLlights(ShaderLight lights[], size_t & lightsCount, const Vec3f pos, bool forPlayerColor);
+void UpdateLlights(ShaderLight lights[], size_t & lightsCount, Vec3f pos, bool forPlayerColor);
 
 void InitTileLights();
-void ResetTileLights();
 void ComputeTileLights(short x, short z);
 void ClearTileLights();
 
-float GetColorz(const Vec3f &pos);
+float GetColorz(const Vec3f & pos);
 
 ColorRGBA ApplyLight(ShaderLight lights[], size_t lightsCount, const glm::quat & quat, const Vec3f & position,
                      const Vec3f & normal, const ColorMod & colorMod, float materialDiffuse = 1.f);

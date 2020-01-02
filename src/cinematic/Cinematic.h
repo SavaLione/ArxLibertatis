@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2016 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -72,7 +72,7 @@ public:
 	CinematicKeyframe * next;
 	
 	CinematicLight()
-		: pos(Vec3f_ZERO)
+		: pos(0.f)
 		, fallin(100.f)
 		, fallout(200.f)
 		, color(Color3f::white * 255.f)
@@ -94,7 +94,8 @@ struct CinematicFadeOut {
 class Cinematic {
 	
 public:
-	Vec3f pos;
+	
+	Vec3f m_pos;
 	float angz;
 	Vec3f m_nextPos; // in the case of a non-fade interpolation
 	float m_nextAngz;
@@ -104,7 +105,7 @@ public:
 	int fx;
 	int m_nextFx;
 	bool changekey;
-	CinematicKeyframe * key;
+	CinematicKeyframe * m_key;
 	bool projectload;
 	short ti;
 	short force;
@@ -125,7 +126,7 @@ public:
 	CinematicFadeOut m_nextFadegrille;
 	float speedtrack;
 	PlatformDuration flTime;
-	std::vector<CinematicBitmap*>	m_bitmaps;
+	std::vector<CinematicBitmap *> m_bitmaps;
 	
 	CinematicFadeOut fadeprev;
 	CinematicFadeOut fadenext;
@@ -137,15 +138,17 @@ public:
 	
 	void OneTimeSceneReInit();
 	void Render(PlatformDuration frameDuration);
-	void New();
 	
 	void DeleteAllBitmap();
 	
 private:
-	EERIE_CAMERA	m_camera;
+	
+	Camera m_camera;
+	
 public:
 	
 	ARX_USE_ALIGNED_NEW(Cinematic) // for m_camera
+	
 };
 
 void DrawGrille(CinematicBitmap * bitmap, Color col, int fx, CinematicLight * light,

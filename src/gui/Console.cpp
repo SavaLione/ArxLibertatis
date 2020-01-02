@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2016-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -21,6 +21,7 @@
 
 #include <algorithm>
 #include <sstream>
+#include <cctype>
 
 #include <boost/algorithm/string/predicate.hpp>
 
@@ -154,6 +155,14 @@ bool ScriptConsole::keyPressed(Keyboard::Key key, KeyModifiers mod) {
 	if(mod.control) {
 		switch(key) {
 			
+			case Keyboard::Key_C: {
+				if(!mod.shift) {
+					clear();
+					return true;
+				}
+				break;
+			}
+			
 			case Keyboard::Key_D: {
 				if(text().empty()) {
 					close();
@@ -205,13 +214,13 @@ bool ScriptConsole::keyPressed(Keyboard::Key key, KeyModifiers mod) {
 }
 
 static bool isScriptContextChar(char c) {
-	return isalnum(c) || c == '_';
+	return std::isalnum(static_cast<unsigned char>(c)) || c == '_';
 }
 
 void ScriptConsole::parse(bool allowEmptyPrefix) {
 	
 	m_contextBegin = 0;
-	while(m_contextBegin < text().size() && isspace(text()[m_contextBegin])) {
+	while(m_contextBegin < text().size() && std::isspace(static_cast<unsigned char>(text()[m_contextBegin]))) {
 		++m_contextBegin;
 	}
 	m_contextEnd = m_contextBegin;
@@ -220,7 +229,7 @@ void ScriptConsole::parse(bool allowEmptyPrefix) {
 	}
 	
 	size_t dot = m_contextEnd;
-	while(dot < text().size() && isspace(text()[dot])) {
+	while(dot < text().size() && std::isspace(static_cast<unsigned char>(text()[dot]))) {
 		++dot;
 	}
 	
@@ -229,12 +238,12 @@ void ScriptConsole::parse(bool allowEmptyPrefix) {
 	if(dot < text().size() && text()[dot] == '.') {
 		hasContext = true;
 		m_commandBegin = dot + 1;
-		while(m_commandBegin < text().size() && isspace(text()[m_commandBegin])) {
+		while(m_commandBegin < text().size() && std::isspace(static_cast<unsigned char>(text()[m_commandBegin]))) {
 			++m_commandBegin;
 		}
 	}
 	size_t commandEnd = m_commandBegin;
-	while(commandEnd < text().size() && !isspace(text()[commandEnd])) {
+	while(commandEnd < text().size() && !std::isspace(static_cast<unsigned char>(text()[commandEnd]))) {
 		++commandEnd;
 	}
 	
@@ -402,16 +411,15 @@ void ScriptConsole::execute() {
 		return;
 	}
 	
-	std::string script = command() + "\naccept\n";
 	EERIE_SCRIPT es;
-	es.size = script.size();
-	es.data = const_cast<char *>(script.c_str());
-	es.master = entity ? &entity->script : NULL;
+	es.valid = true;
+	es.data = command() + "\naccept\n";
 	// TODO Some script commands (timers, etc.) store references to the script
 	
 	// TODO Allow the "context.command" syntax in scripts too
-	long pos = 0;
-	ScriptEvent::send(&es, SM_EXECUTELINE, std::string(), entity, std::string(), pos);
+	size_t pos = 0;
+	ScriptEvent::resume(&es, entity, pos);
+	
 }
 
 bool ScriptConsole::addContextSuggestion(void * self, const std::string & suggestion) {
@@ -562,15 +570,6 @@ void ScriptConsole::update() {
 		textUpdated();
 	}
 	
-	{
-		static const PlatformDuration BlinkDuration = PlatformDurationMs(600);
-		m_blinkTime += g_platformTime.lastFrameDuration();
-		if(m_blinkTime > (BlinkDuration + BlinkDuration)) {
-			m_blinkTime = 0;
-		}
-		m_blink = m_blinkTime > BlinkDuration;
-	}
-	
 }
 
 void ScriptConsole::draw() {
@@ -587,11 +586,13 @@ void ScriptConsole::draw() {
 	Color selection = Color::yellow;
 	selection.a = 40;
 	
-	Rectf box = Rectf(g_size);
-	box.bottom = box.top + (m_buffer.lines() + 1) * hFontDebug->getLineHeight() + 4;
-	EERIEDrawBitmap(box, 0.f, NULL, background);
+	{
+		Rectf box = Rectf(g_size);
+		box.bottom = box.top + float((m_buffer.lines() + 1) * hFontDebug->getLineHeight()) + 4.f;
+		EERIEDrawBitmap(box, 0.f, NULL, background);
+	}
 	
-	Vec2i pos = Vec2i_ZERO;
+	Vec2i pos(0);
 	for(size_t i = 0; i < m_buffer.lines(); i++) {
 		hFontDebug->draw(pos, m_buffer.line(i), Color::white);
 		pos.y += hFontDebug->getLineHeight();
@@ -633,15 +634,19 @@ void ScriptConsole::draw() {
 	}
 	
 	// Draw cursor
-	if(m_blink) {
+	bool blink = true;
+	if(mainApp->getWindow()->hasFocus()) {
+		blink = timeWaveSquare(g_platformTime.frameStart(), PlatformDurationMs(1200));
+	}
+	if(blink) {
 		int cursor = x;
 		if(cursorPos() != displayText.size()) {
 			cursor = pos.x + hFontDebug->getTextSize(begin, begin + displayCursorPos).next();
 		}
 		drawLine(Vec2f(cursor, pos.y), Vec2f(cursor, pos.y + hFontDebug->getLineHeight()), 0.f, line);
 		if(editCursorLength() > 0) {
-			int end = pos.x + hFontDebug->getTextSize(begin, begin + displayCursorPos + editCursorLength()).next();
-			drawLine(Vec2f(end, pos.y), Vec2f(end, pos.y + hFontDebug->getLineHeight()), 0.f, line);
+			int endX = pos.x + hFontDebug->getTextSize(begin, begin + displayCursorPos + editCursorLength()).next();
+			drawLine(Vec2f(endX, pos.y), Vec2f(endX, pos.y + hFontDebug->getLineHeight()), 0.f, line);
 		}
 	}
 	
@@ -657,7 +662,7 @@ void ScriptConsole::draw() {
 	if(!m_error.second.empty()) {
 		Vec2i errorPos = pos;
 		errorPos.x += hFontDebug->getTextSize(text().begin(), text().begin() + m_error.first).advance();
-		hFontDebug->draw(errorPos + Vec2i_ONE, m_error.second, Color::black);
+		hFontDebug->draw(errorPos + Vec2i(1), m_error.second, Color::black);
 		hFontDebug->draw(errorPos, m_error.second, Color::red);
 	} else if(!m_suggestions.empty()) {
 		Vec2i suggestionPos = pos;
@@ -671,7 +676,7 @@ void ScriptConsole::draw() {
 				std::ostringstream oss;
 				oss << "... " << (start + 1) << " - " << (start + MaxVisibleSuggestions - (start != 0))
 				    << " / " << m_suggestions.size();
-				hFontDebug->draw(suggestionPos + Vec2i_ONE, oss.str(), Color::black);
+				hFontDebug->draw(suggestionPos + Vec2i(1), oss.str(), Color::black);
 				hFontDebug->draw(suggestionPos, oss.str(), Color::red);
 				break;
 			}
@@ -680,7 +685,7 @@ void ScriptConsole::draw() {
 				suggestionPos.x = pos.x + hFontDebug->getTextSize(text().begin(), text().begin() + position).advance();
 			}
 			if(start != 0 && i == start) {
-				hFontDebug->draw(suggestionPos + Vec2i_ONE, "...", Color::black);
+				hFontDebug->draw(suggestionPos + Vec2i(1), "...", Color::black);
 				hFontDebug->draw(suggestionPos, "...", Color::red);
 				suggestionPos.y += hFontDebug->getLineHeight();
 			}
@@ -691,7 +696,7 @@ void ScriptConsole::draw() {
 				EERIEDrawBitmap(highlight, 0.f, NULL, selection);
 				drawLineRectangle(highlight, 0.f, background);
 			}
-			hFontDebug->draw(suggestionPos + Vec2i_ONE, m_suggestions[i].second, Color::black);
+			hFontDebug->draw(suggestionPos + Vec2i(1), m_suggestions[i].second, Color::black);
 			hFontDebug->draw(suggestionPos, m_suggestions[i].second, Color::white);
 			suggestionPos.y += hFontDebug->getLineHeight();
 		}

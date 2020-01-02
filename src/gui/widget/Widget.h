@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-2016 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2015-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -20,6 +20,7 @@
 #ifndef ARX_GUI_WIDGET_WIDGET_H
 #define ARX_GUI_WIDGET_WIDGET_H
 
+#include <boost/function.hpp>
 #include <boost/noncopyable.hpp>
 
 #include "core/SaveGame.h"
@@ -27,36 +28,9 @@
 #include "math/Rectangle.h"
 #include "util/HandleType.h"
 
-// Enum for all the buttons in the menu
-enum MenuButton {
-	BUTTON_INVALID = -1,
-
-	BUTTON_MENUEDITQUEST_LOAD = 1,
-
-	BUTTON_MENUEDITQUEST_SAVEINFO,
-};
-
-enum ELEMSTATE
-{
-	TNOP,
-	//Element Text
-	EDIT,           //type d'etat
-	GETTOUCH,
-	EDIT_TIME,      //etat en cours
-	GETTOUCH_TIME
-};
-
-enum ELEMPOS
-{
-	NOCENTER,
-	CENTER,
-	CENTERY
-};
-
-enum MENUSTATE
-{
+enum MENUSTATE {
+	NOP,
 	Page_None,
-	RESUME_GAME,
 	Page_NewQuestConfirm,
 	Page_LoadOrSave,
 	Page_Load,
@@ -70,64 +44,67 @@ enum MENUSTATE
 	Page_OptionsInput,
 	Page_OptionsInputCustomizeKeys1,
 	Page_OptionsInputCustomizeKeys2,
-	CREDITS,
 	Page_QuitConfirm,
-	NOP
 };
 
 enum WidgetType {
+	WidgetType_Spacer,
 	WidgetType_Button,
 	WidgetType_Checkbox,
 	WidgetType_CycleText,
 	WidgetType_Panel,
 	WidgetType_Slider,
-	WidgetType_Text
+	WidgetType_Text,
+	WidgetType_TextInput,
+	WidgetType_Keybind,
+	WidgetType_SaveSlot,
 };
 
 class Widget : private boost::noncopyable {
 	
 public:
-	Rectf m_rect;
 	
-	MenuButton m_id;
-	
-	SavegameHandle m_savegame;
-	
-	ELEMPOS     ePlace;
-	ELEMSTATE   eState;
-	MENUSTATE   m_targetMenu;
-	InputKeyId  m_shortcut;
-	
-public:
-	explicit Widget();
+	Widget();
 	virtual ~Widget();
 	
-	virtual bool OnMouseClick() = 0;
-	virtual void Update() = 0;
-	virtual void Render() = 0;
-	virtual void RenderMouseOver() { }
-	virtual void EmptyFunction() { }
-	virtual void OnMouseDoubleClick() { }
+	virtual bool click();
+	virtual bool doubleClick();
+	virtual void hover() { }
+	virtual void update() { }
+	virtual void render(bool mouseOver = false) = 0;
+	virtual bool wantFocus() const { return false; }
+	virtual void unfocus() { }
 	
-	void SetShortCut(int _iShortCut);
+	MENUSTATE targetPage() const { return m_targetPage; }
+	void setTargetPage(MENUSTATE page) { m_targetPage = page; }
+	
+	InputKeyId shortcut() const { return m_shortcut; }
+	void setShortcut(int key);
 	
 	virtual void setEnabled(bool enable);
+	bool isEnabled() const { return m_enabled; }
 	
-	virtual void Move(const Vec2f & offset);
-	virtual void SetPos(Vec2f pos);
+	virtual void move(const Vec2f & offset);
+	void setPosition(Vec2f pos) { move(pos - m_rect.topLeft()); }
 	
-	void SetCheckOff();
-	void SetCheckOn();
-	
-	bool getCheck();
-	
-	virtual Widget * IsMouseOver(const Vec2f & mousePos);
+	virtual Widget * getWidgetAt(const Vec2f & mousePos);
 	
 	virtual WidgetType type() const = 0;
 	
+	boost::function<void(Widget * /* widget */)> clicked;
+	boost::function<void(Widget * /* widget */)> doubleClicked;
+	
+	Rectf m_rect;
+	
 protected:
-	bool enabled;
-	bool bCheck;
+	
+	bool m_enabled;
+	
+private:
+	
+	MENUSTATE m_targetPage;
+	InputKeyId m_shortcut;
+	
 };
 
 #endif // ARX_GUI_WIDGET_WIDGET_H

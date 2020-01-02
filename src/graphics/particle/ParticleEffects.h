@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2016 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -59,36 +59,32 @@ ZeniMax Media Inc., Suite 120, Rockville, Maryland 20850 USA.
 #include "util/Flags.h"
 
 struct EERIEPOLY;
-struct EERIE_CAMERA;
 struct Sphere;
 class TextureContainer;
 class Entity;
 struct EERIE_3DOBJ;
 
 enum ParticlesTypeFlag {
-	FIRE_TO_SMOKE       = (1<<0),
-	ROTATING            = (1<<1),
-	FADE_IN_AND_OUT     = (1<<2),
-	
-	DISSIPATING         = (1<<4),
-	GRAVITY             = (1<<5),
-	SUBSTRACT           = (1<<6),
-	
-	DELAY_FOLLOW_SOURCE = (1<<11),
-	
-	PARTICLE_ANIMATED   = (1<<13),
-	
-	SPLAT_GROUND        = (1<<15),
-	SPLAT_WATER         = (1<<16),
-	PARTICLE_SUB2       = (1<<17),
-	PARTICLE_GOLDRAIN   = (1<<18),
-	PARTICLE_NOZBUFFER  = (1<<19)
+	FIRE_TO_SMOKE       = 1 << 0,
+	ROTATING            = 1 << 1,
+	FADE_IN_AND_OUT     = 1 << 2,
+	DISSIPATING         = 1 << 4,
+	GRAVITY             = 1 << 5,
+	SUBSTRACT           = 1 << 6,
+	DELAY_FOLLOW_SOURCE = 1 << 11,
+	PARTICLE_ANIMATED   = 1 << 13,
+	SPLAT_GROUND        = 1 << 15,
+	SPLAT_WATER         = 1 << 16,
+	PARTICLE_SUB2       = 1 << 17,
+	PARTICLE_GOLDRAIN   = 1 << 18,
+	PARTICLE_NOZBUFFER  = 1 << 19
 };
 
 DECLARE_FLAGS(ParticlesTypeFlag, ParticlesTypeFlags)
 DECLARE_FLAGS_OPERATORS(ParticlesTypeFlags)
 
 struct PARTICLE_DEF {
+	
 	bool exist;
 	bool is2D;
 	bool zdec;
@@ -112,9 +108,9 @@ struct PARTICLE_DEF {
 		: exist(false)
 		, is2D(false)
 		, zdec(false)
-		, ov(Vec3f_ZERO)
-		, move(Vec3f_ZERO)
-		, scale(Vec3f_ZERO)
+		, ov(0.f)
+		, move(0.f)
+		, scale(0.f)
 		, siz(0.f)
 		, timcreation(0)
 		, tolive(0)
@@ -123,16 +119,15 @@ struct PARTICLE_DEF {
 		, rgb(Color3f::black)
 		, m_flags(0)
 		, source(NULL)
-		, sourceionum()
 		, m_rotation(0.f)
 		, cval1(0)
 		, cval2(0)
 	{ }
+	
 };
 
 //-----------------------------------------------------------------------------
 
-extern TextureContainer * fire2;
 extern long NewSpell;
 
 void MagFX(const Vec3f & pos, float size);
@@ -140,11 +135,11 @@ void RestoreAllLightsInitialStatus();
 void TreatBackgroundActions();
 
 void Add3DBoom(const Vec3f & position);
-void AddRandomSmoke(Entity * io, long amount);
+void AddRandomSmoke(const Entity & io, long amount);
 
 void ManageTorch();
 
-void MakePlayerAppearsFX(Entity * io);
+void MakePlayerAppearsFX(const Entity & io);
 void MakeCoolFx(const Vec3f & pos);
 
 PARTICLE_DEF * createParticle(bool allocateWhilePaused = false);
@@ -152,7 +147,7 @@ long getParticleCount();
 
 void ARX_PARTICLES_FirstInit();
 void ARX_PARTICLES_ClearAll();
-void ARX_PARTICLES_Update(EERIE_CAMERA * cam);
+void ARX_PARTICLES_Update();
 void ARX_PARTICLES_Spawn_Blood(const Vec3f & pos, float dmgs, EntityHandle source);
 void ARX_PARTICLES_Spawn_Blood2(const Vec3f & pos, float dmgs, Color col, Entity * io);
 void ARX_PARTICLES_Spawn_Lava_Burn(Vec3f pos, Entity * io = NULL);
@@ -169,6 +164,6 @@ void LaunchFireballBoom(const Vec3f & poss, float level, Vec3f * direction = NUL
 void spawnFireHitParticle(const Vec3f & poss, long type);
 void spawn2DFireParticle(const Vec2f & pos, float scale);
 
-void SpawnFireballTail(const Vec3f &, const Vec3f &, float, long);
+void SpawnFireballTail(const Vec3f & poss, const Vec3f & vecto, float level, long flags);
 
 #endif // ARX_GRAPHICS_PARTICLE_PARTICLEEFFECTS_H

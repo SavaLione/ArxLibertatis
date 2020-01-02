@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2016 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -19,27 +19,28 @@
 
 #include "graphics/texture/PackedTexture.h"
 
+#include "boost/foreach.hpp"
+
 #include "graphics/Renderer.h"
 #include "graphics/texture/Texture.h"
 #include "io/log/Logger.h"
 
-PackedTexture::PackedTexture(unsigned int pSize, Image::Format pFormat)
-	: textureSize(pSize), textureFormat(pFormat) { }
+PackedTexture::PackedTexture(size_t textureSize, Image::Format textureFormat)
+	: m_textureSize(textureSize), m_textureFormat(textureFormat) { }
 
 PackedTexture::~PackedTexture() {
 	clear();
 }
 
 void PackedTexture::clear() {
-	for(texture_iterator i = textures.begin(); i != textures.end(); ++i) {
-		delete *i;
+	BOOST_FOREACH(TextureTree * tree, m_textures) {
+		delete tree;
 	}
-	textures.clear();
+	m_textures.clear();
 }
 
 void PackedTexture::upload() {
-	for(texture_iterator i = textures.begin(); i != textures.end(); ++i) {
-		TextureTree * tree = *i;
+	BOOST_FOREACH(TextureTree * tree, m_textures) {
 		if(tree->dirty) {
 			tree->texture->upload();
 			tree->dirty = false;
@@ -47,10 +48,9 @@ void PackedTexture::upload() {
 	}
 }
 
-PackedTexture::TextureTree::TextureTree(unsigned int textureSize,
-                                        Image::Format textureFormat) {
+PackedTexture::TextureTree::TextureTree(size_t textureSize, Image::Format textureFormat) {
 	
-	root.rect = Rect(0, 0, textureSize - 1, textureSize - 1);
+	root.rect = Rect(0, 0, s32(textureSize - 1), s32(textureSize - 1));
 	
 	texture = GRenderer->createTexture();
 	if(!texture->create(textureSize, textureSize, textureFormat)) {
@@ -68,45 +68,47 @@ PackedTexture::TextureTree::~TextureTree() {
 	delete texture;
 }
 
-PackedTexture::TextureTree::Node * PackedTexture::TextureTree::insertImage(const Image & img) {
+PackedTexture::TextureTree::Node * PackedTexture::TextureTree::insertImage(const Image & image) {
 	
-	Node * node = root.insertImage(img);
+	Node * node = root.insertImage(image);
 	
 	if(node != NULL) {
-		texture->getImage().copy(img, node->rect.left, node->rect.top);
+		texture->getImage().copy(image, size_t(node->rect.left), size_t(node->rect.top));
 		dirty = true;
 	}
 	
 	return node;
 }
 
-bool PackedTexture::insertImage(const Image & image, unsigned int & textureIndex,
-                                Vec2i & offset) {
+bool PackedTexture::insertImage(const Image & image, size_t & textureIndex, Vec2i & offset) {
 	
 	// Validate image size
-	if(image.getWidth() > textureSize || image.getHeight() > textureSize) {
+	if(image.getWidth() > m_textureSize || image.getHeight() > m_textureSize) {
 		return false;
 	}
 	
 	// Copy to one of the existing textures
 	TextureTree::Node * node = NULL;
-	unsigned int nodeTree = 0;
+	size_t nodeTree = 0;
 	
-	for(size_t i = 0; i < textures.size(); i++) {
-		node = textures[i]->insertImage(image);
+	for(size_t i = 0; i < m_textures.size(); i++) {
+		node = m_textures[i]->insertImage(image);
 		nodeTree = i;
+		if(node) {
+			break;
+		}
 	}
 	
 	// No space found, create a new texture
 	if(!node) {
-		TextureTree * newTree = new TextureTree(textureSize, textureFormat);
+		TextureTree * newTree = new TextureTree(m_textureSize, m_textureFormat);
 		if(!newTree->texture) {
 			delete newTree;
 			return false;
 		}
-		textures.push_back(newTree);
-		node = textures[textures.size() - 1]->insertImage(image);
-		nodeTree = textures.size() - 1;
+		m_textures.push_back(newTree);
+		node = m_textures[m_textures.size() - 1]->insertImage(image);
+		nodeTree = m_textures.size() - 1;
 	}
 	
 	// A node must have been found
@@ -122,16 +124,16 @@ bool PackedTexture::insertImage(const Image & image, unsigned int & textureIndex
 	return node != NULL;
 }
 
-Texture & PackedTexture::getTexture(unsigned int index) {
-	arx_assert(index < textures.size());
-	arx_assert(textures[index]->texture);
-	return *textures[index]->texture;
+Texture & PackedTexture::getTexture(size_t index) {
+	arx_assert(index < m_textures.size());
+	arx_assert(m_textures[index]->texture);
+	return *m_textures[index]->texture;
 }
 
 PackedTexture::TextureTree::Node::Node() {
 	children[0] = NULL;
 	children[1] = NULL;
-	used = 0;
+	used = false;
 }
 
 PackedTexture::TextureTree::Node::~Node() {
@@ -159,8 +161,8 @@ PackedTexture::TextureTree::Node * PackedTexture::TextureTree::Node::insertImage
 		return result;
 	}
 	
-	int diffW = (rect.width() + 1) - image.getWidth();
-	int diffH = (rect.height() + 1) - image.getHeight();
+	s32 diffW = (rect.width() + 1) - s32(image.getWidth());
+	s32 diffH = (rect.height() + 1) - s32(image.getHeight());
 	
 	// If we're too small, return.
 	if(diffW < 0 || diffH < 0) {
@@ -178,11 +180,11 @@ PackedTexture::TextureTree::Node * PackedTexture::TextureTree::Node::insertImage
 	children[1] = new Node();
 	
 	if(diffW > diffH) {
-		children[0]->rect = Rect(rect.left, rect.top, rect.left + image.getWidth() - 1, rect.bottom);
-		children[1]->rect = Rect(rect.left + image.getWidth(), rect.top, rect.right, rect.bottom);
+		children[0]->rect = Rect(rect.left, rect.top, rect.left + s32(image.getWidth()) - 1, rect.bottom);
+		children[1]->rect = Rect(rect.left + s32(image.getWidth()), rect.top, rect.right, rect.bottom);
 	} else {
-		children[0]->rect = Rect(rect.left, rect.top, rect.right, rect.top + image.getHeight() - 1);
-		children[1]->rect = Rect(rect.left, rect.top + image.getHeight(), rect.right, rect.bottom);
+		children[0]->rect = Rect(rect.left, rect.top, rect.right, rect.top + s32(image.getHeight()) - 1);
+		children[1]->rect = Rect(rect.left, rect.top + s32(image.getHeight()), rect.right, rect.bottom);
 	}
 	
 	// Insert into first child we created

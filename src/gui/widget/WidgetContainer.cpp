@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-2016 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2015-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -32,21 +32,31 @@ WidgetContainer::~WidgetContainer() {
 	}
 }
 
-void WidgetContainer::add(Widget *widget) {
+void WidgetContainer::update() {
+	BOOST_FOREACH(Widget * w, m_widgets) {
+		w->update();
+	}
+}
 
+void WidgetContainer::render(Widget * selected) {
+	BOOST_FOREACH(Widget * w, m_widgets) {
+		w->render(w == selected);
+	}
+}
+
+void WidgetContainer::add(Widget * widget) {
 	m_widgets.push_back(widget);
 }
 
-Widget * WidgetContainer::getAtPos(const Vec2f & mousePos) const {
+Widget * WidgetContainer::getWidgetAt(const Vec2f & mousePos) const {
 	
-	BOOST_FOREACH(Widget * w, m_widgets) {
+	BOOST_FOREACH(Widget * widget, m_widgets) {
 		
-		if(!w->getCheck()) {
+		if(!widget->isEnabled()) {
 			continue;
 		}
 		
-		Widget * mouseOverWidget = w->IsMouseOver(mousePos);
-		if(mouseOverWidget) {
+		if(Widget * mouseOverWidget = widget->getWidgetAt(mousePos)) {
 			return mouseOverWidget;
 		}
 		
@@ -55,9 +65,9 @@ Widget * WidgetContainer::getAtPos(const Vec2f & mousePos) const {
 	return NULL;
 }
 
-void WidgetContainer::Move(const Vec2f & offset) {
+void WidgetContainer::move(const Vec2f & offset) {
 	BOOST_FOREACH(Widget * w, m_widgets) {
-		w->Move(offset);
+		w->move(offset);
 	}
 }
 

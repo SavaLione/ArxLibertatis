@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2017 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -61,14 +61,14 @@ ZeniMax Media Inc., Suite 120, Rockville, Maryland 20850 USA.
 #include "platform/Platform.h"
 #include "scene/Light.h"
 
-static const float MIN_RADIUS = 110.0f;
+static const float MIN_RADIUS = 110.f;
 
-const float PathFinder::HEURISTIC_MIN = 0.0f;
+const float PathFinder::HEURISTIC_MIN = 0.f;
 const float PathFinder::HEURISTIC_MAX = 0.5f;
 
 const float PathFinder::HEURISTIC_DEFAULT = 0.5f;
-const float PathFinder::RADIUS_DEFAULT = 0.0f;
-const float PathFinder::HEIGHT_DEFAULT = 0.0f;
+const float PathFinder::RADIUS_DEFAULT = 0.f;
+const float PathFinder::HEIGHT_DEFAULT = 0.f;
 
 class PathFinder::Node {
 	
@@ -98,7 +98,7 @@ public:
 
 class PathFinder::OpenNodeList {
 	
-	typedef std::vector<Node*> NodeList;
+	typedef std::vector<Node *> NodeList;
 	NodeList nodes;
 	
 public:
@@ -177,24 +177,24 @@ public:
 	
 };
 
-PathFinder::PathFinder(size_t map_size, const ANCHOR_DATA * map_data,
-                       size_t slight_count, const EERIE_LIGHT * const * slight_list)
-	: radius(RADIUS_DEFAULT), height(HEIGHT_DEFAULT), heuristic(HEURISTIC_DEFAULT),
-	  map_s(map_size), map_d(map_data), slight_c(slight_count), slight_l(slight_list) { }
+PathFinder::PathFinder(size_t graphSize, const ANCHOR_DATA * graph,
+                       size_t lightCount, const EERIE_LIGHT * const * lights)
+	: m_radius(RADIUS_DEFAULT), m_height(HEIGHT_DEFAULT), m_heuristic(HEURISTIC_DEFAULT),
+	  map_s(graphSize), map_d(graph), slight_c(lightCount), slight_l(lights) { }
 
-void PathFinder::setHeuristic(float _heuristic) {
-	if(_heuristic >= HEURISTIC_MAX) {
-		heuristic = HEURISTIC_MAX;
-	} else if(_heuristic <= HEURISTIC_MIN) {
-		heuristic = HEURISTIC_MIN;
+void PathFinder::setHeuristic(float heuristic) {
+	if(heuristic >= HEURISTIC_MAX) {
+		m_heuristic = HEURISTIC_MAX;
+	} else if(heuristic <= HEURISTIC_MIN) {
+		m_heuristic = HEURISTIC_MIN;
 	} else {
-		heuristic = _heuristic;
+		m_heuristic = heuristic;
 	}
 }
 
-void PathFinder::setCylinder(float _radius, float _height) {
-	radius = _radius;
-	height = _height;
+void PathFinder::setCylinder(float radius, float height) {
+	m_radius = radius;
+	m_height = height;
 }
 
 bool PathFinder::move(NodeId from, NodeId to, Result & rlist, bool stealth) const {
@@ -205,7 +205,7 @@ bool PathFinder::move(NodeId from, NodeId to, Result & rlist, bool stealth) cons
 	}
 	
 	// Create start node and put it on open list
-	Node * node = new Node(from, NULL, 0.0f, 0.0f);
+	Node * node = new Node(from, NULL, 0.f, 0.f);
 	
 	// A* main loop
 	OpenNodeList open;
@@ -224,12 +224,9 @@ bool PathFinder::move(NodeId from, NodeId to, Result & rlist, bool stealth) cons
 		}
 		
 		// Otherwise, generate child from current node.
-		for(short i = 0; i < map_d[nid].nblinked; i++) {
+		BOOST_FOREACH(NodeId cid, map_d[nid].linked) {
 			
-			NodeId cid = map_d[nid].linked[i];
-			
-			if((map_d[cid].flags & ANCHOR_FLAG_BLOCKED) || map_d[cid].height > height
-			   || map_d[cid].radius < radius) {
+			if(map_d[cid].blocked || map_d[cid].height > m_height || map_d[cid].radius < m_radius) {
 				continue;
 			}
 			
@@ -242,11 +239,11 @@ bool PathFinder::move(NodeId from, NodeId to, Result & rlist, bool stealth) cons
 			if(stealth) {
 				distance += getIlluminationCost(map_d[cid].pos);
 			}
-			distance *= heuristic;
+			distance *= m_heuristic;
 			distance += node->getDistance();
 			
 			// Estimated cost to get from this node to the destination.
-			float remaining = (1.0f - heuristic) * fdist(map_d[cid].pos, map_d[to].pos);
+			float remaining = (1.f - m_heuristic) * fdist(map_d[cid].pos, map_d[to].pos);
 			
 			open.add(cid, node, distance, remaining);
 		}
@@ -258,18 +255,18 @@ bool PathFinder::move(NodeId from, NodeId to, Result & rlist, bool stealth) cons
 	return false;
 }
 
-bool PathFinder::flee(NodeId from, const Vec3f & danger, float safeDist, Result & rlist,
-                      bool stealth) const {
+bool PathFinder::flee(NodeId from, const Vec3f & danger, float safeDistance,
+                      Result & rlist, bool stealth) const {
 	
-	static const float FLEE_DISTANCE_COST = 130.0F;
+	static const float FLEE_DISTANCE_COST = 130.f;
 	
-	if(!closerThan(map_d[from].pos, danger, safeDist)) {
+	if(!closerThan(map_d[from].pos, danger, safeDistance)) {
 		rlist.push_back(from);
 		return true;
 	}
 	
 	// Create start node and put it on open list
-	Node * node = new Node(from, NULL, 0.0f, 0.0f);
+	Node * node = new Node(from, NULL, 0.f, 0.f);
 	if(!node) {
 		return false;
 	}
@@ -291,12 +288,9 @@ bool PathFinder::flee(NodeId from, const Vec3f & danger, float safeDist, Result 
 		}
 		
 		// Otherwise, generate child from current node.
-		for(short i(0); i < map_d[nid].nblinked; i++) {
+		BOOST_FOREACH(NodeId cid, map_d[nid].linked) {
 			
-			long cid = map_d[nid].linked[i];
-			
-			if((map_d[cid].flags & ANCHOR_FLAG_BLOCKED) || map_d[cid].height > height
-			   || map_d[cid].radius < radius) {
+			if(map_d[cid].blocked || map_d[cid].height > m_height || map_d[cid].radius < m_radius) {
 				continue;
 			}
 			
@@ -311,7 +305,7 @@ bool PathFinder::flee(NodeId from, const Vec3f & danger, float safeDist, Result 
 			}
 			
 			// Estimated cost to get from this node to the destination.
-			float remaining = std::max(0.0f, safeDist - fdist(map_d[cid].pos, danger));
+			float remaining = std::max(0.f, safeDistance - fdist(map_d[cid].pos, danger));
 			remaining *= FLEE_DISTANCE_COST;
 			
 			open.add(cid, node, distance, remaining);
@@ -324,13 +318,13 @@ bool PathFinder::flee(NodeId from, const Vec3f & danger, float safeDist, Result 
 	return false;
 }
 
-bool PathFinder::wanderAround(NodeId from, float rad, Result & rlist, bool stealth) const {
+bool PathFinder::wanderAround(NodeId from, float aroundRadius, Result & rlist, bool stealth) const {
 	
-	if(!map_d[from].nblinked) {
+	if(map_d[from].linked.empty()) {
 		return false;
 	}
 	
-	if(rad <= MIN_RADIUS) {
+	if(aroundRadius <= MIN_RADIUS) {
 		rlist.push_back(from);
 		return true;
 	}
@@ -345,18 +339,18 @@ bool PathFinder::wanderAround(NodeId from, float rad, Result & rlist, bool steal
 		NodeId next = from;
 		
 		// Select the next node.
-		unsigned int nb = Random::getu(0, unsigned(rad / 50));
-		for(unsigned int j = 0; j < nb && map_d[next].nblinked; j++) {
+		unsigned int nb = Random::getu(0, unsigned(aroundRadius / 50));
+		for(unsigned int j = 0; j < nb && !map_d[next].linked.empty(); j++) {
 			for(int notfinished = 0; notfinished < 4; notfinished++) {
 				
-				size_t r = Random::get(0, map_d[next].nblinked - 1);
-				arx_assert(r < (size_t)map_d[next].nblinked);
+				size_t r = Random::get(0, map_d[next].linked.size() - 1);
+				arx_assert(r < map_d[next].linked.size());
 				
 				arx_assert(map_d[next].linked[r] >= 0);
 				
 				NodeId nid = map_d[next].linked[r];
-				if((!(map_d[nid].flags & ANCHOR_FLAG_BLOCKED)) && (map_d[nid].nblinked)
-				   && (map_d[nid].height <= height) && (map_d[nid].radius >= radius)) {
+				if(!map_d[nid].blocked && !map_d[nid].linked.empty()
+				   && (map_d[nid].height <= m_height) && (map_d[nid].radius >= m_radius)) {
 					next = nid;
 					break;
 				}
@@ -373,11 +367,7 @@ bool PathFinder::wanderAround(NodeId from, float rad, Result & rlist, bool steal
 	}
 	
 	// Close wander around path (return to start position).
-	if(rlist.size() == s || !move(last, from, rlist, stealth)) {
-		return false;
-	}
-	
-	return true;
+	return (rlist.size() != s && move(last, from, rlist, stealth));
 }
 
 PathFinder::NodeId PathFinder::getNearestNode(const Vec3f & pos) const {
@@ -387,7 +377,7 @@ PathFinder::NodeId PathFinder::getNearestNode(const Vec3f & pos) const {
 	
 	for(size_t i = 0; i < map_s; i++) {
 		float dist = arx::distance2(map_d[i].pos, pos);
-		if(dist < distance && map_d[i].nblinked && !(map_d[i].flags & ANCHOR_FLAG_BLOCKED)) {
+		if(dist < distance && !map_d[i].linked.empty() && !map_d[i].blocked) {
 			best = i;
 			distance = dist;
 		}
@@ -413,9 +403,9 @@ bool PathFinder::lookFor(NodeId from, const Vec3f & pos, float radius, Result & 
 	unsigned long step_c = Random::getu(4, 9);
 	for(unsigned long i = 0; i < step_c; i++) {
 		
-		Vec3f pos = map_d[to].pos + arx::randomVec(-1.f, 1.f) * radius;
+		Vec3f nextPos = map_d[to].pos + arx::randomVec(-1.f, 1.f) * radius;
 		
-		NodeId next = getNearestNode(pos);
+		NodeId next = getNearestNode(nextPos);
 		
 		if(!move(last, next, rlist, stealth)) {
 			// TODO can cause infinite loop?
@@ -427,11 +417,7 @@ bool PathFinder::lookFor(NodeId from, const Vec3f & pos, float radius, Result & 
 		last = next;
 	}
 	
-	if(rlist.size() == s) {
-		return false;
-	}
-	
-	return true;
+	return (rlist.size() != s);
 }
 
 void PathFinder::buildPath(const Node & node, Result & rlist) {
@@ -450,13 +436,13 @@ void PathFinder::buildPath(const Node & node, Result & rlist) {
 
 float PathFinder::getIlluminationCost(const Vec3f & pos) const {
 	
-	static const float STEALTH_LIGHT_COST = 300.0F;
+	static const float STEALTH_LIGHT_COST = 300.f;
 	
-	float cost = 0.0f;
+	float cost = 0.f;
 	
 	for(size_t i = 0; i < slight_c; i++) {
 		
-		if(!slight_l[i] || !slight_l[i]->exist || !slight_l[i]->m_ignitionStatus) {
+		if(!slight_l[i] || !slight_l[i]->m_exists || !slight_l[i]->m_ignitionStatus) {
 			continue;
 		}
 		
@@ -468,7 +454,7 @@ float PathFinder::getIlluminationCost(const Vec3f & pos) const {
 			
 			float l_cost = STEALTH_LIGHT_COST;
 			
-			l_cost *= light.intensity * (light.rgb.r + light.rgb.g + light.rgb.b) * (1.0f / 3);
+			l_cost *= light.intensity * (light.rgb.r + light.rgb.g + light.rgb.b) * (1.f / 3);
 			
 			if(dist > light.fallstart) {
 				l_cost *= ((dist - light.fallstart) / (light.fallend - light.fallstart));

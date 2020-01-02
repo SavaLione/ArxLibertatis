@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2017 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2014-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -28,12 +28,9 @@
 #include "graphics/particle/MagicFlare.h"
 #include "math/Types.h"
 
-extern EERIE_CAMERA subj;
-
-static const Vec2s symbolVecScale(8*2, 6*2);
+static const Vec2s symbolVecScale(16, 12);
 
 SYMBOL_DRAW g_bookSymbolDraw;
-
 
 static Vec2s GetSymbVector(char c) {
 	switch(c) {
@@ -76,7 +73,7 @@ void ARX_SPELLS_Init_Rects() {
 		
 		Vec2s iMin;
 		Vec2s iMax;
-		ReCenterSequence(info.sequence.c_str(), iMin, iMax);
+		ReCenterSequence(info.sequence, iMin, iMax);
 		
 		Vec2s iSize = iMax - iMin;
 		lMaxSymbolDrawSize = glm::max(iSize, lMaxSymbolDrawSize);
@@ -84,28 +81,26 @@ void ARX_SPELLS_Init_Rects() {
 }
 
 static void updateIOLight(Entity * io) {
+	
 	if(io->flarecount) {
-
 		EERIE_LIGHT * light = dynLightCreate(io->dynlight);
 		if(light) {
 			light->pos = io->pos;
 			light->pos += angleToVectorXZ(io->angle.getYaw() - 45.f) * 60.f;
 			light->pos += Vec3f(0.f, -120.f, 0.f);
-
 			float rr = Random::getf();
 			light->fallstart = 140.f + io->flarecount * 0.333333f + rr * 5.f;
 			light->fallend = 220.f + io->flarecount * 0.5f + rr * 5.f;
 			light->intensity = 1.6f;
-			light->rgb.r = 0.01f*io->flarecount * 2;
-			light->rgb.g = 0.009f*io->flarecount * 2;
-			light->rgb.b = 0.008f*io->flarecount * 2;
+			light->rgb = Color3f(0.02f, 0.018f, 0.016f) * io->flarecount;
 		}
 	} else {
 		lightHandleDestroy(io->dynlight);
 	}
+	
 }
 
-void ARX_SPELLS_UpdateBookSymbolDraw(Rect rect) {
+void ARX_SPELLS_UpdateBookSymbolDraw(const Rect & rect) {
 
 	if(g_bookSymbolDraw.sequence.empty()) {
 		return;
@@ -130,13 +125,13 @@ void ARX_SPELLS_UpdateBookSymbolDraw(Rect rect) {
 		timePerComponent = AnimationDurationMs(1);
 
 	AnimationDuration timeRemaining = elapsed;
-
+	
 	if(timeRemaining > sd->duration)
 		timeRemaining = sd->duration;
-
-	//keep size ratios among runes
-	Vec2f rectToSymbolsRatio = Vec2f(rect.size()) / (Vec2f(lMaxSymbolDrawSize) * g_sizeRatio);
-	Vec2f scale = glm::min(rectToSymbolsRatio.x, rectToSymbolsRatio.y) * g_sizeRatio;
+	
+	// Keep size ratios among runes
+	Vec2f rectToSymbolsRatio = Vec2f(rect.size()) / (Vec2f(lMaxSymbolDrawSize));
+	Vec2f scale = Vec2f(glm::min(rectToSymbolsRatio.x, rectToSymbolsRatio.y));
 
 	Vec2s iMin;
 	Vec2s iMax;
@@ -157,7 +152,7 @@ void ARX_SPELLS_UpdateBookSymbolDraw(Rect rect) {
 		if(timeRemaining < timePerComponent) {
 			float ratio = timeRemaining / timePerComponent;
 			pos += vect * ratio * 0.5f;
-			AddFlare(pos, 0.1f, 1, entities.player(), true);
+			AddFlare(pos, glm::min(scale.x, scale.y) * 0.2f, 1, entities.player(), true);
 
 			break;
 		}
@@ -210,18 +205,13 @@ void ARX_SPELLS_UpdateSymbolDraw() {
 						io->spellcast_data.symb[3] = RUNE_NONE;
 						float speedFactor = std::max(io->speed_modif + io->basespeed, 0.01f);
 						float duration = (1000 - (io->spellcast_data.spell_level * 60)) * speedFactor;
-						ARX_SPELLS_RequestSymbolDraw2(io, symb, duration);
+						ARX_SPELLS_RequestSymbolDraw2(io, symb, GameDurationMsf(duration));
 						io->gameFlags &= ~GFLAG_INVISIBILITY;
 					} else { // cast spell !!!
 						io->gameFlags &= ~GFLAG_INVISIBILITY;
-
-						ARX_SPELLS_Launch(io->spellcast_data.castingspell,
-										  handle,
-										  io->spellcast_data.spell_flags,
-										  io->spellcast_data.spell_level,
-										  io->spellcast_data.target,
-										  io->spellcast_data.duration);
-
+						ARX_SPELLS_Launch(io->spellcast_data.castingspell, handle, io->spellcast_data.spell_flags,
+						                  io->spellcast_data.spell_level, io->spellcast_data.target,
+						                  io->spellcast_data.duration);
 						if(!(io->spellcast_data.spell_flags & SPELLCAST_FLAG_NOANIM) && (io->ioflags & IO_NPC)) {
 							changeAnimation(io, 1, io->anims[ANIM_CAST]);
 						}
@@ -245,19 +235,18 @@ void ARX_SPELLS_UpdateSymbolDraw() {
 				io->symboldraw = NULL;
 				continue;
 			}
-
+			
 			const size_t nbcomponents = sd->sequence.length();
-
 			if(nbcomponents == 0) {
 				delete io->symboldraw;
 				io->symboldraw = NULL;
 				continue;
 			}
-
-			float ti = toMsf(sd->duration)/(float)nbcomponents;
-
-			if(ti <= 0)
+			
+			float ti = toMsf(sd->duration) / float(nbcomponents);
+			if(ti <= 0) {
 				ti = 1;
+			}
 			
 			AnimationDuration newtime = elapsed;
 			AnimationDuration oldtime = sd->elapsed;
@@ -272,7 +261,7 @@ void ARX_SPELLS_UpdateSymbolDraw() {
 			
 			float div_ti = 1.f / ti;
 
-			Vec2s pos1 = Vec2s(subj.center) - symbolVecScale * short(2) + sd->cPosStart * symbolVecScale;
+			Vec2s pos1 = Vec2s(g_size.center()) - symbolVecScale * short(2) + sd->cPosStart * symbolVecScale;
 
 			Vec2s old_pos = pos1;
 
@@ -280,13 +269,11 @@ void ARX_SPELLS_UpdateSymbolDraw() {
 				Vec2s vect = GetSymbVector(sd->sequence[j]);
 				vect *= symbolVecScale;
 				vect += vect / Vec2s(2);
-
 				if(oldtime <= AnimationDurationMsf(ti)) {
-					float ratio = toMsf(oldtime)*div_ti;
+					float ratio = toMsf(oldtime) * div_ti;
 					old_pos += Vec2s(Vec2f(vect) * ratio);
 					break;
 				}
-
 				old_pos += vect;
 				oldtime -= AnimationDurationMsf(ti);
 			}
@@ -321,50 +308,50 @@ void ARX_SPELLS_ClearAllSymbolDraw() {
 	}
 }
 
-static void ARX_SPELLS_RequestSymbolDrawCommon(Entity * io, float duration,
+static void ARX_SPELLS_RequestSymbolDrawCommon(Entity * io, GameDuration duration,
                                                RuneInfo & info) {
 	
-	SYMBOL_DRAW *sd;
-	
+	SYMBOL_DRAW * sd;
 	if(io != entities.player()) {
 		if(!io->symboldraw) {
 			io->symboldraw = new SYMBOL_DRAW;
 		}
-		
 		sd = io->symboldraw;
 	} else {
 		sd = &g_bookSymbolDraw;
 	}
-
-	sd->duration = AnimationDurationMs(std::max(1l, long(duration)));
+	
+	sd->duration = toAnimationDuration(std::max(GameDurationMs(1), duration));
 	sd->sequence = info.sequence;
-
+	
 	sd->starttime = g_gameTime.now();
 	sd->elapsed = 0;
 	
 	sd->cPosStart = info.startOffset;
-
-	io->gameFlags &= ~GFLAG_INVISIBILITY;
-}
 	
+	io->gameFlags &= ~GFLAG_INVISIBILITY;
+	
+}
 
-void ARX_SPELLS_RequestSymbolDraw(Entity *io, const std::string & name, float duration) {
-
+void ARX_SPELLS_RequestSymbolDraw(Entity * io, const std::string & name, GameDuration duration) {
+	
 	BOOST_FOREACH(RuneInfo & info, runeInfos) {
 		if(info.name == name) {
 			ARX_SPELLS_RequestSymbolDrawCommon(io, duration, info);
 			break;
 		}
 	}
+	
 }
 
-void ARX_SPELLS_RequestSymbolDraw2(Entity *io, Rune symb, float duration)
-{
+void ARX_SPELLS_RequestSymbolDraw2(Entity * io, Rune symb, GameDuration duration) {
+	
 	BOOST_FOREACH(RuneInfo & info, runeInfos) {
 		if(info.rune == symb) {
 			ARX_SPELLS_RequestSymbolDrawCommon(io, duration, info);
 			break;
 		}
 	}
+	
 }
 

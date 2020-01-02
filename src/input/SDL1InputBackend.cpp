@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2016 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -18,6 +18,8 @@
  */
 
 #include "input/SDL1InputBackend.h"
+
+#include <boost/range/size.hpp>
 
 #include "io/log/Logger.h"
 #include "platform/Platform.h"
@@ -45,7 +47,7 @@ SDL1InputBackend::SDL1InputBackend() : m_textHandler(NULL) {
 	SDL_EventState(SDL_MOUSEBUTTONDOWN, SDL_ENABLE);
 	SDL_EventState(SDL_MOUSEBUTTONUP, SDL_ENABLE);
 	
-	std::fill_n(sdlToArxKey, ARRAY_SIZE(sdlToArxKey), Keyboard::Key_Invalid);
+	std::fill_n(sdlToArxKey, boost::size(sdlToArxKey), Keyboard::Key_Invalid);
 	
 	sdlToArxKey[SDLK_BACKSPACE] = Keyboard::Key_Backspace;
 	sdlToArxKey[SDLK_TAB] = Keyboard::Key_Tab;
@@ -175,7 +177,7 @@ SDL1InputBackend::SDL1InputBackend() : m_textHandler(NULL) {
 	sdlToArxKey[SDLK_COMPOSE] = Keyboard::Key_Apps;
 	sdlToArxKey[SDLK_PRINT] = Keyboard::Key_PrintScreen;
 	
-	std::fill_n(sdlToArxButton, ARRAY_SIZE(sdlToArxButton), Mouse::Button_Invalid);
+	std::fill_n(sdlToArxButton, boost::size(sdlToArxButton), Mouse::Button_Invalid);
 	
 	ARX_STATIC_ASSERT(9 < ARRAY_SIZE(sdlToArxButton), "array size mismatch");
 	sdlToArxButton[8] = Mouse::Button_5;
@@ -194,24 +196,24 @@ SDL1InputBackend::SDL1InputBackend() : m_textHandler(NULL) {
 	
 	
 	wheel = 0;
-	cursorAbs = Vec2i_ZERO;
+	cursorAbs = Vec2i(0);
 	cursorInWindow = false;
-	std::fill_n(keyStates, ARRAY_SIZE(keyStates), false);
-	std::fill_n(clickCount, ARRAY_SIZE(clickCount), 0);
-	std::fill_n(unclickCount, ARRAY_SIZE(unclickCount), 0);
+	std::fill_n(keyStates, boost::size(keyStates), false);
+	std::fill_n(clickCount, boost::size(clickCount), 0);
+	std::fill_n(unclickCount, boost::size(unclickCount), 0);
 	
 }
 
 bool SDL1InputBackend::update() {
 	
 	currentWheel = wheel;
-	std::copy(clickCount, clickCount + ARRAY_SIZE(clickCount), currentClickCount);
-	std::copy(unclickCount, unclickCount + ARRAY_SIZE(unclickCount), currentUnclickCount);
+	std::copy(clickCount, clickCount + boost::size(clickCount), currentClickCount);
+	std::copy(unclickCount, unclickCount + boost::size(unclickCount), currentUnclickCount);
 	
 	wheel = 0;
 	
-	std::fill_n(clickCount, ARRAY_SIZE(clickCount), 0);
-	std::fill_n(unclickCount, ARRAY_SIZE(unclickCount), 0);
+	std::fill_n(clickCount, boost::size(clickCount), 0);
+	std::fill_n(unclickCount, boost::size(unclickCount), 0);
 	
 	return true;
 }
@@ -262,6 +264,21 @@ void SDL1InputBackend::stopTextInput() {
 	m_textHandler = NULL;
 }
 
+std::string SDL1InputBackend::getKeyName(Keyboard::Key key) const {
+	
+	arx_assert(key >= Keyboard::KeyBase && key < Keyboard::KeyMax);
+	
+	for(size_t i = 0; i < size_t(boost::size(sdlToArxKey)); i++) {
+		if(sdlToArxKey[i] == key) {
+			if(const char * name = SDL_GetKeyName(SDLKey(i))) {
+				return name;
+			}
+		}
+	}
+	
+	return std::string();
+}
+
 void SDL1InputBackend::onEvent(const SDL_Event & event) {
 	
 	switch(event.type) {
@@ -288,7 +305,8 @@ void SDL1InputBackend::onEvent(const SDL_Event & event) {
 		// fall-through
 		case SDL_KEYUP: {
 			SDLKey key = event.key.keysym.sym;
-			if(size_t(key) < ARRAY_SIZE(sdlToArxKey) && sdlToArxKey[size_t(key)] != Keyboard::Key_Invalid) {
+			if(size_t(key) < size_t(boost::size(sdlToArxKey))
+			   && sdlToArxKey[size_t(key)] != Keyboard::Key_Invalid) {
 				Keyboard::Key arxkey = sdlToArxKey[size_t(key)];
 				if(m_textHandler && event.key.state == SDL_PRESSED) {
 					KeyModifiers mod;
@@ -303,7 +321,7 @@ void SDL1InputBackend::onEvent(const SDL_Event & event) {
 				}
 				keyStates[arxkey - Keyboard::KeyBase] = (event.key.state == SDL_PRESSED);
 			} else {
-				LogWarning << "Unmapped SDL key: " << (int)key << " = " << SDL_GetKeyName(key);
+				LogWarning << "Unmapped SDL key: " << int(key) << " = " << SDL_GetKeyName(key);
 			}
 			break;
 		}
@@ -321,7 +339,8 @@ void SDL1InputBackend::onEvent(const SDL_Event & event) {
 				wheel++;
 			} else if(button == SDL_BUTTON_WHEELDOWN) {
 				wheel--;
-			} else if(button < ARRAY_SIZE(sdlToArxButton) && sdlToArxButton[button] != Mouse::Button_Invalid) {
+			} else if(button < size_t(boost::size(sdlToArxButton))
+			          && sdlToArxButton[button] != Mouse::Button_Invalid) {
 				size_t i = sdlToArxButton[button] - Mouse::ButtonBase;
 				if(event.button.state == SDL_PRESSED) {
 					clickCount[i]++;
@@ -329,7 +348,7 @@ void SDL1InputBackend::onEvent(const SDL_Event & event) {
 					unclickCount[i]++;
 				}
 			} else {
-				LogWarning << "Unmapped SDL mouse button: " << (int)button;
+				LogWarning << "Unmapped SDL mouse button: " << int(button);
 			}
 			break;
 		}

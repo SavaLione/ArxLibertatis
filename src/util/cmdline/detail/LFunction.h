@@ -1,5 +1,5 @@
 /*
- * Copyright 2013-2014 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2013-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -40,6 +40,8 @@
 #include <boost/preprocessor/enum_params.hpp>
 #include <boost/preprocessor/repeat_from_to.hpp>
 #include <boost/preprocessor/iteration/iterate.hpp>
+
+#include "platform/Platform.h"
 
 namespace util { namespace cmdline {
 

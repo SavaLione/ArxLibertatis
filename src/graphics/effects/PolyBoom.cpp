@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2017 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -46,6 +46,8 @@ ZeniMax Media Inc., Suite 120, Rockville, Maryland 20850 USA.
 
 #include "graphics/effects/PolyBoom.h"
 
+#include <boost/foreach.hpp>
+
 #include "animation/AnimationRender.h"
 
 #include "core/Application.h"
@@ -62,19 +64,26 @@ ZeniMax Media Inc., Suite 120, Rockville, Maryland 20850 USA.
 #include "graphics/Math.h"
 #include "graphics/data/Mesh.h"
 #include "graphics/particle/ParticleEffects.h"
+#include "graphics/particle/ParticleTextures.h"
 #include "graphics/texture/TextureStage.h"
 #include "platform/profiler/Profiler.h"
 
 #include "scene/Light.h"
 #include "scene/Interactive.h"
 
+enum DecalType {
+	ScorchMarkDecal,
+	BloodDecal,
+	WaterDecal
+};
 
 struct POLYBOOM {
 	EERIEPOLY * ep;
 	float u[4];
 	float v[4];
 	Color3f rgb;
-	short type;
+	DecalType type;
+	bool fastdecay;
 	short nbvert;
 	TextureContainer * tc;
 	GameInstant timecreation;
@@ -98,8 +107,6 @@ void PolyBoomClear() {
 
 void PolyBoomAddScorch(const Vec3f & poss) {
 	
-	static TextureContainer * tc2 = TextureContainer::Load("graph/particles/boom");
-	
 	// TODO copy-paste background tiles
 	int tilex = int(poss.x * ACTIVEBKG->m_mul.x);
 	int tilez = int(poss.z * ACTIVEBKG->m_mul.y);
@@ -113,20 +120,19 @@ void PolyBoomAddScorch(const Vec3f & poss) {
 	for(int z = minz; z <= maxz; z++)
 	for(int x = minx; x <= maxx; x++) {
 		BackgroundTileData & eg = ACTIVEBKG->m_tileData[x][z];
-		for(long l = 0; l < eg.nbpoly; l++) {
-			EERIEPOLY * ep = &eg.polydata[l];
+		BOOST_FOREACH(EERIEPOLY & ep, eg.polydata) {
 			
-			if((ep->type & POLY_TRANS) && !(ep->type & POLY_WATER)) {
+			if((ep.type & POLY_TRANS) && !(ep.type & POLY_WATER)) {
 				continue;
 			}
 			
-			long nbvert = (ep->type & POLY_QUAD) ? 4 : 3;
+			size_t nbvert = (ep.type & POLY_QUAD) ? 4 : 3;
 			
 			float temp_uv1[4];
 			
 			bool dod = true;
-			for(long k = 0; k < nbvert; k++) {
-				float ddd = fdist(ep->v[k].p, poss);
+			for(size_t k = 0; k < nbvert; k++) {
+				float ddd = fdist(ep.v[k].p, poss);
 				if(ddd > BOOM_RADIUS) {
 					dod = false;
 					break;
@@ -144,13 +150,14 @@ void PolyBoomAddScorch(const Vec3f & poss) {
 			
 			POLYBOOM pb;
 			
-			pb.type = 0;
-			pb.ep = ep;
-			pb.tc = tc2;
+			pb.type = ScorchMarkDecal;
+			pb.fastdecay = false;
+			pb.ep = &ep;
+			pb.tc = g_particleTextures.boom;
 			pb.tolive = GameDurationMs(10000);
 			pb.timecreation = g_gameTime.now();
 			pb.rgb = Color3f::black;
-			for(int k = 0; k < nbvert; k++) {
+			for(size_t k = 0; k < nbvert; k++) {
 				pb.v[k] = pb.u[k] = temp_uv1[k];
 			}
 			pb.nbvert = short(nbvert);
@@ -159,9 +166,6 @@ void PolyBoomAddScorch(const Vec3f & poss) {
 		}
 	}
 }
-
-extern TextureContainer * bloodsplat[6];
-extern TextureContainer * water_splat[3];
 
 void PolyBoomAddSplat(const Sphere & sp, const Color3f & col, long flags) {
 	
@@ -174,7 +178,7 @@ void PolyBoomAddSplat(const Sphere & sp, const Color3f & col, long flags) {
 	if(polyboom.size() > 250 && size < 10)
 		return;
 	
-	float splatsize=90;
+	float splatsize = 90;
 	
 	if(size > 40.f)
 		size = 40.f;
@@ -205,33 +209,28 @@ void PolyBoomAddSplat(const Sphere & sp, const Color3f & col, long flags) {
 		break;
 	}
 	
-	
 	float py;
-	EERIEPOLY *ep = CheckInPoly(poss + Vec3f(0.f, -40, 0.f), &py);
-	
-	if(!ep)
+	if(!CheckInPoly(poss + Vec3f(0.f, -40, 0.f), &py)) {
 		return;
+	}
 	
 	if(flags & 1)
 		py = poss.y;
 	
-	EERIEPOLY TheoricalSplat; // clockwise
-	TheoricalSplat.v[0].p.x=-splatsize;
+	EERIEPOLY TheoricalSplat;
+	TheoricalSplat.v[0].p.x = -splatsize;
 	TheoricalSplat.v[0].p.y = py;
-	TheoricalSplat.v[0].p.z=-splatsize;
-	
-	TheoricalSplat.v[1].p.x=-splatsize;
+	TheoricalSplat.v[0].p.z = -splatsize;
+	TheoricalSplat.v[1].p.x = -splatsize;
 	TheoricalSplat.v[1].p.y = py;
-	TheoricalSplat.v[1].p.z=+splatsize;
-	
-	TheoricalSplat.v[2].p.x=+splatsize;
+	TheoricalSplat.v[1].p.z = splatsize;
+	TheoricalSplat.v[2].p.x = splatsize;
 	TheoricalSplat.v[2].p.y = py;
-	TheoricalSplat.v[2].p.z=+splatsize;
-	
-	TheoricalSplat.v[3].p.x=+splatsize;
+	TheoricalSplat.v[2].p.z = splatsize;
+	TheoricalSplat.v[3].p.x = splatsize;
 	TheoricalSplat.v[3].p.y = py;
-	TheoricalSplat.v[3].p.z=-splatsize;
-	TheoricalSplat.type=POLY_QUAD;
+	TheoricalSplat.v[3].p.z = -splatsize;
+	TheoricalSplat.type = POLY_QUAD;
 	
 	Vec3f RealSplatStart(-size, py, -size);
 	
@@ -254,12 +253,8 @@ void PolyBoomAddSplat(const Sphere & sp, const Color3f & col, long flags) {
 	
 	GameInstant now = g_gameTime.now();
 	
-	std::vector<POLYBOOM>::iterator pb = polyboom.begin();
-	while(pb != polyboom.end()) {
-	
-		//TODO what does this do ?
-		pb->type |= 128;
-		++ pb;
+	BOOST_FOREACH(POLYBOOM & pb, polyboom) {
+		pb.fastdecay = true;
 	}
 	
 	// TODO copy-paste background tiles
@@ -274,10 +269,9 @@ void PolyBoomAddSplat(const Sphere & sp, const Color3f & col, long flags) {
 	
 	for(int z = minz; z <= maxz; z++)
 	for(int x = minx; x <= maxx; x++) {
-		BackgroundTileData *eg = &ACTIVEBKG->m_tileData[x][z];
+		BackgroundTileData & eg = ACTIVEBKG->m_tileData[x][z];
 		
-		for(long l = 0; l < eg->nbpolyin; l++) {
-			EERIEPOLY *ep = eg->polyin[l];
+		BOOST_FOREACH(EERIEPOLY * ep, eg.polyin) {
 			
 			if((flags & 2) && !(ep->type & POLY_WATER))
 				continue;
@@ -285,27 +279,27 @@ void PolyBoomAddSplat(const Sphere & sp, const Color3f & col, long flags) {
 			if((ep->type & POLY_TRANS) && !(ep->type & POLY_WATER))
 				continue;
 			
-			long nbvert = (ep->type & POLY_QUAD) ? 4 : 3;
+			size_t nbvert = (ep->type & POLY_QUAD) ? 4 : 3;
 			
 			bool oki = false;
 			
-			for(long k = 0; k < nbvert; k++) {
+			for(size_t k = 0; k < nbvert; k++) {
+				
 				if(PointIn2DPolyXZ(&TheoricalSplat, ep->v[k].p.x, ep->v[k].p.z)
-					&& glm::abs(ep->v[k].p.y-py) < 100.f)
-				{
+				   && glm::abs(ep->v[k].p.y - py) < 100.f) {
 					oki = true;
 					break;
 				}
 				
-				if(PointIn2DPolyXZ(&TheoricalSplat, (ep->v[k].p.x+ep->center.x) * 0.5f, (ep->v[k].p.z+ep->center.z) * 0.5f)
-					&& glm::abs(ep->v[k].p.y-py) < 100.f)
-				{
+				if(PointIn2DPolyXZ(&TheoricalSplat, (ep->v[k].p.x + ep->center.x) * 0.5f, (ep->v[k].p.z + ep->center.z) * 0.5f)
+				   && glm::abs(ep->v[k].p.y - py) < 100.f) {
 					oki = true;
 					break;
 				}
+				
 			}
 			
-			if(!oki && PointIn2DPolyXZ(&TheoricalSplat, ep->center.x, ep->center.z) && glm::abs(ep->center.y-py) < 100.f)
+			if(!oki && PointIn2DPolyXZ(&TheoricalSplat, ep->center.x, ep->center.z) && glm::abs(ep->center.y - py) < 100.f)
 				oki = true;
 			
 			if(oki) {
@@ -314,27 +308,29 @@ void PolyBoomAddSplat(const Sphere & sp, const Color3f & col, long flags) {
 					POLYBOOM pb;
 					
 					if(flags & 2) {
-						pb.type = 2;
+						pb.type = WaterDecal;
 						
 						long num = Random::get(0, 2);
-						pb.tc = water_splat[num];
+						pb.tc = g_particleTextures.water_splat[num];
 						
 						pb.tolive = GameDurationMs(1500);
 					} else {
-						pb.type = 1;
+						pb.type = BloodDecal;
 						
 						long num = Random::get(0, 5);
-						pb.tc = bloodsplat[num];
+						pb.tc = g_particleTextures.bloodsplat[num];
 						
 						pb.tolive = GameDurationMsf((16000.f / 40) * size);
 					}
+					
+					pb.fastdecay = false;
 					
 					pb.ep = ep;
 					
 					pb.timecreation = now;
 					pb.rgb = col;
 					
-					for(int k = 0; k < nbvert; k++) {
+					for(size_t k = 0; k < nbvert; k++) {
 						
 						float vdiff = glm::abs(ep->v[k].p.y - RealSplatStart.y);
 						
@@ -345,7 +341,7 @@ void PolyBoomAddSplat(const Sphere & sp, const Color3f & col, long flags) {
 							pb.u[k] += vdiff * div;
 						}
 						
-						pb.v[k] = (ep->v[k].p.z-RealSplatStart.z) * div;
+						pb.v[k] = (ep->v[k].p.z - RealSplatStart.z) * div;
 						if(pb.v[k] < 0.5f) {
 							pb.v[k] -= vdiff * div;
 						} else {
@@ -359,7 +355,9 @@ void PolyBoomAddSplat(const Sphere & sp, const Color3f & col, long flags) {
 					polyboom.push_back(pb);
 				}
 			}
+			
 		}
+		
 	}
 }
 
@@ -375,14 +373,12 @@ void PolyBoomDraw() {
 		
 		POLYBOOM & pb = polyboom[i];
 		
-		// FIXME what exactly does pb.type do ?
-		if(pb.type & 128) {
+		if(pb.fastdecay) {
 			if(pb.timecreation - g_gameTime.lastFrameDuration() > 0) {
-				pb.timecreation = pb.timecreation - g_gameTime.lastFrameDuration();
+				pb.timecreation -= g_gameTime.lastFrameDuration();
 			}
-			
 			if(pb.timecreation - g_gameTime.lastFrameDuration() > 0) {
-				pb.timecreation = pb.timecreation - g_gameTime.lastFrameDuration();
+				pb.timecreation -= g_gameTime.lastFrameDuration();
 			}
 		}
 		
@@ -407,21 +403,19 @@ void PolyBoomDraw() {
 		
 		GameDuration t = pb.timecreation + pb.tolive - now;
 		
-		long typp = pb.type;
-		typp &= ~128;
-		
-		switch(typp) {
+		switch(pb.type) {
 			
-			case 0: { // Scorch mark
+			case ScorchMarkDecal: {
+				
 				float tt = t / pb.tolive * 0.8f;
-				ColorRGBA col = (player.m_improve ? (Color3f::red * (tt*.5f)) : Color3f::gray(tt)).toRGB();
+				ColorRGBA col = (player.m_improve ? (Color3f::red * (tt * 0.5f)) : Color3f::gray(tt)).toRGB();
 				
 				TexturedVertexUntransformed ltv[4];
 				
 				for(long k = 0; k < pb.nbvert; k++) {
 					ltv[k].p = pb.ep->v[k].p;
-					ltv[k].uv.x=pb.u[k];
-					ltv[k].uv.y=pb.v[k];
+					ltv[k].uv.x = pb.u[k];
+					ltv[k].uv.y = pb.v[k];
 					ltv[k].color = col;
 				}
 				
@@ -440,7 +434,8 @@ void PolyBoomDraw() {
 				break;
 			}
 			
-			case 1: { // Blood
+			case BloodDecal: {
+				
 				float tt = t / pb.tolive;
 				float tr = std::max(1.f, tt * 2 - 0.5f);
 				ColorRGBA col = Color4f(pb.rgb * tt, glm::clamp(tt * 1.5f, 0.f, 1.f)).toRGBA();
@@ -449,8 +444,8 @@ void PolyBoomDraw() {
 				
 				for(long k = 0; k < pb.nbvert; k++) {
 					ltv[k].p = pb.ep->v[k].p;
-					ltv[k].uv.x=(pb.u[k]-0.5f)*(tr)+0.5f;
-					ltv[k].uv.y=(pb.v[k]-0.5f)*(tr)+0.5f;
+					ltv[k].uv.x = (pb.u[k] - 0.5f) * tr + 0.5f;
+					ltv[k].uv.y = (pb.v[k] - 0.5f) * tr + 0.5f;
 					ltv[k].color = col;
 				}
 				
@@ -465,7 +460,7 @@ void PolyBoomDraw() {
 				break;
 			}
 			
-			case 2: { // Water
+			case WaterDecal: {
 				float tt = t / pb.tolive;
 				float tr = std::max(1.f, tt * 2 - 0.5f);
 				float ttt = tt * 0.5f;
@@ -475,34 +470,26 @@ void PolyBoomDraw() {
 				
 				for(long k = 0; k < pb.nbvert; k++) {
 					ltv[k].p = pb.ep->v[k].p;
-					ltv[k].uv.x=(pb.u[k]-0.5f)*(tr)+0.5f;
-					ltv[k].uv.y=(pb.v[k]-0.5f)*(tr)+0.5f;
-					ltv[k].color=col;
+					ltv[k].uv.x = (pb.u[k] - 0.5f) * tr + 0.5f;
+					ltv[k].uv.y = (pb.v[k] - 0.5f) * tr + 0.5f;
+					ltv[k].color = col;
 				}
 				
-				if (	(ltv[0].uv.x<0.f)
-					&&	(ltv[1].uv.x<0.f)
-					&&	(ltv[2].uv.x<0.f)
-					&&	(ltv[3].uv.x<0.f) )
+				if(ltv[0].uv.x < 0.f && ltv[1].uv.x < 0.f && ltv[2].uv.x < 0.f && ltv[3].uv.x < 0.f) {
 					break;
+				}
 				
-				if (	(ltv[0].uv.y<0.f)
-					&&	(ltv[1].uv.y<0.f)
-					&&	(ltv[2].uv.y<0.f)
-					&&	(ltv[3].uv.y<0.f) )
+				if(ltv[0].uv.y < 0.f && ltv[1].uv.y < 0.f && ltv[2].uv.y < 0.f && ltv[3].uv.y < 0.f) {
 					break;
+				}
 				
-				if (	(ltv[0].uv.x>1.f)
-					&&	(ltv[1].uv.x>1.f)
-					&&	(ltv[2].uv.x>1.f)
-					&&	(ltv[3].uv.x>1.f) )
+				if(ltv[0].uv.x > 1.f && ltv[1].uv.x > 1.f && ltv[2].uv.x > 1.f && ltv[3].uv.x > 1.f) {
 					break;
+				}
 				
-				if (	(ltv[0].uv.y>1.f)
-					&&	(ltv[1].uv.y>1.f)
-					&&	(ltv[2].uv.y>1.f)
-					&&	(ltv[3].uv.y>1.f) )
+				if(ltv[0].uv.y > 1.f && ltv[1].uv.y > 1.f && ltv[2].uv.y > 1.f && ltv[3].uv.y > 1.f) {
 					break;
+				}
 				
 				mat.setBlendType(RenderMaterial::Screen);
 				mat.setTexture(pb.tc);

@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2016 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -31,6 +31,7 @@ static const EntityHandle EntityHandle_Player = EntityHandle(0);
 static const EntityHandle EntityHandle_Self   = EntityHandle(-2);
 
 struct ResourcePool {
+	
 	float current;
 	float max;
 	
@@ -38,6 +39,12 @@ struct ResourcePool {
 		: current(0.f)
 		, max(0.f)
 	{ }
+	
+	explicit ResourcePool(float value)
+		: current(value)
+		, max(value)
+	{ }
+	
 };
 
 enum Material {

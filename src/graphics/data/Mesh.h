@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2017 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -48,67 +48,19 @@ ZeniMax Media Inc., Suite 120, Rockville, Maryland 20850 USA.
 #define ARX_GRAPHICS_DATA_MESH_H
 
 #include <set>
+#include <vector>
 
+#include "ai/Anchors.h"
 #include "graphics/GraphicsTypes.h"
 #include "math/Rectangle.h"
 #include "game/Camera.h"
+#include "scene/Background.h"
 
 class Entity;
-
-struct BackgroundTileData
-{
-	bool				treat;
-	short				nbpoly;
-	short				nbpolyin;
-	EERIEPOLY *			polydata;
-	EERIEPOLY **		polyin;
-	float maxy;
-	
-	BackgroundTileData()
-		: treat(false)
-		, nbpoly(0)
-		, nbpolyin(0)
-		, polydata(NULL)
-		, polyin(NULL)
-		, maxy(0.f)
-	{}
-};
-
-static const short MAX_BKGX = 160;
-static const short MAX_BKGZ = 160;
-static const short BKG_SIZX = 100;
-static const short BKG_SIZZ = 100;
-
-struct ANCHOR_DATA;
-
-struct BackgroundData {
-	
-	long		exist;
-	Vec2s m_size;
-	Vec2s m_tileSize;
-	Vec2f m_mul;
-	BackgroundTileData m_tileData[MAX_BKGX][MAX_BKGZ];
-	long		  nbanchors;
-	ANCHOR_DATA * anchors;
-	
-	BackgroundData()
-		: exist(false)
-		, m_size(0, 0)
-		, m_tileSize(0, 0)
-		, m_mul(0, 0)
-		, nbanchors(0)
-		, anchors(NULL)
-	{ }
-};
 
 extern long EERIEDrawnPolys;
 
 extern BackgroundData * ACTIVEBKG;
-extern EERIE_CAMERA * ACTIVECAM;
-
-//	Entity Struct End
-
-BackgroundTileData * getFastBackgroundData(float x, float z);
 
 EERIEPOLY * CheckTopPoly(const Vec3f & pos);
 EERIEPOLY * CheckInPoly(const Vec3f & poss, float * needY = NULL);
@@ -144,42 +96,30 @@ void worldToClipSpace(const Vec3f & in, TexturedVertex & out);
 
 
 // FAST SAVE LOAD
-bool FastSceneLoad(const res::path & path);
+bool FastSceneLoad(const res::path & path, Vec3f & trans);
 
 struct RenderMaterial;
 
 void Draw3DObject(EERIE_3DOBJ * eobj, const Anglef & angle, const Vec3f & pos, const Vec3f & scale, const Color4f & coll, RenderMaterial mat);
 
-//****************************************************************************
-// BACKGROUND MANAGEMENT FUNCTIONS START
-void ClearBackground(BackgroundData * eb);
-void InitBkg(BackgroundData * eb, short sx, short sz, Vec2s tileSize);
-//****************************************************************************
-
-long MakeTopObjString(Entity * io, std::string& dest);
+long MakeTopObjString(Entity * io, std::string & dest);
 
 Vec2f getWaterFxUvOffset(float watereffect, const Vec3f & odtv);
 
-//*************************************************************************************
-//*************************************************************************************
-
 float PtIn2DPolyProj(const std::vector<Vec4f> & verts, EERIE_FACE * ef, float x, float z);
 
-long CountBkgVertex();
+void EERIE_PORTAL_Release();
 
 bool RayCollidingPoly(const Vec3f & orgn, const Vec3f & dest, const EERIEPOLY & ep, Vec3f * hit);
-
-void EERIEPOLY_Compute_PolyIn();
 
 
 #define MAX_FRUSTRUMS 32
 
-struct Plane
-{
-	float	a;
-	float	b;
-	float	c;
-	float	d; // dist to origin
+struct Plane {
+	float a;
+	float b;
+	float c;
+	float d; // dist to origin
 };
 
 inline float distanceToPoint(const Plane & plane, const Vec3f & point) {
@@ -196,34 +136,41 @@ inline void normalizePlane(Plane & plane) {
 	plane.d = plane.d * n;
 }
 
-struct EERIE_FRUSTRUM
-{
+struct EERIE_FRUSTRUM {
 	Plane plane[4];
 };
 
-struct EERIE_FRUSTRUM_DATA
-{
+struct EERIE_FRUSTRUM_DATA {
 	long nb_frustrums;
 	EERIE_FRUSTRUM frustrums[MAX_FRUSTRUMS];
 };
 
-struct PORTAL_ROOM_DRAW
-{
-	short			count;
-	EERIE_FRUSTRUM_DATA	frustrum;
+struct PORTAL_ROOM_DRAW {
+	short count;
+	EERIE_FRUSTRUM_DATA frustrum;
 };
 
-struct ROOM_DIST_DATA
-{
-	float	distance; // -1 means use truedist
+struct ROOM_DIST_DATA {
+	
+	float distance; // -1 means use truedist
 	Vec3f startpos;
 	Vec3f endpos;
+	
+	ROOM_DIST_DATA()
+		: distance(0.f)
+		, startpos(0.f)
+		, endpos(0.f)
+	{ }
+	
 };
 
-extern ROOM_DIST_DATA * RoomDistance;
+extern std::vector<ROOM_DIST_DATA> g_roomDistance;
 
 void UpdateIORoom(Entity * io);
+
+void FreeRoomDistance();
 float SP_GetRoomDist(const Vec3f & pos, const Vec3f & c_pos, long io_room, long Cam_Room);
+
 void EERIE_PORTAL_ReleaseOnlyVertexBuffer();
 void ComputePortalVertexBuffer();
 

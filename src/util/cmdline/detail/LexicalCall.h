@@ -1,5 +1,5 @@
 /*
- * Copyright 2013-2014 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2013-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -87,7 +87,6 @@ public:
 	}
 	
 	result_type operator()(argument_type args) const {
-		//TODO: add  : if(!is_reference<argument_type>)   argument_type = reference<argument_type>
 		return function(args);
 	}
 	
@@ -106,7 +105,6 @@ private:
 		}
 		
 		result_type operator()(argument_type args) {
-			//TODO: add  : if(!is_reference<argument_type>)   argument_type = reference<argument_type>
 			detail::args_adapter<typename Fn::signature> decoded_args(args);
 			return m_fn(decoded_args);
 		}

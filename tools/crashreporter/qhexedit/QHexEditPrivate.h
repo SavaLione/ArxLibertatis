@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2013 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -24,8 +24,6 @@
 
 #ifndef ARX_TOOLS_CRASHREPORTER_QHEXEDIT_QHEXEDITPRIVATE_H
 #define ARX_TOOLS_CRASHREPORTER_QHEXEDIT_QHEXEDITPRIVATE_H
-
-//! \cond docNever
 
 #include <QtGui>
 #include <QScrollArea>
@@ -122,9 +120,9 @@ private:
 	QColor _addressAreaColor;
 	QColor _highlightingColor;
 	QColor _selectionColor;
-	QScrollArea *_scrollArea;
+	QScrollArea * _scrollArea;
 	QTimer _cursorTimer;
-	QUndoStack *_undoStack;
+	QUndoStack * _undoStack;
 	
 	XByteArray _xData;                  //!< holds the content of the hex editor
 	
@@ -145,8 +143,7 @@ private:
 	int _selectionInit;                 //!< That's, where we pressed the mouse button
 	
 	int _size;
+	
 };
-
-//! \endcond docNever
 
 #endif // ARX_TOOLS_CRASHREPORTER_QHEXEDIT_QHEXEDITPRIVATE_H

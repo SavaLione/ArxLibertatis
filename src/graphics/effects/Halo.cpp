@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2016 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -32,7 +32,7 @@ static TexturedVertex LATERDRAWHALO[2][HALOMAX * 6];
 void Halo_AddVertices(TexturedVertex (&inVerts)[4]) {
 	int blendType = inVerts[2].color == ColorRGBA_ZERO ? 0 : 1;
 
-	TexturedVertex *vert = &LATERDRAWHALO[blendType][(HALOCUR[blendType] * 6)];
+	TexturedVertex * vert = &LATERDRAWHALO[blendType][(HALOCUR[blendType] * 6)];
 	if(HALOCUR[blendType] < HALOMAX - 1) {
 		HALOCUR[blendType]++;
 	}

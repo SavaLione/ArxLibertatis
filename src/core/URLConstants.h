@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2016 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2012-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -25,13 +25,13 @@ namespace url {
 typedef const char * const str_t;
 
 //! Documentation on how to get the game data
-static str_t help_get_data = "http://arx.vg/data";
+static str_t help_get_data = "https://arx.vg/data";
 
 //! Documentation on how and where to install the game data
-static str_t help_install_data = "http://arx.vg/paths";
+static str_t help_install_data = "https://arx.vg/paths";
 
 //! Where users can report bugs
-static str_t bug_report = "http://arx.vg/bug";
+static str_t bug_report = "https://arx.vg/bug";
 
 } // namespace url
 

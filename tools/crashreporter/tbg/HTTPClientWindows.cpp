@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-2016 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2015-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -46,11 +46,10 @@ class WinHTTPSession : public Session {
 	
 public:
 	
-	explicit WinHTTPSession(const std::string & userAgent) {
-		m_session = WinHttpOpen(platform::WideString(userAgent),
-		                        WINHTTP_ACCESS_TYPE_DEFAULT_PROXY, WINHTTP_NO_PROXY_NAME,
-		                        WINHTTP_NO_PROXY_BYPASS, 0);
-	};
+	explicit WinHTTPSession(const std::string & userAgent)
+		: m_session(WinHttpOpen(platform::WideString(userAgent), WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
+		                        WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0))
+	{ }
 	
 	~WinHTTPSession() {
 		if(m_connection) {
@@ -73,6 +72,7 @@ static std::string errorString(DWORD error = GetLastError()) {
 
 static void APIENTRY statusCallback(HINTERNET handle, DWORD_PTR context, DWORD status,
                                     LPVOID info, DWORD size) {
+	ARX_UNUSED(handle);
 	if(status == WINHTTP_CALLBACK_STATUS_REDIRECT && context && size >= 1) {
 		std::basic_string<WCHAR> * url = reinterpret_cast<std::basic_string<WCHAR> *>(context);
 		url->assign(reinterpret_cast<LPWSTR>(info), size - 1);
@@ -85,7 +85,7 @@ HINTERNET WinHTTPSession::setup(const Request & request, LPCWSTR method) {
 	
 	URL_COMPONENTS url;
 	ZeroMemory(&url, sizeof(url));
-  url.dwStructSize = sizeof(url);
+	url.dwStructSize = sizeof(url);
 	url.dwSchemeLength = url.dwHostNameLength = url.dwUrlPathLength = DWORD(-1);
 	if(WinHttpCrackUrl(wurl, 0, 0, &url) != TRUE) {
 		throw new Response("Invalid URL: \"" + request.url() + "\"");
@@ -151,28 +151,28 @@ Response * WinHTTPSession::receive(HINTERNET wrequest, const Request & request,
 	}
 	
 	std::string url;
-	if(!request.followRedirects()) {
+	if(request.followRedirects()) {
+		url = redirect.empty() ? request.url() : platform::WideString::toUTF8(redirect);
+	} else {
 		DWORD urlSize = 0;
 		WinHttpQueryHeaders(wrequest, WINHTTP_QUERY_LOCATION, WINHTTP_HEADER_NAME_BY_INDEX,
 		                    WINHTTP_NO_OUTPUT_BUFFER, &urlSize, WINHTTP_NO_HEADER_INDEX);
 		if(GetLastError() ==  ERROR_INSUFFICIENT_BUFFER && urlSize % sizeof(WCHAR) == 0) {
-			platform::WideString redirect;
-			redirect.allocate(urlSize / sizeof(WCHAR));
+			platform::WideString location;
+			location.allocate(urlSize / sizeof(WCHAR));
 			if(WinHttpQueryHeaders(wrequest, WINHTTP_QUERY_LOCATION, WINHTTP_HEADER_NAME_BY_INDEX,
-			                       redirect.data(), &urlSize, WINHTTP_NO_HEADER_INDEX)) {
-				redirect.resize(urlSize / sizeof(WCHAR));
+			                       location.data(), &urlSize, WINHTTP_NO_HEADER_INDEX)) {
+				location.resize(urlSize / sizeof(WCHAR));
 				platform::WideString base(request.url());
 				platform::WideString wurl;
-				wurl.allocate(2 * (base.size() + redirect.size()));
+				wurl.allocate(2 * (base.size() + location.size()));
 				urlSize = wurl.size();
-				if(InternetCombineUrlW(base, redirect, wurl.data(), &urlSize, ICU_BROWSER_MODE)) {
+				if(InternetCombineUrlW(base, location, wurl.data(), &urlSize, ICU_BROWSER_MODE)) {
 					wurl.resize(urlSize);
 					url = wurl.toUTF8();
 				}
 			}
 		}
-	} else {
-		url = redirect.empty() ? request.url() : platform::WideString::toUTF8(redirect);
 	}
 	
 	std::string data;
@@ -215,7 +215,7 @@ Response * WinHTTPSession::get(const Request & request) {
 	
 	std::basic_string<WCHAR> redirect;
 	BOOL result = WinHttpSendRequest(wrequest, WINHTTP_NO_ADDITIONAL_HEADERS, 0,
-	                                 WINHTTP_NO_REQUEST_DATA, 0, 0, (DWORD_PTR)&redirect);
+	                                 WINHTTP_NO_REQUEST_DATA, 0, 0, reinterpret_cast<DWORD_PTR>(&redirect));
 	if(!result) {
 		return new Response(errorString());
 	}
@@ -245,8 +245,8 @@ Response * WinHTTPSession::post(const POSTRequest & request) {
 	LPVOID data = const_cast<LPVOID>(static_cast<LPCVOID>(request.data().data()));
 	DWORD size = request.data().size();
 	std::basic_string<WCHAR> redirect;
-	BOOL result = WinHttpSendRequest(wrequest, headers, -1, data, size, size,
-	                                (DWORD_PTR)&redirect);
+	BOOL result = WinHttpSendRequest(wrequest, headers, DWORD(-1), data, size, size,
+	                                reinterpret_cast<DWORD_PTR>(&redirect));
 	if(!result) {
 		return new Response("Could not send request: " + errorString());
 	}

@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2016 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -51,8 +51,7 @@ OpenGLRenderer::OpenGLRenderer()
 	, m_maximumAnisotropy(1.f)
 	, m_maximumSupportedAnisotropy(1.f)
 	, m_glcull(GL_NONE)
-	, m_glscissor(false)
-	, m_scissor(false)
+	, m_scissor(Rect::ZERO)
 	, m_MSAALevel(0)
 	, m_hasMSAA(false)
 	, m_hasTextureNPOT(false)
@@ -77,9 +76,6 @@ OpenGLRenderer::~OpenGLRenderer() {
 	}
 	
 	// TODO textures must be destructed before OpenGLRenderer or not at all
-	//for(TextureList::iterator it = textures.begin(); it != textures.end(); ++it) {
-	//	LogWarning << "Texture still loaded: " << it->getFileName();
-	//}
 	
 }
 
@@ -130,6 +126,23 @@ void OpenGLRenderer::initialize() {
 	const GLubyte * glRenderer = glGetString(GL_RENDERER);
 	LogInfo << " ├─ Device: " << glRenderer;
 	CrashHandler::setVariable("OpenGL device", glRenderer);
+	
+	#if defined(GL_CONTEXT_FLAG_DEBUG_BIT) || defined(GL_CONTEXT_FLAG_NO_ERROR_BIT)
+	if(ARX_HAVE_GL_VER(3, 0)) {
+		GLint flags = 0;
+		glGetIntegerv(GL_CONTEXT_FLAGS, &flags);
+		#ifdef GL_CONTEXT_FLAG_DEBUG_BIT
+		if(flags & GL_CONTEXT_FLAG_DEBUG_BIT) {
+			LogInfo << " ├─ Context type: debug";
+		}
+		#endif
+		#ifdef GL_CONTEXT_FLAG_NO_ERROR_BIT
+		if(flags & GL_CONTEXT_FLAG_NO_ERROR_BIT) {
+			LogInfo << " ├─ Context type: no error";
+		}
+		#endif
+	}
+	#endif
 	
 	u64 totalVRAM = 0, freeVRAM = 0;
 	{
@@ -251,9 +264,15 @@ void OpenGLRenderer::reinit() {
 			LogError << "OpenGL ES version 1.0 or newer required";
 		}
 	} else {
+		#if ARX_HAVE_EPOXY
+		if(!ARX_HAVE_GL_VER(1, 5) && (!ARX_HAVE_GL_VER(1, 4) || !ARX_HAVE_GL_EXT(ARB_vertex_buffer_object))) {
+			LogError << "OpenGL version 1.5 or newer or 1.4 + GL_ARB_vertex_buffer_object required";
+		}
+		#else
 		if(!ARX_HAVE_GL_VER(1, 5)) {
 			LogError << "OpenGL version 1.5 or newer required";
 		}
+		#endif
 	}
 	
 	if(isES) {
@@ -348,7 +367,12 @@ void OpenGLRenderer::reinit() {
 	if(isES) {
 		m_hasSampleShading = ARX_HAVE_GLES_VER(3, 2) || ARX_HAVE_GLES_EXT(OES_sample_shading);
 	} else {
+		#if ARX_HAVE_GLEW
+		// The extension and core version have different entry points
+		m_hasSampleShading = ARX_HAVE_GL_EXT(ARB_sample_shading);
+		#else
 		m_hasSampleShading = ARX_HAVE_GL_VER(4, 0) || ARX_HAVE_GL_EXT(ARB_sample_shading);
+		#endif
 	}
 	
 	// Synchronize GL state cache
@@ -387,7 +411,11 @@ void OpenGLRenderer::reinit() {
 	glAlphaFunc(GL_GREATER, 0.5f);
 	#ifdef GL_VERSION_4_0
 	if(hasSampleShading()) {
+		#if ARX_HAVE_GLEW
+		glMinSampleShadingARB(1.f);
+		#else
 		glMinSampleShading(1.f);
+		#endif
 	}
 	#endif
 	m_glstate.setAlphaCutout(false);
@@ -403,8 +431,6 @@ void OpenGLRenderer::reinit() {
 	
 	glEnable(GL_BLEND);
 	m_glstate.setBlend(BlendOne, BlendZero);
-	
-	m_glscissor = false;
 	
 	glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
 	glPixelStorei(GL_PACK_ALIGNMENT, 1);
@@ -448,8 +474,8 @@ void OpenGLRenderer::shutdown() {
 	
 }
 
-static glm::mat4x4 projection;
-static glm::mat4x4 view;
+static glm::mat4x4 projection(1.f);
+static glm::mat4x4 view(1.f);
 
 void OpenGLRenderer::enableTransform() {
 	
@@ -487,10 +513,10 @@ void OpenGLRenderer::disableTransform() {
 	
 	// Change coordinate system from [0, width] x [0, height] to [-1, 1] x [-1, 1] and flip the y axis
 	glTranslatef(-1.f, 1.f, 0.f);
-	glScalef(2.f/viewport.width(), -2.f/viewport.height(), 1.f);
+	glScalef(2.f / viewport.width(), -2.f / viewport.height(), 1.f);
 	
-	// Change the viewport and pixel origins
-	glTranslatef(.5f - viewport.left, .5f - viewport.top, 0.f);
+	// Change pixel origins
+	glTranslatef(0.5f, 0.5f, 0.f);
 	
 	if(hasVertexFogCoordinate()) {
 		glFogi(GL_FOG_COORDINATE_SOURCE, GL_FOG_COORDINATE);
@@ -512,10 +538,6 @@ void OpenGLRenderer::SetViewMatrix(const glm::mat4x4 & matView) {
 	view = matView;
 }
 
-void OpenGLRenderer::GetViewMatrix(glm::mat4x4 & matView) const {
-	matView = view;
-}
-
 void OpenGLRenderer::SetProjectionMatrix(const glm::mat4x4 & matProj) {
 	
 	if(!memcmp(&projection, &matProj, sizeof(glm::mat4x4))) {
@@ -527,10 +549,6 @@ void OpenGLRenderer::SetProjectionMatrix(const glm::mat4x4 & matProj) {
 	}
 	
 	projection = matProj;
-}
-
-void OpenGLRenderer::GetProjectionMatrix(glm::mat4x4 & matProj) const {
-	matProj = projection;
 }
 
 void OpenGLRenderer::ReleaseAllTextures() {
@@ -578,19 +596,26 @@ void OpenGLRenderer::SetViewport(const Rect & _viewport) {
 	}
 }
 
-Rect OpenGLRenderer::GetViewport() {
-	return viewport;
-}
-
 void OpenGLRenderer::SetScissor(const Rect & rect) {
 	
+	if(m_scissor == rect) {
+		return;
+	}
+	
 	if(rect.isValid()) {
-		m_scissor = true;
+		if(!m_scissor.isValid()) {
+			glEnable(GL_SCISSOR_TEST);
+		}
 		int height = mainApp->getWindow()->getSize().y;
 		glScissor(rect.left, height - rect.bottom, rect.width(), rect.height());
 	} else {
-		m_scissor = false;
+		if(m_scissor.isValid()) {
+			glDisable(GL_SCISSOR_TEST);
+		}
 	}
+	
+	m_scissor = rect;
+	
 }
 
 void OpenGLRenderer::Clear(BufferFlags bufferFlags, Color clearColor, float clearDepth, size_t nrects, Rect * rect) {
@@ -598,8 +623,8 @@ void OpenGLRenderer::Clear(BufferFlags bufferFlags, Color clearColor, float clea
 	GLbitfield buffers = 0;
 	
 	if(bufferFlags & ColorBuffer) {
-		Color4f col = clearColor.to<float>();
-		glClearColor(col.r, col.g, col.b, col.a);
+		Color4f colorf(clearColor);
+		glClearColor(colorf.r, colorf.g, colorf.b, colorf.a);
 		buffers |= GL_COLOR_BUFFER_BIT;
 	}
 	
@@ -617,42 +642,43 @@ void OpenGLRenderer::Clear(BufferFlags bufferFlags, Color clearColor, float clea
 		#endif
 		{
 			// Not available in OpenGL ES
-			glClearDepth((GLclampd)clearDepth);
+			glClearDepth(GLclampd(clearDepth));
 		}
 		buffers |= GL_DEPTH_BUFFER_BIT;
 	}
 	
 	if(nrects) {
 		
-		arx_assert(!m_scissor);
-		
-		if(!m_glscissor) {
-			glEnable(GL_SCISSOR_TEST);
-			m_glscissor = true;
-		}
-		
-		int height = mainApp->getWindow()->getSize().y;
+		Rect scissor = m_scissor;
 		
 		for(size_t i = 0; i < nrects; i++) {
-			glScissor(rect[i].left, height - rect[i].bottom, rect[i].width(), rect[i].height());
+			
+			SetScissor(rect[i]);
+			
 			glClear(buffers);
+			
 		}
+		
+		SetScissor(scissor);
 		
 	} else {
 		
-		if(m_glscissor) {
+		if(m_scissor.isValid()) {
 			glDisable(GL_SCISSOR_TEST);
-			m_glscissor = false;
 		}
 		
 		glClear(buffers);
+		
+		if(m_scissor.isValid()) {
+			glEnable(GL_SCISSOR_TEST);
+		}
 		
 	}
 }
 
 void OpenGLRenderer::SetFogColor(Color color) {
-	Color4f colorf = color.to<float>();
-	GLfloat fogColor[4]= {colorf.r, colorf.g, colorf.b, colorf.a};
+	Color4f colorf(color);
+	GLfloat fogColor[4] = { colorf.r, colorf.g, colorf.b, colorf.a };
 	glFogfv(GL_FOG_COLOR, fogColor);
 }
 
@@ -880,15 +906,6 @@ static const GLenum arxToGlBlendFactor[] = {
 };
 
 void OpenGLRenderer::flushState() {
-	
-	if(m_glscissor != m_scissor) {
-		if(m_scissor) {
-			glEnable(GL_SCISSOR_TEST);
-		} else {
-			glDisable(GL_SCISSOR_TEST);
-		}
-		m_glscissor = m_scissor;
-	}
 	
 	if(m_glstate != m_state) {
 		

@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2013 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -26,31 +26,38 @@
 bool DisplayMode::operator<(const DisplayMode & o) const {
 	if(resolution.x != o.resolution.x) {
 		return (resolution.x < o.resolution.x);
-	} else {
+	} else if(resolution.y != o.resolution.y) {
 		return (resolution.y < o.resolution.y);
+	} else {
+		return (refresh < o.refresh);
 	}
 }
 
 std::ostream & operator<<(std::ostream & os, const DisplayMode & mode) {
-	return os << mode.resolution.x << 'x' << mode.resolution.y;
+	os << mode.resolution.x << 'x' << mode.resolution.y;
+	if(mode.refresh != 0) {
+		os << '@' << mode.refresh << "Hz";
+	}
+	return os;
 }
 
-void Window::Listener::onCreateWindow( const Window & /*window*/ ) {}
-bool Window::Listener::onCloseWindow( const Window & /*window*/ ) { return true; }
-void Window::Listener::onDestroyWindow( const Window & /*window*/ ) {}
-void Window::Listener::onMoveWindow( const Window & /*window*/ ) {}
-void Window::Listener::onResizeWindow( const Window & /*window*/ ) {}
-void Window::Listener::onMinimizeWindow( const Window & /*window*/ ) {}
-void Window::Listener::onMaximizeWindow( const Window & /*window*/ ) {}
-void Window::Listener::onRestoreWindow( const Window & /*window*/ ) {}
-void Window::Listener::onToggleFullscreen( const Window & /*window*/ ) {}
-void Window::Listener::onWindowGotFocus( const Window & /*window*/ ) {}
-void Window::Listener::onWindowLostFocus( const Window & /*window*/ ) {}
-void Window::Listener::onPaintWindow( const Window & /*window*/ ) {}
+void Window::Listener::onCreateWindow(const Window & /* window */) { }
+bool Window::Listener::onCloseWindow(const Window & /* window */) { return true; }
+void Window::Listener::onDestroyWindow(const Window & /* window */) { }
+void Window::Listener::onMoveWindow(const Window & /* window */) { }
+void Window::Listener::onResizeWindow(const Window & /* window */) { }
+void Window::Listener::onMinimizeWindow(const Window & /* window */) { }
+void Window::Listener::onMaximizeWindow(const Window & /* window */) { }
+void Window::Listener::onRestoreWindow(const Window & /* window */) { }
+void Window::Listener::onToggleFullscreen(const Window & /* window */) { }
+void Window::Listener::onWindowGotFocus(const Window & /* window */) { }
+void Window::Listener::onWindowLostFocus(const Window & /* window */) { }
+void Window::Listener::onPaintWindow(const Window & /*window*/) { }
+void Window::Listener::onDroppedFile(const Window & /*window*/, const fs::path & /* path */) { }
 
 Window::Window()
 	: m_position(0, 0)
-	, m_size(640, 480)
+	, m_mode(Vec2i(640, 480))
 	, m_minimized(false)
 	, m_maximized(false)
 	, m_visible(false)
@@ -101,7 +108,7 @@ void Window::onMove(s32 x, s32 y) {
 }
 
 void Window::onResize(const Vec2i & size) {
-	m_size = size;
+	m_mode.resolution = size;
 	BOOST_FOREACH(Listener * listener, m_listeners) {
 		listener->onResizeWindow(*this);
 	}
@@ -155,5 +162,11 @@ void Window::onFocus(bool hasFocus) {
 void Window::onPaint() {
 	BOOST_FOREACH(Listener * listener, m_listeners) {
 		listener->onPaintWindow(*this);
+	}
+}
+
+void Window::onDroppedFile(const fs::path & path) {
+	BOOST_FOREACH(Listener * listener, m_listeners) {
+		listener->onDroppedFile(*this, path);
 	}
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2017 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -97,106 +97,88 @@ ZeniMax Media Inc., Suite 120, Rockville, Maryland 20850 USA.
 // TODO: Convert to a RenderBatch & make TextureContainer constructor private
 static TextureContainer TexSpecialColor("specialcolor_list", TextureContainer::NoInsert);
 
-static TexturedVertex * PushVertexInTable(ModelBatch * pTex, BatchBucket type) {
-	
-	if(pTex->count[type] + 3 > pTex->max[type]) {
-		pTex->max[type] += 20 * 3;
-		pTex->list[type] = (TexturedVertex *)realloc(pTex->list[type], pTex->max[type] * sizeof(TexturedVertex));
-
-		if(!pTex->list[type]) {
-			pTex->max[type] = 0;
-			pTex->count[type] = 0;
-			return NULL;
-		}
-	}
-
-	pTex->count[type] += 3;
-	return &pTex->list[type][pTex->count[type] - 3];
+static TexturedVertex * PushVertexInTable(std::vector<TexturedVertex> & bucket) {
+	bucket.resize(bucket.size() + 3);
+	return &bucket[bucket.size() - 3];
 }
 
-static void PopOneTriangleList(RenderState baseState, TextureContainer * _pTex, bool clear) {
+static void PopOneTriangleList(RenderState baseState, TextureContainer * material, bool clear) {
 	
-	ModelBatch & batch = _pTex->m_modelBatch;
+	std::vector<TexturedVertex> & bucket = material->m_modelBatch[BatchBucket_Opaque];
 	
-	if(!batch.count[BatchBucket_Opaque]) {
+	if(bucket.empty()) {
 		return;
 	}
 	
-	GRenderer->SetTexture(0, _pTex);
-	baseState.setAlphaCutout(_pTex->m_pTexture && _pTex->m_pTexture->hasAlpha());
+	GRenderer->SetTexture(0, material);
+	baseState.setAlphaCutout(material->m_pTexture && material->m_pTexture->hasAlpha());
 	
 	UseRenderState state(baseState);
+	UseTextureState textureState(TextureStage::FilterLinear, TextureStage::WrapClamp);
 	
-	if(_pTex->userflags & POLY_LATE_MIP) {
+	if(material->userflags & POLY_LATE_MIP) {
 		const float GLOBAL_NPC_MIPMAP_BIAS = -2.2f;
 		GRenderer->GetTextureStage(0)->setMipMapLODBias(GLOBAL_NPC_MIPMAP_BIAS);
 	}
-
-
-	EERIEDRAWPRIM(Renderer::TriangleList, batch.list[BatchBucket_Opaque], batch.count[BatchBucket_Opaque]);
+	
+	EERIEDRAWPRIM(Renderer::TriangleList, &bucket[0], bucket.size());
 	
 	if(clear) {
-		batch.count[BatchBucket_Opaque] = 0;
+		bucket.clear();
 	}
-
-	if(_pTex->userflags & POLY_LATE_MIP) {
+	
+	if(material->userflags & POLY_LATE_MIP) {
 		float biasResetVal = 0;
 		GRenderer->GetTextureStage(0)->setMipMapLODBias(biasResetVal);
 	}
 
 }
 
-static void PopOneTriangleListTransparency(TextureContainer *_pTex) {
+static void PopOneTriangleListTransparency(TextureContainer * material) {
 	
-	ModelBatch & batch = _pTex->m_modelBatch;
+	std::vector<TexturedVertex> * batch = material->m_modelBatch;
 	
-	if(!batch.count[BatchBucket_Blended]
-	   && !batch.count[BatchBucket_Additive]
-	   && !batch.count[BatchBucket_Subtractive]
-	   && !batch.count[BatchBucket_Multiplicative]) {
+	if(batch[BatchBucket_Blended].empty()
+	   && batch[BatchBucket_Additive].empty()
+	   && batch[BatchBucket_Subtractive].empty()
+	   && batch[BatchBucket_Multiplicative].empty()) {
 		return;
 	}
 	
 	RenderState baseState = render3D().depthWrite(false);
+	UseTextureState textureState(TextureStage::FilterLinear, TextureStage::WrapClamp);
 	
-	GRenderer->SetTexture(0, _pTex);
-	baseState.setAlphaCutout(_pTex->m_pTexture && _pTex->m_pTexture->hasAlpha());
+	GRenderer->SetTexture(0, material);
+	baseState.setAlphaCutout(material->m_pTexture && material->m_pTexture->hasAlpha());
 	
-	if(batch.count[BatchBucket_Blended]) {
+	if(!batch[BatchBucket_Blended].empty()) {
 		UseRenderState state(baseState.blend(BlendDstColor, BlendSrcColor));
-		if(batch.count[BatchBucket_Blended]) {
-			EERIEDRAWPRIM(Renderer::TriangleList, batch.list[BatchBucket_Blended],
-						  batch.count[BatchBucket_Blended]);
-			batch.count[BatchBucket_Blended]=0;
-		}
+		EERIEDRAWPRIM(Renderer::TriangleList, &batch[BatchBucket_Blended][0],
+		                                      batch[BatchBucket_Blended].size());
+		batch[BatchBucket_Blended].clear();
 	}
-
-	if(batch.count[BatchBucket_Additive]) {
+	
+	if(!batch[BatchBucket_Additive].empty()) {
 		UseRenderState state(baseState.blend(BlendOne, BlendOne));
-		if(batch.count[BatchBucket_Additive]) {
-			EERIEDRAWPRIM(Renderer::TriangleList, batch.list[BatchBucket_Additive],
-						  batch.count[BatchBucket_Additive]);
-			batch.count[BatchBucket_Additive]=0;
-		}
+		EERIEDRAWPRIM(Renderer::TriangleList, &batch[BatchBucket_Additive][0],
+		                                      batch[BatchBucket_Additive].size());
+		batch[BatchBucket_Additive].clear();
 	}
-
-	if(batch.count[BatchBucket_Subtractive]) {
+	
+	if(!batch[BatchBucket_Subtractive].empty()) {
 		UseRenderState state(baseState.blend(BlendZero, BlendInvSrcColor));
-		if(batch.count[BatchBucket_Subtractive]) {
-			EERIEDRAWPRIM(Renderer::TriangleList, batch.list[BatchBucket_Subtractive],
-						  batch.count[BatchBucket_Subtractive]);
-			batch.count[BatchBucket_Subtractive]=0;
-		}
+		EERIEDRAWPRIM(Renderer::TriangleList, &batch[BatchBucket_Subtractive][0],
+		                                      batch[BatchBucket_Subtractive].size());
+		batch[BatchBucket_Subtractive].clear();
 	}
-
-	if(batch.count[BatchBucket_Multiplicative]) {
+	
+	if(!batch[BatchBucket_Multiplicative].empty()) {
 		UseRenderState state(baseState.blend(BlendOne, BlendOne));
-		if(batch.count[BatchBucket_Multiplicative]) {
-			EERIEDRAWPRIM(Renderer::TriangleList, batch.list[BatchBucket_Multiplicative],
-						  batch.count[BatchBucket_Multiplicative]);
-			batch.count[BatchBucket_Multiplicative] = 0;
-		}
+		EERIEDRAWPRIM(Renderer::TriangleList, &batch[BatchBucket_Multiplicative][0],
+		                                      batch[BatchBucket_Multiplicative].size());
+		batch[BatchBucket_Multiplicative].clear();
 	}
+	
 }
 
 void PopAllTriangleListOpaque(RenderState baseState, bool clear) {
@@ -233,123 +215,119 @@ void PopAllTriangleListTransparency() {
 
 extern bool EXTERNALVIEW;
 
-float Cedric_GetInvisibility(Entity *io) {
-	if(io) {
-		float invisibility = io->invisibility;
-
-		if (invisibility > 1.f)
-			invisibility -= 1.f;
-
-		if(io != entities.player() && invisibility > 0.f && !EXTERNALVIEW) {
-			SpellBase * spell = spells.getSpellOnTarget(io->index(), SPELL_INVISIBILITY);
-
-			if(spell) {
-				if(player.m_skillFull.intuition > spell->m_level * 10) {
-					invisibility -= player.m_skillFull.intuition * (1.0f / 100)
-									+ spell->m_level * (1.0f / 10);
-
-					invisibility = glm::clamp(invisibility, 0.1f, 1.f);
-				}
-			}
-		}
-		return invisibility;
-	} else {
+float Cedric_GetInvisibility(Entity * io) {
+	
+	if(!io) {
 		return 0.f;
 	}
+	
+	float invisibility = io->invisibility;
+	if(invisibility > 1.f) {
+		invisibility -= 1.f;
+	}
+	
+	if(io != entities.player() && invisibility > 0.f && !EXTERNALVIEW) {
+		SpellBase * spell = spells.getSpellOnTarget(io->index(), SPELL_INVISIBILITY);
+		if(spell) {
+			if(player.m_skillFull.intuition > spell->m_level * 10) {
+				invisibility -= player.m_skillFull.intuition * (1.0f / 100) + spell->m_level * (1.0f / 10);
+				invisibility = glm::clamp(invisibility, 0.1f, 1.f);
+			}
+		}
+	}
+	
+	return invisibility;
 }
 
-//TODO Move somewhere else
-void Cedric_ApplyLightingFirstPartRefactor(Entity *io) {
-
-	if(!io)
-		return;
-
-	io->special_color = Color3f::white;
+// TODO Move somewhere else
+void Cedric_ApplyLightingFirstPartRefactor(Entity & io) {
+	
+	io.special_color = Color3f::white;
 
 	float poisonpercent = 0.f;
 	float trappercent = 0.f;
 	float secretpercent = 0.f;
 
-	if((io->ioflags & IO_NPC) && io->_npcdata->poisonned > 0.f) {
-		poisonpercent = io->_npcdata->poisonned * ( 1.0f / 20 );
+	if((io.ioflags & IO_NPC) && io._npcdata->poisonned > 0.f) {
+		poisonpercent = io._npcdata->poisonned * 0.05f;
 		if(poisonpercent > 1.f)
 			poisonpercent = 1.f;
 	}
 
-	if((io->ioflags & IO_ITEM) && io->poisonous > 0.f && io->poisonous_count) {
-		poisonpercent = io->poisonous * (1.0f / 20);
+	if((io.ioflags & IO_ITEM) && io.poisonous > 0.f && io.poisonous_count) {
+		poisonpercent = io.poisonous * (1.0f / 20);
 		if(poisonpercent > 1.f)
 			poisonpercent = 1.f;
 	}
 
-	if((io->ioflags & IO_FIX) && io->_fixdata->trapvalue > -1) {
-		trappercent = player.TRAP_DETECT - io->_fixdata->trapvalue;
+	if((io.ioflags & IO_FIX) && io._fixdata->trapvalue > -1) {
+		trappercent = player.TRAP_DETECT - io._fixdata->trapvalue;
 		if(trappercent > 0.f) {
-			trappercent = 0.6f + trappercent * ( 1.0f / 100 );
+			trappercent = 0.6f + trappercent * 0.01f;
 			trappercent = glm::clamp(trappercent, 0.6f, 1.f);
 		}
 	}
 
-	if((io->ioflags & IO_FIX) && io->secretvalue > -1) {
-		secretpercent = player.TRAP_SECRET - io->secretvalue;
+	if((io.ioflags & IO_FIX) && io.secretvalue > -1) {
+		secretpercent = player.TRAP_SECRET - io.secretvalue;
 		if(secretpercent > 0.f) {
-			secretpercent = 0.6f + secretpercent * ( 1.0f / 100 );
+			secretpercent = 0.6f + secretpercent * 0.01f;
 			secretpercent = glm::clamp(secretpercent, 0.6f, 1.f);
 		}
 	}
 
 	if(poisonpercent > 0.f) {
-		io->special_color = Color3f::green;
+		io.special_color = Color3f::green;
 	}
 
 	if(trappercent > 0.f) {
-		io->special_color = Color3f(trappercent, 1.f - trappercent, 1.f - trappercent);
+		io.special_color = Color3f(trappercent, 1.f - trappercent, 1.f - trappercent);
 	}
 
 	if(secretpercent > 0.f) {
-		io->special_color = Color3f(1.f - secretpercent, 1.f - secretpercent, secretpercent);
+		io.special_color = Color3f(1.f - secretpercent, 1.f - secretpercent, secretpercent);
 	}
 
-	if(io->ioflags & IO_FREEZESCRIPT) {
-		io->special_color = Color3f::blue;
+	if(io.ioflags & IO_FREEZESCRIPT) {
+		io.special_color = Color3f::blue;
 	}
 
-	if(io->sfx_flag & SFX_TYPE_YLSIDE_DEATH) {
-		if(io->show == SHOW_FLAG_TELEPORTING) {
-			io->sfx_time = io->sfx_time + g_gameTime.lastFrameDuration();
-
-			if (io->sfx_time >= g_gameTime.now())
-				io->sfx_time = g_gameTime.now();
+	if(io.sfx_flag & SFX_TYPE_YLSIDE_DEATH) {
+		if(io.show == SHOW_FLAG_TELEPORTING) {
+			io.sfx_time = io.sfx_time + g_gameTime.lastFrameDuration();
+			if(io.sfx_time >= g_gameTime.now()) {
+				io.sfx_time = g_gameTime.now();
+			}
 		} else {
-			const GameDuration elapsed = g_gameTime.now() - io->sfx_time;
+			const GameDuration elapsed = g_gameTime.now() - io.sfx_time;
 
 			if(elapsed > 0) {
 				if(elapsed < GameDurationMs(3000)) { // 5 seconds to red
 					float ratio = elapsed / GameDurationMs(3000);
-					io->special_color = Color3f(1.f, 1.f - ratio, 1.f - ratio);
-					io->highlightColor += Color3f(std::max(ratio - 0.5f, 0.f), 0.f, 0.f) * 255;
+					io.special_color = Color3f(1.f, 1.f - ratio, 1.f - ratio);
+					io.highlightColor += Color3f(std::max(ratio - 0.5f, 0.f), 0.f, 0.f) * 255;
 					AddRandomSmoke(io, 1);
 				} else if(elapsed < GameDurationMs(6000)) { // 5 seconds to White
 					float ratio = elapsed / GameDurationMs(3000);
-					io->special_color = Color3f::red;
-					io->highlightColor += Color3f(std::max(ratio - 0.5f, 0.f), 0.f, 0.f) * 255;
+					io.special_color = Color3f::red;
+					io.highlightColor += Color3f(std::max(ratio - 0.5f, 0.f), 0.f, 0.f) * 255;
 					AddRandomSmoke(io, 2);
 				} else { // SFX finish
-					io->sfx_time = 0;
+					io.sfx_time = 0;
 
-					if(io->ioflags & IO_NPC) {
+					if(io.ioflags & IO_NPC) {
 						MakePlayerAppearsFX(io);
 						AddRandomSmoke(io, 50);
-						Color3f rgb = io->_npcdata->blood_color.to<float>();
-						Sphere sp = Sphere(io->pos, 200.f);
+						Color3f rgb(io._npcdata->blood_color);
+						Sphere sp = Sphere(io.pos, 200.f);
 						
 						long count = 6;
 						while(count--) {
 							Sphere splatSphere = Sphere(sp.origin, Random::getf(30.f, 60.f));
 							PolyBoomAddSplat(splatSphere, rgb, 1);
 							sp.origin.y -= Random::getf(0.f, 150.f);
-							ARX_PARTICLES_Spawn_Splat(sp.origin, 200.f, io->_npcdata->blood_color);
-							sp.origin = io->pos + arx::randomVec3f() * Vec3f(200.f, 20.f, 200.f) - Vec3f(100.f, 10.f, 100.f);
+							ARX_PARTICLES_Spawn_Splat(sp.origin, 200.f, io._npcdata->blood_color);
+							sp.origin = io.pos + arx::randomVec3f() * Vec3f(200.f, 20.f, 200.f) - Vec3f(100.f, 10.f, 100.f);
 							sp.radius = Random::getf(100.f, 200.f);
 						}
 						
@@ -359,33 +337,33 @@ void Cedric_ApplyLightingFirstPartRefactor(Entity *io) {
 							light->fallend = 600.f;
 							light->fallstart = 400.f;
 							light->rgb = Color3f(1.0f, 0.8f, 0.f);
-							light->pos = io->pos + Vec3f(0.f, -80.f, 0.f);
+							light->pos = io.pos + Vec3f(0.f, -80.f, 0.f);
 							light->duration = GameDurationMs(600);
 						}
 
-						if(io->sfx_flag & SFX_TYPE_INCINERATE) {
-							io->sfx_flag &= ~SFX_TYPE_INCINERATE;
-							io->sfx_flag &= ~SFX_TYPE_YLSIDE_DEATH;
-							SpellBase * spell = spells.getSpellOnTarget(io->index(), SPELL_INCINERATE);
+						if(io.sfx_flag & SFX_TYPE_INCINERATE) {
+							io.sfx_flag &= ~SFX_TYPE_INCINERATE;
+							io.sfx_flag &= ~SFX_TYPE_YLSIDE_DEATH;
+							SpellBase * spell = spells.getSpellOnTarget(io.index(), SPELL_INCINERATE);
 
 							if(!spell)
-								spell = spells.getSpellOnTarget(io->index(), SPELL_MASS_INCINERATE);
+								spell = spells.getSpellOnTarget(io.index(), SPELL_MASS_INCINERATE);
 
 							if(spell) {
 								spells.endSpell(spell);
 								float damages = 20 * spell->m_level;
-								damages = ARX_SPELLS_ApplyFireProtection(io, damages);
+								damages = ARX_SPELLS_ApplyFireProtection(&io, damages);
 
 								if (ValidIONum(spell->m_caster))
-									ARX_DAMAGES_DamageNPC(io, damages, spell->m_caster, true, &entities[spell->m_caster]->pos);
+									ARX_DAMAGES_DamageNPC(&io, damages, spell->m_caster, true, &entities[spell->m_caster]->pos);
 								else
-									ARX_DAMAGES_DamageNPC(io, damages, spell->m_caster, true, &io->pos);
+									ARX_DAMAGES_DamageNPC(&io, damages, spell->m_caster, true, &io.pos);
 
-								ARX_SOUND_PlaySFX(SND_SPELL_FIRE_HIT, &io->pos);
+								ARX_SOUND_PlaySFX(g_snd.SPELL_FIRE_HIT, &io.pos);
 							}
 						} else {
-							io->sfx_flag &= ~SFX_TYPE_YLSIDE_DEATH;
-							ARX_INTERACTIVE_DestroyIOdelayed(io);
+							io.sfx_flag &= ~SFX_TYPE_YLSIDE_DEATH;
+							ARX_INTERACTIVE_DestroyIOdelayed(&io);
 						}
 					}
 				}
@@ -395,7 +373,8 @@ void Cedric_ApplyLightingFirstPartRefactor(Entity *io) {
 }
 
 static void Cedric_PrepareHalo(EERIE_3DOBJ * eobj, Skeleton * obj) {
-	Vec3f cam_vector = angleToVector(ACTIVECAM->angle);
+	
+	Vec3f cam_vector = angleToVector(g_camera->angle);
 	
 	// Apply light on all vertices
 	for(size_t i = 0; i != obj->bones.size(); i++) {
@@ -417,35 +396,36 @@ static void Cedric_PrepareHalo(EERIE_3DOBJ * eobj, Skeleton * obj) {
 	}
 }
 
-static TexturedVertex * GetNewVertexList(ModelBatch * container,
+static TexturedVertex * GetNewVertexList(std::vector<TexturedVertex> * batch,
                                          const EERIE_FACE & face, float invisibility,
                                          float & fTransp) {
 	
 	fTransp = 0.f;
-
+	
 	if((face.facetype & POLY_TRANS) || invisibility > 0.f) {
-		if(invisibility > 0.f)
+		if(invisibility > 0.f) {
 			fTransp = 2.f - invisibility;
-		else
+		} else {
 			fTransp = face.transval;
-
-		if(fTransp >= 2.f) { //MULTIPLICATIVE
+		}
+		if(fTransp >= 2.f) {
 			fTransp *= (1.f / 2);
 			fTransp += 0.5f;
-			return PushVertexInTable(container, BatchBucket_Multiplicative);
-		} else if(fTransp >= 1.f) { //ADDITIVE
+			return PushVertexInTable(batch[BatchBucket_Multiplicative]);
+		} else if(fTransp >= 1.f) {
 			fTransp -= 1.f;
-			return PushVertexInTable(container, BatchBucket_Additive);
-		} else if(fTransp > 0.f) { //NORMAL TRANS
+			return PushVertexInTable(batch[BatchBucket_Additive]);
+		} else if(fTransp > 0.f) {
 			fTransp = 1.f - fTransp;
-			return PushVertexInTable(container, BatchBucket_Blended);
-		} else { //SUBTRACTIVE
+			return PushVertexInTable(batch[BatchBucket_Blended]);
+		} else {
 			fTransp = 1.f - fTransp;
-			return PushVertexInTable(container, BatchBucket_Subtractive);
+			return PushVertexInTable(batch[BatchBucket_Subtractive]);
 		}
 	} else {
-		return PushVertexInTable(container, BatchBucket_Opaque);
+		return PushVertexInTable(batch[BatchBucket_Opaque]);
 	}
+	
 }
 
 void drawQuadRTP(const RenderMaterial & mat, TexturedQuad quat) {
@@ -479,25 +459,26 @@ static bool Cedric_IO_Visible(const Vec3f & pos) {
 	ARX_PROFILE_FUNC();
 	
 	if(ACTIVEBKG) {
-		//TODO maybe readd this
-		//if(fartherThan(io->pos, ACTIVECAM->orgTrans.pos, ACTIVECAM->cdepth * 0.6f))
-		//	return false;
-
+		
+		// TODO maybe readd this
+		// if(fartherThan(io->pos, g_camera->pos, g_camera->cdepth * 0.6f))
+		//  return false;
+		
 		long xx = long(pos.x * ACTIVEBKG->m_mul.x);
 		long yy = long(pos.z * ACTIVEBKG->m_mul.y);
-
-		if(xx >= 1 && yy >= 1 && xx < ACTIVEBKG->m_size.x-1 && yy < ACTIVEBKG->m_size.y-1) {
-			for(short z = yy - 1; z <= yy + 1; z++)
-			for(short x = xx - 1; x <= xx + 1; x++) {
-				const BackgroundTileData & feg = ACTIVEBKG->m_tileData[x][z];
-				if(feg.treat)
+		
+		if(xx >= 1 && yy >= 1 && xx < ACTIVEBKG->m_size.x - 1 && yy < ACTIVEBKG->m_size.y - 1) {
+			for(long z = yy - 1; z <= yy + 1; z++)
+			for(long x = xx - 1; x <= xx + 1; x++) {
+				if(ACTIVEBKG->isTileActive(Vec2s(x, z))) {
 					return true;
+				}
 			}
-
 			return false;
 		}
+		
 	}
-
+	
 	return true;
 }
 
@@ -525,7 +506,7 @@ static void Cedric_ApplyLighting(ShaderLight lights[], size_t lightsCount, EERIE
 	}
 }
 
-static EERIE_3D_BBOX UpdateBbox3d(EERIE_3DOBJ *eobj) {
+static EERIE_3D_BBOX UpdateBbox3d(EERIE_3DOBJ * eobj) {
 	
 	EERIE_3D_BBOX box3D;
 	box3D.reset();
@@ -558,7 +539,7 @@ EERIE_2D_BBOX UpdateBbox2d(const EERIE_3DOBJ & eobj) {
 	return box2D;
 }
 
-void DrawEERIEInter_ModelTransform(EERIE_3DOBJ *eobj, const TransformInfo &t) {
+void DrawEERIEInter_ModelTransform(EERIE_3DOBJ * eobj, const TransformInfo & t) {
 	
 	arx_assert(eobj->vertexWorldPositions.size() == eobj->vertexlist.size());
 	
@@ -575,7 +556,7 @@ void DrawEERIEInter_ModelTransform(EERIE_3DOBJ *eobj, const TransformInfo &t) {
 	}
 }
 
-void DrawEERIEInter_ViewProjectTransform(EERIE_3DOBJ *eobj) {
+void DrawEERIEInter_ViewProjectTransform(EERIE_3DOBJ * eobj) {
 	arx_assert(eobj->vertexClipPositions.size() == eobj->vertexWorldPositions.size());
 	for(size_t i = 0 ; i < eobj->vertexWorldPositions.size(); i++) {
 		eobj->vertexClipPositions[i] = worldToClipSpace(eobj->vertexWorldPositions[i].v);
@@ -591,11 +572,10 @@ static bool CullFace(const EERIE_3DOBJ * eobj, const EERIE_FACE & face) {
 		normFace.x = (normV10.y * normV20.z) - (normV10.z * normV20.y);
 		normFace.y = (normV10.z * normV20.x) - (normV10.x * normV20.z);
 		normFace.z = (normV10.x * normV20.y) - (normV10.y * normV20.x);
-
-		Vec3f nrm = eobj->vertexWorldPositions[face.vid[0]].v - ACTIVECAM->orgTrans.pos;
-
-		if(glm::dot(normFace, nrm) > 0.f)
+		Vec3f nrm = eobj->vertexWorldPositions[face.vid[0]].v - g_camera->m_pos;
+		if(glm::dot(normFace, nrm) > 0.f) {
 			return true;
+		}
 	}
 
 	return false;
@@ -606,33 +586,23 @@ static void AddFixedObjectHalo(const EERIE_FACE & face, const TransformInfo & t,
                                const IO_HALO & halo, TexturedVertex * tvList,
                                const EERIE_3DOBJ * eobj) {
 	
-	float mdist=ACTIVECAM->cdepth;
-	float ddist = mdist-fdist(t.pos, ACTIVECAM->orgTrans.pos);
-	ddist = ddist/mdist;
+	float mdist = g_camera->cdepth;
+	float ddist = mdist - fdist(t.pos, g_camera->m_pos);
+	ddist = ddist / mdist;
 	ddist = glm::pow(ddist, 6.f);
-
 	ddist = glm::clamp(ddist, 0.25f, 0.9f);
-
-	float tot=0;
+	
+	float tot = 0;
 	float _ffr[3];
-
+	
 	for(long o = 0; o < 3; o++) {
-		Vec3f temporary3D;
-		temporary3D = t.rotation * eobj->vertexlist[face.vid[o]].norm;
-
-		float power = 255.f- glm::abs(255.f*(temporary3D.z)*( 1.0f / 2 ));
-
-		power = glm::clamp(power, 0.f, 255.f);
-
-		tot += power;
-		_ffr[o] = power;
-
-		u8 lfr = u8(halo.color.r * power);
-		u8 lfg = u8(halo.color.g * power);
-		u8 lfb = u8(halo.color.b * power);
-		tvList[o].color = Color(lfr, lfg, lfb, 255).toRGBA();
+		Vec3f temporary3D = t.rotation * eobj->vertexlist[face.vid[o]].norm;
+		float power = glm::clamp(1.f - glm::abs(temporary3D.z * 0.5f), 0.f, 1.f);
+		tot += power * 255.f;
+		_ffr[o] = power * 255.f;
+		tvList[o].color = (halo.color * power).toRGB();
 	}
-
+	
 	if(tot > 150.f) {
 		long first;
 		long second;
@@ -697,8 +667,8 @@ static void AddFixedObjectHalo(const EERIE_FACE & face, const TransformInfo & t,
 			vert[0].p.z += 0.0001f * vert[0].w;
 			vert[3].p.z += 0.0001f * vert[3].w;
 			
-			vert[1].color = Color(0, 0, 0, 255).toRGBA();
-			vert[2].color = Color(0, 0, 0, (halo.flags & HALO_NEGATIVE) ? 0 : 255).toRGBA();
+			vert[1].color = Color::black.toRGB();
+			vert[2].color = ((halo.flags & HALO_NEGATIVE) ? Color::none : Color::black).toRGBA();
 			
 			Halo_AddVertices(vert);
 		}
@@ -707,7 +677,7 @@ static void AddFixedObjectHalo(const EERIE_FACE & face, const TransformInfo & t,
 
 extern float WATEREFFECT;
 
-void DrawEERIEInter_Render(EERIE_3DOBJ *eobj, const TransformInfo &t, Entity *io, float invisibility) {
+void DrawEERIEInter_Render(EERIE_3DOBJ * eobj, const TransformInfo & t, Entity * io, float invisibility) {
 
 	ColorMod colorMod;
 	colorMod.updateFromEntity(io, !io);
@@ -735,14 +705,15 @@ void DrawEERIEInter_Render(EERIE_3DOBJ *eobj, const TransformInfo &t, Entity *io
 
 		if(face.texid < 0)
 			continue;
-
-		TextureContainer *pTex = eobj->texturecontainer[face.texid];
-		if(!pTex)
+		
+		TextureContainer * pTex = eobj->texturecontainer[face.texid];
+		if(!pTex) {
 			continue;
-
+		}
+		
 		float fTransp = 0.f;
-		TexturedVertex *tvList = GetNewVertexList(&pTex->m_modelBatch, face, invisibility, fTransp);
-
+		TexturedVertex * tvList = GetNewVertexList(pTex->m_modelBatch, face, invisibility, fTransp);
+		
 		for(size_t n = 0; n < 3; n++) {
 
 			if(useFaceNormal) {
@@ -769,7 +740,7 @@ void DrawEERIEInter_Render(EERIE_3DOBJ *eobj, const TransformInfo &t, Entity *io
 
 			if(face.facetype & POLY_GLOW) {
 				// unaffected by light
-				tvList[n].color = Color(255, 255, 255, 255).toRGBA();
+				tvList[n].color = Color::white.toRGB();
 			} else {
 				// Normal Illuminations
 				tvList[n].color = eobj->vertexColors[face.vid[n]];
@@ -777,29 +748,25 @@ void DrawEERIEInter_Render(EERIE_3DOBJ *eobj, const TransformInfo &t, Entity *io
 
 			// TODO copy-paste
 			if(io && player.m_improve) {
-				long lr = Color::fromRGBA(tvList[n].color).r;
-				float ffr=(float)(lr);
-
+				
+				float lr = Color4f::fromRGBA(tvList[n].color).r;
+				
 				float dd = 1.f / tvList[n].w;
 
 				dd = glm::clamp(dd, 0.f, 1.f);
 
 				Vec3f & norm = eobj->vertexlist[face.vid[n]].norm;
-
-				float fb=((1.f-dd)*6.f + (glm::abs(norm.x) + glm::abs(norm.y))) * 0.125f;
-				float fr=((.6f-dd)*6.f + (glm::abs(norm.z) + glm::abs(norm.y))) * 0.125f;
-
-				if(fr < 0.f)
-					fr = 0.f;
-				else
-					fr = std::max(ffr, fr * 255.f);
 				
-				fr = std::min(fr, 255.f);
-				fb = std::min(fb * 255.f, 255.f);
-				u8 lfr = u8(fr);
-				u8 lfb = u8(fb);
-				u8 lfg = 0x1E;
-				tvList[n].color = Color(lfr, lfg, lfb, 255).toRGBA();
+				float fb = ((1.f - dd) * 6.f + (glm::abs(norm.x) + glm::abs(norm.y))) * 0.125f;
+				float fr = ((0.6f - dd) * 6.f + (glm::abs(norm.z) + glm::abs(norm.y))) * 0.125f;
+				
+				if(fr < 0.f) {
+					fr = 0.f;
+				} else {
+					fr = std::max(lr, fr);
+				}
+				
+				tvList[n].color = Color::rgb(fr, 0.118f, fb).toRGB();
 			}
 
 			// Transparent poly: storing info to draw later
@@ -852,21 +819,16 @@ struct HaloRenderInfo {
 	
 	HaloRenderInfo()
 		: halo(NULL)
-		, selection()
 	{ }
 	
-	HaloRenderInfo(IO_HALO * halo, ObjSelection selection)
-		: halo(halo)
-		, selection(selection)
+	explicit  HaloRenderInfo(IO_HALO * halo_, ObjSelection selection_ = ObjSelection())
+		: halo(halo_)
+		, selection(selection_)
 	{}
-
-	explicit HaloRenderInfo(IO_HALO * halo)
-		: halo(halo)
-		, selection()
-	{}
-
+	
 	IO_HALO * halo;
 	ObjSelection selection;
+	
 };
 
 struct HaloInfo {
@@ -907,27 +869,28 @@ extern long IN_BOOK_DRAW;
 static void PrepareAnimatedObjectHalo(HaloInfo & haloInfo, const Vec3f & pos,
                                       Skeleton * obj, EERIE_3DOBJ * eobj) {
 	
-		Vec3f ftrPos = pos;
-		//TODO copy-pase
-		float mdist = ACTIVECAM->cdepth;
-		mdist *= ( 1.0f / 2 );
-
-		float ddist = mdist-fdist(ftrPos, ACTIVECAM->orgTrans.pos);
-		ddist = ddist/mdist;
-		ddist = glm::pow(ddist, 6.f);
-		ddist = glm::clamp(ddist, 0.25f, 0.9f);
-
-		haloInfo.ddist = ddist;
-
-		Cedric_PrepareHalo(eobj, obj);
-
-		haloInfo.MAX_ZEDE = 0.f;
-		for(size_t i = 0; i < eobj->vertexlist.size(); i++) {
-			if(eobj->vertexClipPositions[i].w > 0.f) {
-				haloInfo.MAX_ZEDE = std::max(eobj->vertexClipPositions[i].z / eobj->vertexClipPositions[i].w,
-				                             haloInfo.MAX_ZEDE);
-			}
+	Vec3f ftrPos = pos;
+	// TODO copy-pase
+	float mdist = g_camera->cdepth;
+	mdist *= 0.5f;
+	
+	float ddist = mdist - fdist(ftrPos, g_camera->m_pos);
+	ddist = ddist / mdist;
+	ddist = glm::pow(ddist, 6.f);
+	ddist = glm::clamp(ddist, 0.25f, 0.9f);
+	
+	haloInfo.ddist = ddist;
+	
+	Cedric_PrepareHalo(eobj, obj);
+	
+	haloInfo.MAX_ZEDE = 0.f;
+	for(size_t i = 0; i < eobj->vertexlist.size(); i++) {
+		if(eobj->vertexClipPositions[i].w > 0.f) {
+			haloInfo.MAX_ZEDE = std::max(eobj->vertexClipPositions[i].z / eobj->vertexClipPositions[i].w,
+			                             haloInfo.MAX_ZEDE);
 		}
+	}
+	
 }
 
 // TODO copy-paste halo
@@ -951,23 +914,15 @@ static void AddAnimatedObjectHalo(HaloInfo & haloInfo, const unsigned short * pa
 	float tot = 0;
 	float _ffr[3];
 	ColorRGBA colors[3];
-
+	
 	for(size_t o = 0; o < 3; o++) {
-		float tttz	= glm::abs(eobj->vertexWorldPositions[paf[o]].norm.z) * ( 1.0f / 2 );
-		float power = 255.f - (255.f * tttz);
-		power *= (1.f - invisibility);
-
-		power = glm::clamp(power, 0.f, 255.f);
-
-		tot += power;
-		_ffr[o] = power;
-
-		u8 lfr = u8(curhalo->color.r * power);
-		u8 lfg = u8(curhalo->color.g * power);
-		u8 lfb = u8(curhalo->color.b * power);
-		colors[o] = Color(lfr, lfg, lfb, 255).toRGBA();
+		float tttz = glm::abs(eobj->vertexWorldPositions[paf[o]].norm.z) * 0.5f;
+		float power =  glm::clamp((1.f - tttz) * (1.f - invisibility), 0.f, 1.f);
+		tot += power * 255.f;
+		_ffr[o] = power * 255.f;
+		colors[o] = (curhalo->color * power).toRGB();
 	}
-
+	
 	if(tot > 260) {
 		long first;
 		long second;
@@ -1045,8 +1000,8 @@ static void AddAnimatedObjectHalo(HaloInfo & haloInfo, const unsigned short * pa
 			vert[3].p.z += 0.0001f * vert[3].w;
 			
 			vert[0].color = colors[first];
-			vert[1].color = Color(0, 0, 0, 255).toRGBA();
-			vert[2].color = Color(0, 0, 0, (curhalo->flags & HALO_NEGATIVE) ? 0 : 255).toRGBA();
+			vert[1].color = Color::black.toRGB();
+			vert[2].color = ((curhalo->flags & HALO_NEGATIVE) ? Color::none : Color::black).toRGBA();
 			vert[3].color = colors[second];
 			
 			Halo_AddVertices(vert);
@@ -1054,18 +1009,20 @@ static void AddAnimatedObjectHalo(HaloInfo & haloInfo, const unsigned short * pa
 	}
 }
 
-static void Cedric_RenderObject(EERIE_3DOBJ * eobj, Skeleton * obj, Entity * io, const Vec3f & pos, float invisibility) {
+static void Cedric_RenderObject(EERIE_3DOBJ * eobj, Skeleton * obj, Entity * io,
+                                const Vec3f & pos, float invisibility) {
 	
 	ARX_PROFILE_FUNC();
 	
-	if(invisibility == 1.f)
+	if(invisibility == 1.f) {
 		return;
-
-	Entity *use_io = io;
-
-	if(!io && IN_BOOK_DRAW && eobj == entities.player()->obj)
+	}
+	
+	Entity * use_io = io;
+	if(!io && IN_BOOK_DRAW && eobj == entities.player()->obj) {
 		use_io = entities.player();
-
+	}
+	
 	HaloInfo haloInfo;
 	if(use_io) {
 		if(use_io == entities.player()) {
@@ -1105,15 +1062,16 @@ static void Cedric_RenderObject(EERIE_3DOBJ * eobj, Skeleton * obj, Entity * io,
 
 		if(face.texid < 0)
 			continue;
-
-		TextureContainer *pTex = eobj->texturecontainer[face.texid];
-		if(!pTex)
+		
+		TextureContainer * pTex = eobj->texturecontainer[face.texid];
+		if(!pTex) {
 			continue;
-
+		}
+		
 		float fTransp = 0.f;
-
-		TexturedVertex *tvList = GetNewVertexList(&pTex->m_modelBatch, face, invisibility, fTransp);
-
+		
+		TexturedVertex * tvList = GetNewVertexList(pTex->m_modelBatch, face, invisibility, fTransp);
+		
 		for(size_t n = 0; n < 3; n++) {
 			tvList[n].p = Vec3f(eobj->vertexClipPositions[face.vid[n]]);
 			tvList[n].w = eobj->vertexClipPositions[face.vid[n]].w;
@@ -1130,20 +1088,21 @@ static void Cedric_RenderObject(EERIE_3DOBJ * eobj, Skeleton * obj, Entity * io,
 		}
 		
 		if(glow) {
-			TexturedVertex * tv2 = PushVertexInTable(&TexSpecialColor.m_modelBatch, BatchBucket_Opaque);
+			TexturedVertex * tv2 = PushVertexInTable(TexSpecialColor.m_modelBatch[BatchBucket_Opaque]);
 			std::copy(tvList, tvList + 3, tv2);
 			tv2[0].color = tv2[1].color = tv2[2].color = glowColor;
 		}
+		
 	}
 }
 
 static void Cedric_AnimateDrawEntityRender(EERIE_3DOBJ * eobj, const Vec3f & pos,
                                            Entity * io, float invisibility) {
 	
-	Skeleton *obj = eobj->m_skeleton;
-	
-	if(!obj)
+	Skeleton * obj = eobj->m_skeleton;
+	if(!obj) {
 		return;
+	}
 	
 	ColorMod colorMod;
 	colorMod.updateFromEntity(io);
@@ -1193,28 +1152,28 @@ static void Cedric_AnimateDrawEntityRender(EERIE_3DOBJ * eobj, const Vec3f & pos
 static Vec3f CalcTranslation(AnimLayer & layer) {
 	
 	if(!layer.cur_anim) {
-		return Vec3f_ZERO;
+		return Vec3f(0.f);
 	}
 	
-	EERIE_ANIM	*eanim = layer.cur_anim->anims[layer.altidx_cur];
-	
+	EERIE_ANIM * eanim = layer.currentAltAnim();
 	if(!eanim) {
-		return Vec3f_ZERO;
+		return Vec3f(0.f);
 	}
 	
-	//Avoiding impossible cases
+	// Avoiding impossible cases
 	if(layer.currentFrame < 0) {
 		layer.currentFrame = 0;
 		layer.currentInterpolation = 0.f;
-	} else if(layer.currentFrame >= eanim->nb_key_frames - 1) {
-		layer.currentFrame = eanim->nb_key_frames - 2;
+	} else if(layer.currentFrame >= long(eanim->frames.size()) - 1) {
+		layer.currentFrame = long(eanim->frames.size()) - 2;
 		layer.currentInterpolation = 1.f;
 	}
 	layer.currentInterpolation = glm::clamp(layer.currentInterpolation, 0.f, 1.f);
 	
 	// FIXME animation indices prevent invalid memory access, should be fixed properly
-	if(layer.currentFrame < 0 || layer.currentFrame + 1 >= eanim->nb_key_frames)
-		return Vec3f_ZERO;
+	if(layer.currentFrame < 0 || layer.currentFrame + 1 >= long(eanim->frames.size())) {
+		return Vec3f(0.f);
+	}
 	
 	// FRAME TRANSLATE : Gives the Virtual pos of Main Object
 	if(eanim->frames[layer.currentFrame].f_translate && !(layer.flags & EA_STATICANIM)) {
@@ -1225,7 +1184,7 @@ static Vec3f CalcTranslation(AnimLayer & layer) {
 		return sFrame.translate + (eFrame.translate - sFrame.translate) * layer.currentInterpolation;
 	}
 	
-	return Vec3f_ZERO;
+	return Vec3f(0.f);
 }
 
 static void StoreEntityMovement(Entity * io, Vec3f & ftr, float scale) {
@@ -1253,9 +1212,9 @@ static void StoreEntityMovement(Entity * io, Vec3f & ftr, float scale) {
 
 		// Use calculated value to notify the Movement engine of the translation to do
 		if(io->ioflags & IO_NPC) {
-			ftr = Vec3f_ZERO;
+			ftr = Vec3f(0.f);
 			io->move -= io->lastmove;
-		} else if (io->gameFlags & GFLAG_ELEVATOR) {
+		} else if(io->gameFlags & GFLAG_ELEVATOR) {
 			// Must recover translations for NON-NPC IO
 			PushIO_ON_Top(io, io->move.y - io->lastmove.y);
 		}
@@ -1267,62 +1226,65 @@ static void StoreEntityMovement(Entity * io, Vec3f & ftr, float scale) {
 /*!
  * Animate skeleton
  */
-static void Cedric_AnimateObject(Skeleton * obj, AnimLayer * animlayer)
-{
+static void Cedric_AnimateObject(Skeleton * obj, AnimLayer * animlayer) {
+	
 	std::vector<unsigned char> grps(obj->bones.size());
 
 	for(long count = MAX_ANIM_LAYERS - 1; count >= 0; count--) {
-
+		
 		AnimLayer & layer = animlayer[count];
-
-		if(!layer.cur_anim)
+		if(!layer.cur_anim) {
 			continue;
-
-		EERIE_ANIM *eanim = layer.cur_anim->anims[layer.altidx_cur];
-		if(!eanim)
+		}
+		
+		EERIE_ANIM * eanim = layer.currentAltAnim();
+		if(!eanim) {
 			continue;
-
+		}
+		
 		if(layer.currentFrame < 0) {
 			layer.currentFrame = 0;
 			layer.currentInterpolation = 0.f;
-		} else if(layer.currentFrame >= eanim->nb_key_frames - 1) {
-			layer.currentFrame = eanim->nb_key_frames - 2;
+		} else if(layer.currentFrame >= long(eanim->frames.size()) - 1) {
+			layer.currentFrame = long(eanim->frames.size()) - 2;
 			layer.currentInterpolation = 1.f;
 		}
 		layer.currentInterpolation = glm::clamp(layer.currentInterpolation, 0.f, 1.f);
 		
 		// FIXME animation indices are sometimes negative
-		//arx_assert(animuse->fr >= 0 && animuse->fr < eanim->nb_key_frames);
-		layer.currentFrame = glm::clamp(layer.currentFrame, 0l, eanim->nb_key_frames - 1l);
+		layer.currentFrame = glm::clamp(layer.currentFrame, 0l, long(eanim->frames.size()) - 1l);
 		
 		// Now go for groups rotation/translation/scaling, And transform Linked objects by the way
-		int l = std::min(long(obj->bones.size() - 1), eanim->nb_groups - 1);
-
-		for(int j = l; j >= 0; j--) {
-			if(grps[j])
+		size_t l = std::min(obj->bones.size(), eanim->nb_groups());
+		
+		for(size_t j = 0; j < l; j++) {
+			
+			if(grps[j]) {
 				continue;
-
-			const EERIE_GROUP & sGroup = eanim->groups[j+(layer.currentFrame*eanim->nb_groups)];
-			const EERIE_GROUP & eGroup = eanim->groups[j+(layer.currentFrame*eanim->nb_groups)+eanim->nb_groups];
-
-			if(!eanim->voidgroups[j])
+			}
+			
+			const EERIE_GROUP & sGroup = eanim->groups[j + size_t(layer.currentFrame) * eanim->nb_groups()];
+			const EERIE_GROUP & eGroup = eanim->groups[j + size_t(layer.currentFrame + 1) * eanim->nb_groups()];
+			
+			if(!eanim->voidgroups[j]) {
 				grps[j] = 1;
-
-			if(eanim->nb_key_frames != 1) {
-				Bone & bone = obj->bones[j];
-
+			}
+			
+			if(eanim->frames.size() != 1) {
 				BoneTransform temp;
-
 				temp.quat = Quat_Slerp(sGroup.quat, eGroup.quat, layer.currentInterpolation);
-				temp.trans = sGroup.translate + (eGroup.translate - sGroup.translate) * layer.currentInterpolation;
-				temp.scale = sGroup.zoom + (eGroup.zoom - sGroup.zoom) * layer.currentInterpolation;
-
+				temp.trans = glm::mix(sGroup.translate, eGroup.translate, layer.currentInterpolation);
+				temp.scale = glm::mix(sGroup.zoom, eGroup.zoom, layer.currentInterpolation);
+				Bone & bone = obj->bones[j];
 				bone.init.quat = bone.init.quat * temp.quat;
 				bone.init.trans = temp.trans + bone.transinit_global;
 				bone.init.scale = temp.scale;
 			}
+			
 		}
+		
 	}
+	
 }
 
 static void Cedric_BlendAnimation(Skeleton & rig, AnimationBlendStatus * animBlend) {
@@ -1330,19 +1292,18 @@ static void Cedric_BlendAnimation(Skeleton & rig, AnimationBlendStatus * animBle
 	if(!animBlend->m_active) {
 		return;
 	}
-
+	
 	float timm = toMsf(g_gameTime.now() - animBlend->lastanimtime) + 0.0001f;
-
 	if(timm >= 300.f) {
 		animBlend->m_active = false;
 		return;
-	} else {
-		timm *= ( 1.0f / 300 );
-
-		if(timm < 0.f || timm >= 1.f)
-			return;
 	}
-
+	
+	timm *= 1.0f / 300;
+	if(timm < 0.f || timm >= 1.f) {
+		return;
+	}
+	
 	for(size_t i = 0; i < rig.bones.size(); i++) {
 		Bone & bone = rig.bones[i];
 
@@ -1373,7 +1334,7 @@ static void Cedric_ConcatenateTM(Skeleton & rig, const TransformInfo & t) {
 			bone.anim.trans = parent.anim.trans + bone.anim.trans;
 
 			// Scale
-			bone.anim.scale = (bone.init.scale + Vec3f_ONE) * parent.anim.scale;
+			bone.anim.scale = (bone.init.scale + Vec3f(1.f)) * parent.anim.scale;
 		} else { // Root Bone
 			// Rotation
 			bone.anim.quat = t.rotation * bone.init.quat;
@@ -1385,7 +1346,7 @@ static void Cedric_ConcatenateTM(Skeleton & rig, const TransformInfo & t) {
 			bone.anim.trans += t.pos;
 
 			// Compute Global Object Scale AND Global Animation Scale
-			bone.anim.scale = (bone.init.scale + Vec3f_ONE) * t.scale;
+			bone.anim.scale = (bone.init.scale + Vec3f(1.f)) * t.scale;
 		}
 	}
 }
@@ -1501,7 +1462,7 @@ void EERIEDrawAnimQuatUpdate(EERIE_3DOBJ * eobj,
 
 	if(BH_MODE && eobj->fastaccess.head_group != ObjVertGroup()) {
 		extraScale.groupIndex = eobj->fastaccess.head_group;
-		extraScale.scale = Vec3f_ONE;
+		extraScale.scale = Vec3f(1.f);
 	}
 
 	arx_assert(eobj->m_skeleton);
@@ -1511,7 +1472,7 @@ void EERIEDrawAnimQuatUpdate(EERIE_3DOBJ * eobj,
 	for(size_t i = 0; i != skeleton.bones.size(); i++) {
 		Bone & bone = skeleton.bones[i];
 
-		bone.init.quat = glm::quat();
+		bone.init.quat = quat_identity();
 		bone.init.trans = bone.transinit_global;
 	}
 	
@@ -1562,21 +1523,19 @@ void EERIEDrawAnimQuatUpdate(EERIE_3DOBJ * eobj,
 	}
 }
 
-void EERIEDrawAnimQuatRender(EERIE_3DOBJ *eobj, const Vec3f & pos, Entity *io, float invisibility) {
-
+void EERIEDrawAnimQuatRender(EERIE_3DOBJ * eobj, const Vec3f & pos, Entity * io, float invisibility) {
+	
 	ARX_PROFILE_FUNC();
 	
 	if(io && io != entities.player() && !Cedric_IO_Visible(io->pos))
 		return;
-
-	bool isFightingNpc = io &&
-						 (io->ioflags & IO_NPC) &&
-						 (io->_npcdata->behavior & BEHAVIOUR_FIGHT) &&
-						 closerThan(io->pos, player.pos, 240.f);
-
-	if(!isFightingNpc && ARX_SCENE_PORTAL_ClipIO(io, pos))
+	
+	bool isFightingNpc = io && (io->ioflags & IO_NPC) && (io->_npcdata->behavior & BEHAVIOUR_FIGHT)
+	                     && closerThan(io->pos, player.pos, 240.f);
+	if(!isFightingNpc && ARX_SCENE_PORTAL_ClipIO(io, pos)) {
 		return;
-
+	}
+	
 	Cedric_AnimateDrawEntityRender(eobj, pos, io, invisibility);
 }
 

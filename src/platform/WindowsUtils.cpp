@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-2016 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2015-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -49,7 +49,7 @@ void WideString::allocateDynamic(size_t size) {
 	} else {
 		WCHAR backup[ARRAY_SIZE(m_static)];
 		std::copy(m_static, m_static + m_size, backup);
-		new (reinterpret_cast<char *>(&m_dynamic)) DynamicType(size, L'\0');
+		new(reinterpret_cast<char *>(&m_dynamic)) DynamicType(size, L'\0');
 		std::copy(backup, backup + m_size, str().begin());
 		m_size = size_t(-1);
 	}
@@ -111,8 +111,7 @@ std::string getErrorString(WORD error, HMODULE module) {
 	}
 	
 	LPWSTR buffer = NULL;
-	DWORD n = FormatMessageW(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM,
-	                         module, error, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
+	DWORD n = FormatMessageW(flags, module, error, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
 	                         reinterpret_cast<LPWSTR>(&buffer), 0, NULL);
 	if(n != 0) {
 		std::string message = WideString::toUTF8(buffer, n);

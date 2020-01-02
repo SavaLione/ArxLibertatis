@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2014 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -26,28 +26,26 @@
 GLTextureStage::GLTextureStage(OpenGLRenderer * _renderer, unsigned stage) : TextureStage(stage), renderer(_renderer), tex(NULL), current(NULL) {
 	
 	// Set default state
-	wrapMode = WrapRepeat;
-	minFilter = FilterLinear;
-	magFilter = FilterLinear;
 	
 	if(mStage == 0) {
-		ops[Color] = OpModulate;
-		ops[Alpha] = OpSelectArg1;
+		ops[ColorOp] = OpModulate;
+		ops[AlphaOp] = OpSelectArg1;
 		glActiveTexture(GL_TEXTURE0);
 		setTexEnv(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_COMBINE);
 		setTexEnv(GL_TEXTURE_ENV, GL_COMBINE_ALPHA, GL_REPLACE); // TODO change the AL default to match OpenGL
 		glEnable(GL_TEXTURE_2D);
 	} else {
-		ops[Color] = OpDisable;
-		ops[Alpha] = OpDisable;
+		ops[ColorOp] = OpDisable;
+		ops[AlphaOp] = OpDisable;
 	}
+	
 }
 
 GLTextureStage::~GLTextureStage() {
 	resetTexture();
 }
 
-Texture* GLTextureStage::getTexture() const {
+Texture * GLTextureStage::getTexture() const {
 	return tex;
 }
 
@@ -174,27 +172,11 @@ void GLTextureStage::setTexEnv(GLenum target, GLenum pname, GLint param) {
 }
 
 void GLTextureStage::setColorOp(TextureOp op) {
-	setOp(Color, op);
+	setOp(ColorOp, op);
 }
 
 void GLTextureStage::setAlphaOp(TextureOp op) {
-	setOp(Alpha, op);
-}
-
-TextureStage::WrapMode GLTextureStage::getWrapMode() const {
-	return wrapMode;
-}
-
-void GLTextureStage::setWrapMode(WrapMode _wrapMode) {
-	wrapMode = _wrapMode;
-}
-
-void GLTextureStage::setMinFilter(FilterMode filterMode) {
-	minFilter = filterMode;
-}
-
-void GLTextureStage::setMagFilter(FilterMode filterMode) {
-	magFilter = filterMode;
+	setOp(AlphaOp, op);
 }
 
 void GLTextureStage::setMipMapLODBias(float bias) {
@@ -231,23 +213,25 @@ void GLTextureStage::apply() {
 			GLTextureStage * stage = renderer->GetTextureStage(i);
 			if(stage->tex == tex && stage->isEnabled()) {
 				apply = false;
-#ifdef ARX_DEBUG
-				if(stage->wrapMode != wrapMode || stage->minFilter != minFilter || stage->magFilter != magFilter) {
+				#ifdef ARX_DEBUG
+				if(stage->getWrapMode() != getWrapMode()
+				   || stage->getMinFilter() != getMinFilter() || stage->getMagFilter() != getMagFilter()) {
 					static bool warned = false;
 					if(!warned) {
 						LogWarning << "Same texture used in multiple stages with different attributes.";
 						warned = true;
 					}
 				}
-#else
+				#else
 				break;
-#endif
+				#endif
 			}
 		}
 		
 		if(apply) {
 			tex->apply(this);
 		}
+		
 	}
 
 	if(mStage != 0) {

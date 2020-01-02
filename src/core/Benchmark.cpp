@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-2016 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2015-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -24,6 +24,7 @@
 
 #include <boost/lexical_cast.hpp>
 #include <boost/algorithm/string/trim.hpp>
+#include <boost/range/size.hpp>
 
 #include "core/Application.h"
 #include "core/TimeTypes.h"
@@ -114,7 +115,7 @@ static void display(Status type, const Result & result, bool summary = false, bo
 	float time = toMs(result.m_totalTime);
 	float tmin = toMs(result.m_minTime);
 	float tmax = toMs(result.m_maxTime);
-	float average = time / result.m_frameCount;
+	float average = time / float(result.m_frameCount);
 	float framerate = 1000.f / average;
 	float minrate = 1000.f / tmin;
 	float maxrate = 1000.f / tmax;
@@ -206,7 +207,7 @@ static void end() {
 		
 		display(g_currentStatus, g_current);
 		
-		arx_assert(size_t(g_currentStatus) < ARRAY_SIZE(g_results));
+		arx_assert(size_t(g_currentStatus) < size_t(boost::size(g_results)));
 		g_results[g_currentStatus] += g_current;
 		if(isNormalFrame(g_currentStatus)) {
 			g_results[0] += g_current;
@@ -232,7 +233,7 @@ void begin(Status status) {
 	}
 	
 	if(g_startCount < SkipFrames && isFrame(status)) {
-			// Skip the first frames - they may not be reperasentative
+		// Skip the first frames - they may not be reperasentative
 		g_startCount++;
 	} else if(g_startCount <= SkipFrames) {
 		g_startCount = SkipFrames + 1;
@@ -260,7 +261,7 @@ void shutdown() {
 	
 	size_t last = 0;
 	if(g_results[0].empty()) {
-		for(size_t i = ARRAY_SIZE(g_results) - 1; i > 0; i--) {
+		for(size_t i = boost::size(g_results) - 1; i > 0; i--) {
 			if(!g_results[i].empty()) {
 				last = i;
 				break;
@@ -273,7 +274,7 @@ void shutdown() {
 	
 	LogInfo << "Benchmark summary:";
 	
-	for(size_t i = 1; i < ARRAY_SIZE(g_results); i++) {
+	for(size_t i = 1; i < size_t(boost::size(g_results)); i++) {
 		display(Status(i), g_results[i], true, (i == last));
 	}
 	

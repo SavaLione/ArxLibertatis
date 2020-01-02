@@ -1,5 +1,5 @@
 /*
- * Copyright 2013-2017 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2013-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -75,12 +75,11 @@ void ManageFade() {
 		FADEDIR = 0;
 		return;
 	}
-
-	LAST_FADEVALUE=Visibility;
+	
+	LAST_FADEVALUE = Visibility;
 	
 	UseRenderState state(render2D());
 	
-	Color color = Color4f(FADECOLOR, Visibility).to<u8>();
-	EERIEDrawBitmap(Rectf(g_size), 0.0001f, NULL, color);
+	EERIEDrawBitmap(Rectf(g_size), 0.0001f, NULL, Color(Color4f(FADECOLOR, Visibility)));
 	
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-2016 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2015-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -43,6 +43,7 @@
 #endif
 
 #include <boost/crc.hpp>
+#include <boost/lexical_cast.hpp>
 #include <boost/algorithm/string/trim.hpp>
 #include <boost/range/size.hpp>
 
@@ -111,7 +112,7 @@ void CrashHandlerPOSIX::processCrashInfo() {
 	
 	pid_t child = fork();
 	if(!child) {
-		while(1) {
+		while(true) {
 			// wait
 		}
 	}
@@ -369,12 +370,13 @@ void CrashHandlerPOSIX::processCrashTrace() {
 		}
 		m_pCrashInfo->crashId = checksum.checksum();
 	}
+	#else
+	ARX_UNUSED(maps);
 	#endif
 	
 	// Get a stack trace via GDB
 	if(platform::isProcessRunning(m_pCrashInfo->processId)) {
-		char pid[32];
-		std::sprintf(pid, "%d", m_pCrashInfo->processId);
+		std::string pid = boost::lexical_cast<std::string>(m_pCrashInfo->processId);
 		const char * args[] = {
 			"gdb", "--batch", "-n",
 			"-ex", "thread",
@@ -383,7 +385,7 @@ void CrashHandlerPOSIX::processCrashTrace() {
 			"-ex", "set print static-members off",
 			"-ex", "info threads",
 			"-ex", "thread apply all bt full",
-			"--pid", pid, NULL
+			"--pid", pid.c_str(), NULL
 		};
 		std::string gdbstdout = platform::getOutputOf(args, /*unlocalized=*/ true);
 		if(!gdbstdout.empty()) {
@@ -468,16 +470,14 @@ void CrashHandlerPOSIX::processCrashDump() {
 	else
 	#endif
 	if(platform::isProcessRunning(m_pCrashInfo->processId)) {
-		char pid[32];
-		std::sprintf(pid, "%d", m_pCrashInfo->processId);
-		const char * command[] = { "gcore", "-o", "arx-crash-core-dump", pid, NULL };
+		std::string pid = boost::lexical_cast<std::string>(m_pCrashInfo->processId);
+		const char * command[] = { "gcore", "-o", "arx-crash-core-dump", pid.c_str(), NULL };
 		(void)platform::runHelper(command, true);
 		if(fs::exists("arx-crash-core-dump")) {
 			fs::rename("arx-crash-core-dump", coredump);
 			addAttachedFile(coredump);
 		} else {
-			char filename[1024];
-			std::sprintf(filename, "arx-crash-core-dump.%d", m_pCrashInfo->processId);
+			fs::path filename = "arx-crash-core-dump." + pid;
 			if(fs::exists(filename)) {
 				fs::rename(filename, coredump);
 				addAttachedFile(coredump);

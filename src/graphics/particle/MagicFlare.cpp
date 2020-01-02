@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2017 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -20,6 +20,7 @@
 #include "graphics/particle/MagicFlare.h"
 
 #include <cstdio>
+#include <sstream>
 
 #include "core/Application.h"
 #include "core/Core.h"
@@ -34,6 +35,7 @@
 #include "graphics/Math.h"
 #include "graphics/Vertex.h"
 #include "graphics/particle/ParticleEffects.h"
+#include "graphics/particle/ParticleTextures.h"
 #include "graphics/Draw.h"
 #include "graphics/Renderer.h"
 #include "graphics/data/TextureContainer.h"
@@ -75,10 +77,11 @@ void MagicFlareLoadTextures() {
 	g_magicFlareTextures.lumignon2 = TextureContainer::LoadUI("graph/particles/lumignon2", flags);
 	g_magicFlareTextures.plasm = TextureContainer::LoadUI("graph/particles/plasm", flags);
 	
-	char temp[256];
-	for(long i = 1; i < 10; i++) {
-		sprintf(temp, "graph/particles/shine%ld", i);
-		g_magicFlareTextures.shine[i] = TextureContainer::LoadUI(temp, flags);
+	std::ostringstream oss;
+	for(size_t i = 1; i < 10; i++) {
+		oss.str(std::string());
+		oss << "graph/particles/shine" << i;
+		g_magicFlareTextures.shine[i] = TextureContainer::LoadUI(oss.str(), flags);
 	}
 	
 }
@@ -169,12 +172,9 @@ void AddFlare(const Vec2f & pos, float sm, short typ, Entity * io, bool bookDraw
 	MagicFlare & flare = g_magicFlares[i];
 	flare.exist = 1;
 	g_magicFlaresCount++;
-
-	if(!bookDraw)
-		flare.bDrawBitmap = 0;
-	else
-		flare.bDrawBitmap = 1;
-
+	
+	flare.bDrawBitmap = bookDraw;
+	
 	flare.io = io;
 	if(io) {
 		flare.flags = 1;
@@ -188,20 +188,16 @@ void AddFlare(const Vec2f & pos, float sm, short typ, Entity * io, bool bookDraw
 
 	if(!bookDraw) {
 		if(io) {
-			float vx = -(flare.pos.x - subj.center.x) * 0.2173913f;
-			float vy = (flare.pos.y - subj.center.y) * 0.1515151515151515f;
+			float vx = -(flare.pos.x - g_size.center().x) * 0.2173913f;
+			float vy = (flare.pos.y - g_size.center().y) * 0.1515151515151515f;
 			flare.p = io->pos;
 			flare.p += angleToVectorXZ(io->angle.getYaw() + vx) * 100.f;
 			flare.p.y += std::sin(glm::radians(MAKEANGLE(io->angle.getPitch() + vy))) * 100.f - 150.f;
 		} else {
-			flare.p.x = 1.0f  * (pos.x - float(g_size.width()  / 2)) * 156.f / (640.f * g_sizeRatio.y);
-			flare.p.y = 0.75f * (pos.y - float(g_size.height() / 2)) * 156.f / (480.f * g_sizeRatio.y);
-			flare.p.z = 75.f;
-			float temp = (flare.p.y * -ACTIVECAM->orgTrans.xsin) + (flare.p.z * ACTIVECAM->orgTrans.xcos);
-			flare.p.y = (flare.p.y * ACTIVECAM->orgTrans.xcos) - (-flare.p.z * ACTIVECAM->orgTrans.xsin);
-			flare.p.z = (temp * ACTIVECAM->orgTrans.ycos) - (-flare.p.x * ACTIVECAM->orgTrans.ysin);
-			flare.p.x = (temp * -ACTIVECAM->orgTrans.ysin) + (flare.p.x * ACTIVECAM->orgTrans.ycos);
-			flare.p += ACTIVECAM->orgTrans.pos;
+			Vec3f screenPos(1.0f  * (pos.x - float(g_size.center().x)) * 156.f / (640.f * g_sizeRatio.y),
+			                0.75f * (pos.y - float(g_size.center().y)) * 156.f / (480.f * g_sizeRatio.y),
+			                75.f);
+			flare.p = Vec3f(glm::inverse(g_preparedCamera.m_worldToView) * Vec4f(screenPos, 1.0f));
 		}
 	} else {
 		flare.p = Vec3f(flare.pos.x, flare.pos.y, 0.001f);
@@ -209,17 +205,18 @@ void AddFlare(const Vec2f & pos, float sm, short typ, Entity * io, bool bookDraw
 
 	switch(g_magicFlareCurrentColor) {
 		case 0: {
-			flare.rgb = Color3f(.4f, 0.f, .4f) + Color3f(2.f/3, 2.f/3, 2.f/3) * randomColor3f();
+			flare.rgb = Color3f(0.4f, 0.f, 0.4f) + Color3f(2.f / 3, 2.f / 3, 2.f / 3) * randomColor3f();
 			break;
 		}
 		case 1: {
-			flare.rgb = Color3f(.5f, .5f, 0.f) + Color3f(.625f, .625f, .55f) * randomColor3f();
+			flare.rgb = Color3f(0.5f, 0.5f, 0.f) + Color3f(0.625f, 0.625f, 0.55f) * randomColor3f();
 			break;
 		}
 		case 2: {
-			flare.rgb = Color3f(.4f, 0.f, 0.f) + Color3f(2.f/3, .55f, .55f) * randomColor3f();
+			flare.rgb = Color3f(0.4f, 0.f, 0.f) + Color3f(2.f / 3, 0.55f, 0.55f) * randomColor3f();
 			break;
 		}
+		default: arx_unreachable();
 	}
 	
 	static const float FLARE_MUL = 2.f;
@@ -271,18 +268,19 @@ void AddFlare(const Vec2f & pos, float sm, short typ, Entity * io, bool bookDraw
 		pd->move = Vec3f(0.f, 5.f, 0.f);
 		pd->scale = Vec3f(-2.f);
 		pd->tolive = 1300 + kk * 100 + Random::getu(0, 800);
-		pd->tc = fire2;
+		pd->tc = g_particleTextures.fire2;
 		if(kk == 1) {
 			pd->move.y = 4.f;
 			pd->siz = 1.5f;
 		} else {
 			pd->siz = Random::getf(1.f, 2.f);
 		}
-		pd->rgb = Color3f(flare.rgb.r * (2.f/3), flare.rgb.g * (2.f/3), flare.rgb.b * (2.f/3));
+		pd->rgb = flare.rgb * (2.f / 3);
 		pd->m_rotation = 1.2f;
-
-		if(bookDraw)
+		if(bookDraw) {
 			pd->is2D = true;
+		}
+		
 	}
 }
 
@@ -381,20 +379,20 @@ void ARX_MAGICAL_FLARES_Update() {
 			if(!flare.exist || flare.type != j) {
 				continue;
 			}
-
+			
 			flare.tolive -= diff * 2;
 			if(flare.flags & 1) {
 				flare.tolive -= diff * 4;
-			} else if (key) {
+			} else if(key) {
 				flare.tolive -= diff * 6;
 			}
-
+			
 			float z = flare.tolive / PlatformDurationMs(4000);
 			float size;
 			if(flare.type == 1) {
 				size = flare.size * 2 * z;
 			} else if(flare.type == 4) {
-				size = flare.size * 2.f * z + 10.f;
+				size = flare.size * 2.f * z * (4.0f / 3.0f);
 			} else {
 				size = flare.size;
 			}
@@ -421,11 +419,10 @@ void ARX_MAGICAL_FLARES_Update() {
 			mat.setDepthTest(flare.io != NULL);
 			
 			if(flare.bDrawBitmap) {
-				size *= 2.f * minSizeRatio();
 				Vec3f pos = Vec3f(flare.p.x - size / 2.0f, flare.p.y - size / 2.0f, flare.p.z);
-				EERIEAddBitmap(mat, pos, size, size, surf, color.to<u8>());
+				EERIEAddBitmap(mat, pos, size, size, surf, Color(color));
 			} else {
-				EERIEAddSprite(mat, flare.p, size * 0.025f + 1.f, color.to<u8>(), 2.f);
+				EERIEAddSprite(mat, flare.p, size * 0.025f + 1.f, Color(color), 2.f);
 			}
 
 		}

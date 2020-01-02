@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2016 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -57,45 +57,45 @@ class Entity;
 struct RenderMaterial;
 struct TexturedQuad;
 
-float Cedric_GetInvisibility(Entity *io);
+float Cedric_GetInvisibility(Entity * io);
 
-void Cedric_ApplyLightingFirstPartRefactor(Entity *io);
+void Cedric_ApplyLightingFirstPartRefactor(Entity & io);
 
 void PopAllTriangleListOpaque(RenderState baseState = render3D(), bool clear = true);
 void PopAllTriangleListTransparency();
 
 void drawQuadRTP(const RenderMaterial & mat, TexturedQuad quat);
-void drawTriangle(const RenderMaterial & mat, const TexturedVertexUntransformed *vertices);
+void drawTriangle(const RenderMaterial & mat, const TexturedVertexUntransformed * vertices);
 
 struct TransformInfo {
-
+	
 	Vec3f pos;
 	glm::quat rotation;
 	float scale;
 	Vec3f offset;
-
+	
 	TransformInfo()
-		: pos(Vec3f_ZERO)
+		: pos(0.f)
+		, rotation(quat_identity())
 		, scale(1.f)
-		, offset(Vec3f_ZERO)
-	{
-		rotation = glm::quat();
-	}
-
-	TransformInfo(Vec3f pos, glm::quat rotation, float scale = 1.f, Vec3f offset = Vec3f_ZERO)
-		: pos(pos)
-		, rotation(rotation)
-		, scale(scale)
-		, offset(offset)
-	{}
+		, offset(0.f)
+	{ }
+	
+	TransformInfo(Vec3f pos_, glm::quat rotation_, float scale_ = 1.f, Vec3f offset_ = Vec3f(0.f))
+		: pos(pos_)
+		, rotation(rotation_)
+		, scale(scale_)
+		, offset(offset_)
+	{ }
+	
 };
 
 EERIE_2D_BBOX UpdateBbox2d(const EERIE_3DOBJ & eobj);
 
-void DrawEERIEInter_ModelTransform(EERIE_3DOBJ *eobj, const TransformInfo &t);
-void DrawEERIEInter_ViewProjectTransform(EERIE_3DOBJ *eobj);
+void DrawEERIEInter_ModelTransform(EERIE_3DOBJ * eobj, const TransformInfo & t);
+void DrawEERIEInter_ViewProjectTransform(EERIE_3DOBJ * eobj);
 
-void DrawEERIEInter_Render(EERIE_3DOBJ *eobj, const TransformInfo &t, Entity *io, float invisibility = 0.f);
+void DrawEERIEInter_Render(EERIE_3DOBJ * eobj, const TransformInfo & t, Entity * io, float invisibility = 0.f);
 
 void DrawEERIEInter(EERIE_3DOBJ * eobj,
                     const TransformInfo & t,
@@ -111,7 +111,7 @@ void EERIEDrawAnimQuatUpdate(EERIE_3DOBJ * eobj,
                              Entity * io,
                              bool update_movement);
 
-void EERIEDrawAnimQuatRender(EERIE_3DOBJ *eobj, const Vec3f & pos, Entity *io, float invisibility);
+void EERIEDrawAnimQuatRender(EERIE_3DOBJ * eobj, const Vec3f & pos, Entity * io, float invisibility);
 
 void AnimatedEntityRender(Entity * entity, float invisibility);
 

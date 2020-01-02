@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2016 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -60,7 +60,7 @@ static void skip_script_save(const char * dat, size_t & pos) {
 		avs = reinterpret_cast<const ARX_CHANGELEVEL_VARIABLE_SAVE *>(dat + pos);
 		pos += sizeof(ARX_CHANGELEVEL_VARIABLE_SAVE);
 		if(avs->type == TYPE_L_TEXT || (avs->type != TYPE_L_LONG && avs->type != TYPE_L_FLOAT && (avs->name[0] == '$' || avs->name[0] == '\xA3'))) {
-			pos += (size_t)avs->fval;
+			pos += size_t(avs->fval);
 		}
 	}
 }
@@ -200,22 +200,22 @@ static long fix_io(SaveBlock & save, const std::string & name, Idents & idents, 
 		return 0;
 	}
 	
-	std::string savefile = name;
+	const std::string & savefile = name;
 	
-	size_t size = 0;
-	char * dat = save.load(savefile, size);
-	if(!dat) {
+	std::string buffer = save.load(savefile);
+	if(buffer.empty()) {
 		remap[name] = 0;
 		return 0;
 	}
+	
+	char * dat = &buffer[0];
 	
 	Idents::iterator it = idents.find(name);
 	if(it != idents.end()) {
 		std::cout << "duplicate ident " << name << " detected: in " << it->second << " and " << where << '\n';
 		// we already fixed this!
-		long newIdent = copy_io(save, name, idents, where, dat, size);
+		long newIdent = copy_io(save, name, idents, where, dat, buffer.size());
 		std::cout << " -> copied " << name << " as " << newIdent << " for " << where << '\n';
-		free(dat);
 		remap[name] = newIdent;
 		return newIdent;
 	} else {
@@ -256,12 +256,10 @@ static long fix_io(SaveBlock & save, const std::string & name, Idents & idents, 
 	
 	if(changed) {
 		LogDebug("#saving fixed io " << savefile);
-		if(!save.save(savefile, dat, size)) {
+		if(!save.save(savefile, dat, buffer.size())) {
 			std::cerr << "error saving " << savefile;
 		}
 	}
-	
-	free(dat);
 	
 	return 0;
 }
@@ -278,7 +276,7 @@ static bool patch_ident(char (&name)[SIZE_ID], long newIdent, const std::string 
 	
 	size_t pos = namestr.find_last_of('_');
 	
-	util::storeString(name, makeIdent(namestr.substr(0, pos), newIdent).c_str());
+	util::storeString(name, makeIdent(namestr.substr(0, pos), newIdent));
 	
 	return true;
 }
@@ -307,11 +305,12 @@ static void fix_player(SaveBlock & save, Idents & idents) {
 	
 	const std::string loadfile = "player";
 	
-	size_t size;
-	char * dat = save.load(loadfile, size);
-	if(!dat) {
+	std::string buffer = save.load(loadfile);
+	if(buffer.empty()) {
 		return;
 	}
+	
+	char * dat = &buffer[0];
 	
 	bool changed = false;
 	
@@ -344,10 +343,8 @@ static void fix_player(SaveBlock & save, Idents & idents) {
 	
 	if(changed) {
 		LogDebug("saving fixed " << loadfile);
-		save.save(loadfile, dat, size);
+		save.save(loadfile, dat, buffer.size());
 	}
-	
-	free(dat);
 	
 }
 
@@ -360,11 +357,12 @@ static void fix_level(SaveBlock & save, long num, Idents & idents) {
 		return;
 	}
 	
-	size_t size;
-	char * dat = save.load(ss.str(), size);
-	if(!dat) {
+	std::string buffer = save.load(ss.str());
+	if(buffer.empty()) {
 		return;
 	}
+	
+	char * dat = &buffer[0];
 	
 	std::cout << "level " << num << '\n';
 	
@@ -399,10 +397,8 @@ static void fix_level(SaveBlock & save, long num, Idents & idents) {
 	
 	if(changed) {
 		LogDebug("#saving fixed " << ss.str());
-		save.save(ss.str(), dat, size);
+		save.save(ss.str(), dat, buffer.size());
 	}
-	
-	free(dat);
 	
 }
 
@@ -417,13 +413,13 @@ int main_fix(SaveBlock & save, const std::vector<std::string> & args) {
 	// TODO share this list with the game code
 	static const char * const default_paks[] = { "data.pak", "data2.pak" };
 	BOOST_FOREACH(const char * const filename, default_paks) {
-		if(g_resources->addArchive(fs::paths.find(filename))) {
+		if(g_resources->addArchive(fs::findDataFile(filename))) {
 			continue;
 		}
 		LogError << "Missing required data file: \"" << filename << "\"";
 		return 3;
 	}
-	BOOST_REVERSE_FOREACH(const fs::path & base, fs::paths.data) {
+	BOOST_REVERSE_FOREACH(const fs::path & base, fs::getDataDirs()) {
 		const char * dirname = "graph";
 		g_resources->addFiles(base / dirname, dirname);
 	}

@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2017 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -48,6 +48,8 @@ ZeniMax Media Inc., Suite 120, Rockville, Maryland 20850 USA.
 
 #include <cstdio>
 
+#include <boost/foreach.hpp>
+
 #include "ai/PathFinderManager.h"
 
 #include "game/Entity.h"
@@ -58,41 +60,28 @@ void AnchorData_ClearAll(BackgroundData * eb) {
 	
 	EERIE_PATHFINDER_Clear();
 	
-	if(eb->anchors && eb->nbanchors) {
-		for(int j = 0; j < eb->nbanchors; j++) {
-			if(eb->anchors[j].nblinked && eb->anchors[j].linked) {
-				free(eb->anchors[j].linked);
-				eb->anchors[j].linked = NULL;
-			}
-		}
-
-		free(eb->anchors);
-	}
-
-	eb->anchors = NULL;
-	eb->nbanchors = 0;
+	eb->m_anchors.clear();
 }
 
 void ANCHOR_BLOCK_Clear() {
-
+	
 	BackgroundData * eb = ACTIVEBKG;
-
-	if(!eb)
+	if(!eb) {
 		return;
-
-	for(long k = 0; k < eb->nbanchors; k++) {
-		ANCHOR_DATA & ad = eb->anchors[k];
-		ad.flags &= ~ANCHOR_FLAG_BLOCKED;
 	}
+	
+	BOOST_FOREACH(ANCHOR_DATA & ad, eb->m_anchors) {
+		ad.blocked = false;
+	}
+	
 }
 
-void ANCHOR_BLOCK_By_IO(Entity * io, long status) {
-
+void ANCHOR_BLOCK_By_IO(Entity * io, bool blocked) {
+	
 	BackgroundData * eb = ACTIVEBKG;
-
-	for(long k = 0; k < eb->nbanchors; k++) {
-		ANCHOR_DATA & ad = eb->anchors[k];
-
+	
+	BOOST_FOREACH(ANCHOR_DATA & ad, eb->m_anchors) {
+		
 		if(fartherThan(ad.pos, io->pos, 600.f))
 			continue;
 
@@ -112,8 +101,8 @@ void ANCHOR_BLOCK_By_IO(Entity * io, long status) {
 					cz += ep.v[kk].p.z;
 				}
 
-				cx *= (1.f/3);
-				cz *= (1.f/3);
+				cx *= 1.f / 3;
+				cz *= 1.f / 3;
 
 				for(int kk = 0; kk < 3; kk++) {
 					ep.v[kk].p.x = (ep.v[kk].p.x - cx) * 3.5f + cx;
@@ -121,12 +110,13 @@ void ANCHOR_BLOCK_By_IO(Entity * io, long status) {
 				}
 
 				if(PointIn2DPolyXZ(&ep, ad.pos.x, ad.pos.z)) {
-					if(status)
-						ad.flags |= ANCHOR_FLAG_BLOCKED;
-					else
-						ad.flags &= ~ANCHOR_FLAG_BLOCKED;
+					ad.blocked = blocked;
 				}
+				
 			}
+			
 		}
+		
 	}
+	
 }

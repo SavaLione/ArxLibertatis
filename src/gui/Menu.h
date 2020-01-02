@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2016 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -51,20 +51,6 @@ ZeniMax Media Inc., Suite 120, Rockville, Maryland 20850 USA.
 
 class TextureContainer;
 
-static const size_t MAX_FLYOVER = 32;
-
-struct MENU_DYNAMIC_DATA {
-	
-	TextureContainer * BookBackground;
-	std::string flyover[MAX_FLYOVER];
-	// New Quest Buttons Strings
-	std::string str_button_quickgen;
-	std::string str_button_skin;
-	std::string str_button_done;
-	
-	MENU_DYNAMIC_DATA();
-};
-
 enum MenuMode {
 	Mode_InGame,
 	Mode_MainMenu,
@@ -73,8 +59,6 @@ enum MenuMode {
 };
 
 struct ARX_MENU_DATA {
-	
-	MENU_DYNAMIC_DATA * mda;
 	
 	MenuMode mode() {
 		return m_currentMode;
@@ -93,11 +77,8 @@ extern bool g_canResumeGame;
 void ARX_Menu_Manage();
 void ARX_Menu_Render();
 void ARX_MENU_Launch(bool allowResume);
-void ARX_Menu_Resources_Create();
-void ARX_Menu_Resources_Release(bool _bNoSound = true);
+void ARX_Menu_Resources_Release();
 void ARX_MENU_Clicked_CREDITS();
-
-void ARX_MENU_LaunchAmb(const std::string & _lpszAmb);
 
 void ARX_MENU_Clicked_NEWQUEST();
 

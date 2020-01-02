@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2017 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -69,7 +69,7 @@ Particle::Particle()
 Particle::~Particle() { }
 
 void Particle::Regen() {
-	p3Pos = Vec3f_ZERO;
+	p3Pos = Vec3f(0.f);
 	m_age = 0;
 	fSize = 1;
 	iTexTime = 0;
@@ -112,7 +112,6 @@ void Particle::Update(GameDuration delta) {
 		
 		fSize = fSizeStart + (fSizeEnd - fSizeStart) * ft;
 		
-		Color4f fColor = fColorStart + (fColorEnd - fColorStart) * ft;
-		ulColor = fColor.to<u8>();
+		ulColor = Color(fColorStart + (fColorEnd - fColorStart) * ft);
 	}
 }

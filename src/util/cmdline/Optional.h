@@ -1,5 +1,5 @@
 /*
- * Copyright 2013-2016 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2013-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -78,11 +78,11 @@ struct optional {
 		rh.m_ptr = tmp;
 	}
 	
-	const T & operator *() const { // never throws
+	const T & operator*() const { // never throws
 		return *m_ptr;
 	}
 	
-	T & operator *() { // never throws
+	T & operator*() { // never throws
 		return const_cast<T &>(static_cast<const optional *>(this)->operator*());
 	}
 	

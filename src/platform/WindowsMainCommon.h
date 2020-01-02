@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-2016 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2015-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -28,6 +28,7 @@
 #include <math.h>
 
 #include "platform/Architecture.h"
+#include "platform/WindowsUtils.h"
 
 class WindowsMain {
 	
@@ -58,9 +59,9 @@ public:
 		bool hasAVX = false;
 		HMODULE kernel32 = GetModuleHandleW(L"kernel32.dll");
 		if(kernel32) {
-			typedef DWORD64 (WINAPI *PGETENABLEDXSTATEFEATURES)();
+			typedef DWORD64 (WINAPI * PGETENABLEDXSTATEFEATURES)();
 			PGETENABLEDXSTATEFEATURES GetEnabledXStateFeatures
-				= (PGETENABLEDXSTATEFEATURES)GetProcAddress(kernel32, "GetEnabledXStateFeatures");
+				= platform::getProcAddress<PGETENABLEDXSTATEFEATURES>(kernel32, "GetEnabledXStateFeatures");
 			if(GetEnabledXStateFeatures) {
 				DWORD64 features = GetEnabledXStateFeatures();
 				if(features & XSTATE_MASK_GSSE) {

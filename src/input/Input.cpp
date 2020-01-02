@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2017 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -52,18 +52,19 @@ ZeniMax Media Inc., Suite 120, Rockville, Maryland 20850 USA.
 
 #include <boost/lexical_cast.hpp>
 #include <boost/static_assert.hpp>
+#include <boost/range/size.hpp>
 
 #include "core/Application.h"
 #include "core/Config.h"
 #include "core/GameTime.h"
 #include "graphics/Math.h"
+#include "gui/Menu.h"
 #include "input/InputBackend.h"
 #include "io/log/Logger.h"
 #include "window/RenderWindow.h"
 
 Input * GInput = NULL;
 
-// TODO-input: Clean me!
 long EERIEMouseButton = 0;
 long LastMouseClick = 0;
 
@@ -327,10 +328,15 @@ Input::Input()
 	: backend(NULL)
 	, m_useRawMouseInput(true)
 	, m_mouseMode(Mouse::Absolute)
-	, m_lastMousePosition(Vec2s_ZERO)
+	, m_mouseMovement(0.f)
+	, iMouseA(0)
+	, m_lastMousePosition(0)
 	, mouseInWindow(false)
+	, m_mouseSensitivity(0.f)
 	, m_mouseAcceleration(0)
 	, m_invertMouseY(false)
+	, iWheelDir(0)
+	, iKeyId(-1)
 {
 	setMouseSensitivity(2);
 	reset();
@@ -353,7 +359,7 @@ bool Input::init(Window * window) {
 
 void Input::reset() {
 	
-	m_mouseMovement = Vec2f_ZERO;
+	m_mouseMovement = Vec2f(0.f);
 
 	for(size_t i = 0; i < Mouse::ButtonCount; i++) {
 		iMouseTime[i][0] = 0;
@@ -363,15 +369,14 @@ void Input::reset() {
 		iOldNumClick[i] = 0;
 	}
 
-	iKeyId=-1;
-
+	iKeyId = -1;
 	for(int i = 0; i < Keyboard::KeyCount; i++) {
-		keysStates[i]=0;
+		keysStates[i] = 0;
 	}
-
+	
 	EERIEMouseButton = 0;
-
 	iWheelDir = 0;
+	
 }
 
 void Input::setMouseMode(Mouse::Mode mode) {
@@ -433,15 +438,9 @@ void Input::update(float time) {
 
 	for(int i = 0; i < Keyboard::KeyCount; i++) {
 		if(isKeyPressed(i)) {
-			switch(i) {
-			case Keyboard::Key_LeftShift:
-			case Keyboard::Key_RightShift:
-			case Keyboard::Key_LeftCtrl:
-			case Keyboard::Key_RightCtrl:
-			case Keyboard::Key_LeftAlt:
-			case Keyboard::Key_RightAlt:
+			
+			if(Keyboard::isModifier(i)) {
 				modifier = i;
-				break;
 			}
 
 			if(keysStates[i] < 2) {
@@ -462,44 +461,16 @@ void Input::update(float time) {
 			}
 		}
 	}
-
+	
 	if(modifier != 0 && iKeyId != modifier) {
 		iKeyId |= (modifier << 16);
 	}
-
-	if(iKeyId >= 0) {   //keys priority
-		switch(iKeyId) {
-		case Keyboard::Key_LeftShift:
-		case Keyboard::Key_RightShift:
-		case Keyboard::Key_LeftCtrl:
-		case Keyboard::Key_RightCtrl:
-		case Keyboard::Key_LeftAlt:
-		case Keyboard::Key_RightAlt: {
-				bool bFound=false;
-
-				for(int i = 0; i < Keyboard::KeyCount; i++) {
-					if(bFound) {
-						break;
-					}
-
-					switch(i & 0xFFFF) {
-					case Keyboard::Key_LeftShift:
-					case Keyboard::Key_RightShift:
-					case Keyboard::Key_LeftCtrl:
-					case Keyboard::Key_RightCtrl:
-					case Keyboard::Key_LeftAlt:
-					case Keyboard::Key_RightAlt:
-						continue;
-					default: {
-						if(keysStates[i]) {
-							bFound=true;
-							iKeyId&=~0xFFFF;
-							iKeyId|=i;
-						}
-						}
-						break;
-					}
-				}
+	
+	if(Keyboard::isModifier(iKeyId)) {
+		for(int i = 0; i < Keyboard::KeyCount; i++) {
+			if(!Keyboard::isModifier(i & 0xFFFF) && keysStates[i]) {
+				iKeyId &= ~0xFFFF;
+				iKeyId |= i;
 			}
 		}
 	}
@@ -612,7 +583,7 @@ void Input::update(float time) {
 		}
 		
 	} else {
-		m_mouseMovement = Vec2f_ZERO;
+		m_mouseMovement = Vec2f(0.f);
 		if(!m_useRawMouseInput) {
 			m_lastMousePosition = newMousePosition;
 		}
@@ -623,7 +594,7 @@ void Input::update(float time) {
 
 static std::map<std::string, InputKeyId> keyNames;
 
-std::string Input::getKeyName(InputKeyId key, bool localizedName) {
+std::string Input::getKeyName(InputKeyId key) {
 	
 	if(key == -1) {
 		return std::string();
@@ -634,35 +605,25 @@ std::string Input::getKeyName(InputKeyId key, bool localizedName) {
 	std::string modifier;
 	if(key & INPUT_COMBINATION_MASK) {
 		// key combination
-		modifier = getKeyName((key >> 16) & 0x0fff, localizedName);
+		modifier = getKeyName((key >> 16) & 0x0fff);
 		key &= INPUT_MASK;
 	}
 	
 	if(key >= InputKeyId(Mouse::ButtonBase) && key < InputKeyId(Mouse::ButtonMax)) {
-		
 		std::ostringstream oss;
 		oss << PREFIX_BUTTON << int(key - Mouse::ButtonBase + 1);
 		name = oss.str();
-	
 	} else if(key == InputKeyId(Mouse::Wheel_Up)) {
 		name = "WheelUp";
-
 	} else if(key == InputKeyId(Mouse::Wheel_Down)) {
 		name = "WheelDown";
-
-	} else {
-		BOOST_STATIC_ASSERT(ARRAY_SIZE(keysDescriptions) == Keyboard::KeyMax);
-		arx_assert(key >= 0 && key < int(ARRAY_SIZE(keysDescriptions)));
-		const KeyDescription & entity = keysDescriptions[key];
-		
+	} else if(key >= InputKeyId(Keyboard::KeyBase) && key < InputKeyId(Keyboard::KeyMax)) {
+		BOOST_STATIC_ASSERT(ARRAY_SIZE(keysDescriptions) == size_t(Keyboard::KeyMax - Keyboard::KeyBase));
+		const KeyDescription & entity = keysDescriptions[key - InputKeyId(Keyboard::KeyBase)];
 		arx_assert(entity.id == key);
 		name = entity.name;
-	}
-	
-	if(name.empty()) {
-		std::ostringstream oss;
-		oss << PREFIX_KEY << int(key);
-		name = oss.str();
+	} else {
+		arx_unreachable();
 	}
 	
 	if(!modifier.empty()) {
@@ -670,6 +631,56 @@ std::string Input::getKeyName(InputKeyId key, bool localizedName) {
 	} else {
 		return name;
 	}
+	
+}
+
+std::string Input::getKeyDisplayName(InputKeyId key) {
+	
+	if(key == -1) {
+		return std::string();
+	}
+	
+	std::string name;
+	
+	std::string modifier;
+	if(key & INPUT_COMBINATION_MASK) {
+		// key combination
+		modifier = getKeyDisplayName((key >> 16) & 0x0fff);
+		key &= INPUT_MASK;
+	}
+	
+	if(key == InputKeyId(Mouse::Button_0)) {
+		name = "Left Click";
+	} else if(key == InputKeyId(Mouse::Button_2)) {
+		name = "Middle Click";
+	} else if(key == InputKeyId(Mouse::Button_1)) {
+		name = "Right Click";
+	} else if(key >= InputKeyId(Mouse::ButtonBase) && key < InputKeyId(Mouse::ButtonMax)) {
+		std::ostringstream oss;
+		oss << "Mouse " << int(key - Mouse::ButtonBase + 1);
+		name = oss.str();
+	} else if(key == InputKeyId(Mouse::Wheel_Up)) {
+		name = "Wheel Up";
+	} else if(key == InputKeyId(Mouse::Wheel_Down)) {
+		name = "Wheel Down";
+	} else if(key >= InputKeyId(Keyboard::KeyBase) && key < InputKeyId(Keyboard::KeyMax)) {
+		name = backend->getKeyName(Keyboard::Key(key));
+		if(name.empty()) {
+			BOOST_STATIC_ASSERT(ARRAY_SIZE(keysDescriptions) == size_t(Keyboard::KeyMax - Keyboard::KeyBase));
+			const KeyDescription & entity = keysDescriptions[key - InputKeyId(Keyboard::KeyBase)];
+			arx_assert(entity.id == key);
+			name = entity.name;
+		}
+	} else {
+		arx_unreachable();
+	}
+	
+	if(!modifier.empty()) {
+		return modifier + " + " + name;
+	} else {
+		return name;
+	}
+	
 }
 
 InputKeyId Input::getKeyId(const std::string & name) {
@@ -683,7 +694,7 @@ InputKeyId Input::getKeyId(const std::string & name) {
 	if(sep != std::string::npos) {
 		InputKeyId modifier = getKeyId(name.substr(0, sep));
 		InputKeyId key = getKeyId(name.substr(sep + 1));
-		return (modifier << 16 | key);
+		return (modifier < 0) ? key : (modifier << 16 | key);
 	}
 	
 	if(!name.compare(0, PREFIX_KEY.length(), PREFIX_KEY)) {
@@ -704,7 +715,7 @@ InputKeyId Input::getKeyId(const std::string & name) {
 	
 	if(keyNames.empty()) {
 		// Initialize the key name -> id map.
-		for(size_t i = 0; i < ARRAY_SIZE(keysDescriptions); i++) {
+		for(size_t i = 0; i < size_t(boost::size(keysDescriptions)); i++) {
 			keyNames[keysDescriptions[i].name] = keysDescriptions[i].id;
 		}
 		keyNames["WheelUp"] = InputKeyId(Mouse::Wheel_Up);
@@ -750,152 +761,6 @@ bool Input::isKeyPressedNowUnPressed(int keyId) const {
 	arx_assert(keyId >= Keyboard::KeyBase && keyId < Keyboard::KeyMax);
 
 	return !backend->isKeyboardKeyPressed(keyId) && (keysStates[keyId] == 1);
-}
-
-static const char arxKeys[][2] = {
-	
-	{ '0', ')' }, // Key_0,
-	{ '1', '!' }, // Key_1,
-	{ '2', '@' }, // Key_2,
-	{ '3', '#' }, // Key_3,
-	{ '4', '$' }, // Key_4,
-	{ '5', '%' }, // Key_5,
-	{ '6', '^' }, // Key_6,
-	{ '7', '&' }, // Key_7,
-	{ '8', '*' }, // Key_8,
-	{ '9', '(' }, // Key_9,
-	
-	{ 'a', 'A' }, // Key_A,
-	{ 'b', 'B' }, // Key_B,
-	{ 'c', 'C' }, // Key_C,
-	{ 'd', 'D' }, // Key_D,
-	{ 'e', 'E' }, // Key_E,
-	{ 'f', 'F' }, // Key_F,
-	{ 'g', 'G' }, // Key_G,
-	{ 'h', 'H' }, // Key_H,
-	{ 'i', 'I' }, // Key_I,
-	{ 'j', 'J' }, // Key_J,
-	{ 'k', 'K' }, // Key_K,
-	{ 'l', 'L' }, // Key_L,
-	{ 'm', 'M' }, // Key_M,
-	{ 'n', 'N' }, // Key_N,
-	{ 'o', 'O' }, // Key_O,
-	{ 'p', 'P' }, // Key_P,
-	{ 'q', 'Q' }, // Key_Q,
-	{ 'r', 'R' }, // Key_R,
-	{ 's', 'S' }, // Key_S,
-	{ 't', 'T' }, // Key_T,
-	{ 'u', 'U' }, // Key_U,
-	{ 'v', 'V' }, // Key_V,
-	{ 'w', 'W' }, // Key_W,
-	{ 'x', 'X' }, // Key_X,
-	{ 'y', 'Y' }, // Key_Y,
-	{ 'z', 'Z' }, // Key_Z,
-	
-	{ 0, 0 }, // Key_F1,
-	{ 0, 0 }, // Key_F2,
-	{ 0, 0 }, // Key_F3,
-	{ 0, 0 }, // Key_F4,
-	{ 0, 0 }, // Key_F5,
-	{ 0, 0 }, // Key_F6,
-	{ 0, 0 }, // Key_F7,
-	{ 0, 0 }, // Key_F8,
-	{ 0, 0 }, // Key_F9,
-	{ 0, 0 }, // Key_F10,
-	{ 0, 0 }, // Key_F11,
-	{ 0, 0 }, // Key_F12,
-	{ 0, 0 }, // Key_F13,
-	{ 0, 0 }, // Key_F14,
-	{ 0, 0 }, // Key_F15,
-	
-	{ 0, 0 }, // Key_UpArrow,
-	{ 0, 0 }, // Key_DownArrow,
-	{ 0, 0 }, // Key_LeftArrow,
-	{ 0, 0 }, // Key_RightArrow,
-	
-	{ 0, 0 }, // Key_Home,
-	{ 0, 0 }, // Key_End,
-	{ 0, 0 }, // Key_PageUp,
-	{ 0, 0 }, // Key_PageDown,
-	{ 0, 0 }, // Key_Insert,
-	{ 0, 0 }, // Key_Delete,
-	
-	{ 0, 0 }, // Key_Escape,
-	
-	{ 0, 0 }, // Key_NumLock,
-	{ '0', '0' }, // Key_0,
-	{ '1', '1' }, // Key_1,
-	{ '2', '2' }, // Key_2,
-	{ '3', '3' }, // Key_3,
-	{ '4', '4' }, // Key_4,
-	{ '5', '5' }, // Key_5,
-	{ '6', '6' }, // Key_6,
-	{ '7', '7' }, // Key_7,
-	{ '8', '8' }, // Key_8,
-	{ '9', '9' }, // Key_9,
-	{ '\n', '\n' }, // Key_NumPadEnter,
-	{ '-', '-' }, // Key_NumSubtract,
-	{ '+', '+' }, // Key_NumAdd,
-	{ '*', '*' }, // Key_NumMultiply,
-	{ '/', '/' }, // Key_NumDivide,
-	{ '.', '.' }, // Key_NumPoint,
-	
-	{ '[', '{' }, // Key_LeftBracket,
-	{ 0, 0 }, // Key_LeftCtrl,
-	{ 0, 0 }, // Key_LeftAlt,
-	{ 0, 0 }, // Key_LeftShift,
-	{ 0, 0 }, // Key_LeftWin,
-	
-	{ ']', '}' }, // Key_RightBracket,
-	{ 0, 0 }, // Key_RightCtrl,
-	{ 0, 0 }, // Key_RightAlt,
-	{ 0, 0 }, // Key_RightShift,
-	{ 0, 0 }, // Key_RightWin,
-	
-	{ 0, 0 }, // Key_PrintScreen,
-	{ 0, 0 }, // Key_ScrollLock,
-	{ 0, 0 }, // Key_Pause,
-	
-	{ ' ', ' ' }, // Key_Spacebar,
-	{ 0, 0 }, // Key_Backspace,
-	{ '\n', '\n' }, // Key_Enter,
-	{ '\t', '\t' }, // Key_Tab,
-
-	{ 0, 0 }, // Key_Apps,
-	{ 0, 0 }, // Key_CapsLock,
-
-	{ '/', '?' }, // Key_Slash,
-	{ '\\', '|' }, // Key_Backslash,
-	{ ',', '<' }, // Key_Comma,
-	{ ';', ':' }, // Key_Semicolon,
-	{ '.', '>' }, // Key_Period,
-	{ '`', '~' }, // Key_Grave,
-	{ '\'', '"' }, // Key_Apostrophe,
-	{ '-', '_' }, // Key_Minus,
-	{ '=', '+' }, // Key_Equals,
-	
-};
-
-bool Input::getKeyAsText(int keyId, char & result) const {
-	
-	// TODO we should use SDL_StartTextInput + SDL_SetTextInputRect to allow unicode input
-	
-	keyId -= Keyboard::KeyBase;
-	
-	if(keyId < 0 || size_t(keyId) >= ARRAY_SIZE(arxKeys)) {
-		return false;
-	}
-	
-	bool shift = isKeyPressed(Keyboard::Key_LeftShift)
-	             || isKeyPressed(Keyboard::Key_RightShift);
-	
-	char c = arxKeys[keyId][shift ? 1 : 0];
-	if(c) {
-		result = c;
-		return true;
-	}
-	
-	return false;
 }
 
 void Input::startTextInput(const Rect & box, TextInputHandler * handler) {
@@ -944,29 +809,26 @@ bool Input::getMouseButtonDoubleClick(int buttonId) const {
 }
 
 int Input::getMouseButtonClicked() const {
-
-	//MouseButton
+	
 	for(int i = Mouse::ButtonBase; i < Mouse::ButtonMax; i++) {
 		if(getMouseButtonNowPressed(i)) {
 			return i;
 		}
 	}
-
-	//Wheel UP/DOWN
+	
 	if(iWheelDir < 0) {
 		return Mouse::Wheel_Down;
-	} else {
-		if(iWheelDir > 0) {
-			return Mouse::Wheel_Up;
-		}
 	}
-
+	if(iWheelDir > 0) {
+		return Mouse::Wheel_Up;
+	}
+	
 	return 0;
 }
 
 bool Input::actionNowPressed(ControlAction actionId) const {
 	
-	for(size_t j = 0; j < ARRAY_SIZE(config.actions[actionId].key); j++) {
+	for(size_t j = 0; j < size_t(boost::size(config.actions[actionId].key)); j++) {
 		
 		InputKeyId key = config.actions[actionId].key[j];
 		if(key == -1) {
@@ -974,7 +836,7 @@ bool Input::actionNowPressed(ControlAction actionId) const {
 		}
 		
 		if(key & Mouse::ButtonBase) {
-			if(getMouseButtonNowPressed(key)) {
+			if(ARXmenu.mode() != Mode_MainMenu && getMouseButtonNowPressed(key)) {
 				return true;
 			}
 			continue;
@@ -997,6 +859,7 @@ bool Input::actionNowPressed(ControlAction actionId) const {
 		if(isKeyPressedNowPressed(key & INPUT_KEYBOARD_MASK)) {
 			return bCombine;
 		}
+		
 	}
 	
 	return false;
@@ -1011,92 +874,83 @@ bool Input::actionPressed(ControlAction actionId) const {
 		return false;
 	}
 	
-	if(config.misc.forceToggle) {
-		for(int j = 0; j < 2; j++) {
-			if(config.actions[actionId].key[j] != -1) {
-				if(config.actions[actionId].key[j] & Mouse::ButtonBase) {
-					if(getMouseButtonRepeat(config.actions[actionId].key[j]))
-						return true;
-				} else if(config.actions[actionId].key[j] & Mouse::WheelBase) {
-					if (config.actions[actionId].key[j] == Mouse::Wheel_Down) {
-						if(getMouseWheelDir() < 0)
-							return true;
-					} else {
-						if(getMouseWheelDir() > 0)
-							return true;
+	for(size_t j = 0; j < size_t(boost::size(config.actions[actionId].key)); j++) {
+		
+		InputKeyId key = config.actions[actionId].key[j];
+		if(key == -1) {
+			continue;
+		}
+		
+		if(key & Mouse::ButtonBase) {
+			if(ARXmenu.mode() != Mode_MainMenu && getMouseButtonRepeat(key)) {
+				return true;
+			}
+			continue;
+		}
+		
+		if(key & Mouse::WheelBase) {
+			if((key == Mouse::Wheel_Down) ? (getMouseWheelDir() < 0) : (getMouseWheelDir() > 0)) {
+				return true;
+			}
+			continue;
+		}
+		
+		bool bCombine = true;
+		if(key & INPUT_COMBINATION_MASK) {
+			if(!isKeyPressed((key >> 16) & INPUT_KEYBOARD_MASK)) {
+				bCombine = false;
+			}
+		}
+		
+		if(isKeyPressed(key & INPUT_KEYBOARD_MASK)) {
+			
+			if(config.misc.forceToggle && actionId == CONTROLS_CUST_MAGICMODE) {
+				if(bCombine) {
+					if(uiOneHandedMagicMode == 0) {
+						uiOneHandedMagicMode = 1;
+					} else if(uiOneHandedMagicMode == 2) {
+						uiOneHandedMagicMode = 3;
 					}
-				} else {
-					bool bCombine = true;
-					
-					if(config.actions[actionId].key[j] & INPUT_COMBINATION_MASK) {
-						if(!isKeyPressed((config.actions[actionId].key[j] >> 16) & 0xFFFF))
-							bCombine = false;
+					break;
+				}
+			} else if(config.misc.forceToggle && actionId == CONTROLS_CUST_STEALTHMODE) {
+				if(bCombine) {
+					if(uiOneHandedStealth == 0) {
+						uiOneHandedStealth = 1;
+					} else if(uiOneHandedStealth == 2) {
+						uiOneHandedStealth = 3;
 					}
-					
-					if(isKeyPressed(config.actions[actionId].key[j] & 0xFFFF)) {
-						bool bQuit = false;
-						
-						if(actionId == CONTROLS_CUST_MAGICMODE) {
-							if(bCombine) {
-								if(!uiOneHandedMagicMode) {
-									uiOneHandedMagicMode = 1;
-								} else {
-									if(uiOneHandedMagicMode == 2) {
-										uiOneHandedMagicMode = 3;
-									}
-								}
-								
-								bQuit = true;
-							}
-						} else if(actionId == CONTROLS_CUST_STEALTHMODE) {
-							if(bCombine) {
-								if(!uiOneHandedStealth) {
-									uiOneHandedStealth = 1;
-								} else {
-									if(uiOneHandedStealth == 2) {
-										uiOneHandedStealth = 3;
-									}
-								}
-								
-								bQuit = true;
-							}
-						} else {
-							return bCombine;
-						}
-						
-						if(bQuit) {
-							break;
-						}
-					} else {
-						if(actionId == CONTROLS_CUST_MAGICMODE) {
-							if(!j && isKeyPressed(config.actions[actionId].key[1] & 0xFFFF)) {
-								continue;
-							}
-							
-							if(uiOneHandedMagicMode == 1) {
-								uiOneHandedMagicMode = 2;
-							} else {
-								if(uiOneHandedMagicMode == 3) {
-									uiOneHandedMagicMode = 0;
-								}
-							}
-						} else if(actionId == CONTROLS_CUST_STEALTHMODE) {
-							if(!j && isKeyPressed(config.actions[actionId].key[1] & 0xFFFF)) {
-								continue;
-							}
-							
-							if(uiOneHandedStealth == 1) {
-								uiOneHandedStealth = 2;
-							} else {
-								if(uiOneHandedStealth == 3) {
-									uiOneHandedStealth = 0;
-								}
-							}
-						}
-					}
+					break;
+				}
+			} else {
+				return bCombine;
+			}
+			
+		} else if(config.misc.forceToggle) {
+			if(actionId == CONTROLS_CUST_MAGICMODE) {
+				if(!j && isKeyPressed(config.actions[actionId].key[1] & INPUT_KEYBOARD_MASK)) {
+					continue;
+				}
+				if(uiOneHandedMagicMode == 1) {
+					uiOneHandedMagicMode = 2;
+				} else if(uiOneHandedMagicMode == 3) {
+					uiOneHandedMagicMode = 0;
+				}
+			} else if(actionId == CONTROLS_CUST_STEALTHMODE) {
+				if(!j && isKeyPressed(config.actions[actionId].key[1] & INPUT_KEYBOARD_MASK)) {
+					continue;
+				}
+				if(uiOneHandedStealth == 1) {
+					uiOneHandedStealth = 2;
+				} else if(uiOneHandedStealth == 3) {
+					uiOneHandedStealth = 0;
 				}
 			}
 		}
+		
+	}
+	
+	if(config.misc.forceToggle) {
 		
 		if(actionId == CONTROLS_CUST_MAGICMODE) {
 			if(uiOneHandedMagicMode == 1 || uiOneHandedMagicMode == 2) {
@@ -1107,33 +961,7 @@ bool Input::actionPressed(ControlAction actionId) const {
 				return true;
 			}
 		}
-	} else {
-		for(int j = 0; j < 2; j++) {
-			if(config.actions[actionId].key[j] != -1) {
-				if(config.actions[actionId].key[j] & Mouse::ButtonBase) {
-					if(getMouseButtonRepeat(config.actions[actionId].key[j]))
-						return true;
-				} else if(config.actions[actionId].key[j] & Mouse::WheelBase) {
-					if(config.actions[actionId].key[j] == Mouse::Wheel_Down) {
-						if(getMouseWheelDir() < 0)
-							return true;
-					} else {
-						if(getMouseWheelDir() > 0)
-							return true;
-					}
-				} else {
-					bool bCombine = true;
-					
-					if(config.actions[actionId].key[j] & INPUT_COMBINATION_MASK) {
-						if(!isKeyPressed((config.actions[actionId].key[j] >> 16) & 0xFFFF))
-							bCombine = false;
-					}
-					
-					if(isKeyPressed(config.actions[actionId].key[j] & 0xFFFF))
-						return bCombine;
-				}
-			}
-		}
+		
 	}
 	
 	return false;
@@ -1141,7 +969,7 @@ bool Input::actionPressed(ControlAction actionId) const {
 
 bool Input::actionNowReleased(ControlAction actionId) const {
 	
-	for(size_t j = 0; j < ARRAY_SIZE(config.actions[actionId].key); j++) {
+	for(size_t j = 0; j < size_t(boost::size(config.actions[actionId].key)); j++) {
 		
 		InputKeyId key = config.actions[actionId].key[j];
 		if(key == -1) {
@@ -1149,7 +977,7 @@ bool Input::actionNowReleased(ControlAction actionId) const {
 		}
 		
 		if(key & Mouse::ButtonBase) {
-			if(getMouseButtonNowUnPressed(key)) {
+			if(ARXmenu.mode() != Mode_MainMenu && getMouseButtonNowUnPressed(key)) {
 				return true;
 			}
 			continue;
@@ -1169,6 +997,7 @@ bool Input::actionNowReleased(ControlAction actionId) const {
 		if(isKeyPressedNowUnPressed(key & INPUT_KEYBOARD_MASK)) {
 			return bCombine;
 		}
+		
 	}
 	
 	return false;

@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2017 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -30,6 +30,8 @@
 
 #include "math/Types.h"
 #include "math/Vector.h"
+
+#include "window/DisplayMode.h"
 
 //! Enum for all the controlling actions
 enum ControlAction {
@@ -129,15 +131,18 @@ public:
 		
 		std::string renderer;
 		
-		Vec2i resolution;
-		
 		bool fullscreen;
-		int levelOfDetail;
-		float fogDistance;
+		DisplayMode mode;
 		float gamma;
-		bool antialiasing;
+		
 		int vsync;
 		int fpsLimit;
+		
+		float fov;
+		
+		int levelOfDetail;
+		float fogDistance;
+		bool antialiasing;
 		int maxAnisotropicFiltering;
 		bool colorkeyAntialiasing;
 		int alphaCutoutAntialiasing;
@@ -157,8 +162,14 @@ public:
 		
 		float hudScale;
 		bool hudScaleInteger;
-		bool scaleCursorWithHud;
-		UIScaleFilter hudScaleFilter;
+		float bookScale;
+		bool bookScaleInteger;
+		float cursorScale;
+		bool cursorScaleInteger;
+		UIScaleFilter scaleFilter;
+		
+		float fontSize;
+		int fontWeight;
 		
 		Vec2i thumbnailSize;
 		
@@ -230,7 +241,7 @@ public:
 	
 public:
 	
-	void setActionKey(ControlAction action, size_t index, InputKeyId key);
+	bool setActionKey(ControlAction actionId, size_t index, InputKeyId key);
 	void setDefaultActionKeys();
 	
 	/*!
@@ -241,11 +252,12 @@ public:
 	
 	bool init(const fs::path & file);
 	
-	void setOutputFile(const fs::path & _file);
+	void setOutputFile(const fs::path & file);
 	
 private:
 	
-	fs::path file;
+	fs::path m_file;
+	
 };
 
 extern Config config;

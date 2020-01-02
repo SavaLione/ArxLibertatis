@@ -1,5 +1,5 @@
 /*
- * Copyright 2013 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2013-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -68,8 +68,7 @@ public:
 			case cmd_not_found:      return "command not found";
 			case invalid_cmd_syntax: return "commands must start with a dash (-)";
 		}
-		ARX_DEAD_CODE();
-		return "unknown error";
+		arx_unreachable();
 	}
 	
 public:

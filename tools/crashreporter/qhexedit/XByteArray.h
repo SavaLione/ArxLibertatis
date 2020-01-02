@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2012 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -24,8 +24,6 @@
 
 #ifndef ARX_TOOLS_CRASHREPORTER_QHEXEDIT_XBYTEARRAY_H
 #define ARX_TOOLS_CRASHREPORTER_QHEXEDIT_XBYTEARRAY_H
-
-//! \cond docNever
 
 #include <QtCore>
 
@@ -52,7 +50,7 @@ public:
 	void setAddressWidth(int width);
 	
 	QByteArray & data();
-	void setData(QByteArray data);
+	void setData(const QByteArray & data);
 	
 	bool dataChanged(int i);
 	QByteArray dataChanged(int i, int len);
@@ -65,7 +63,7 @@ public:
 	QByteArray & insert(int i, char ch);
 	QByteArray & insert(int i, const QByteArray & ba);
 	
-	QByteArray & remove(int pos, int len);
+	QByteArray & remove(int i, int len);
 	
 	QByteArray & replace(int index, char ch);
 	QByteArray & replace(int index, const QByteArray & ba);
@@ -87,8 +85,7 @@ private:
 	int _addressOffset;      //!< will be added to the real addres inside bytearray
 	int _realAddressNumbers; //!< real width of address area (can be greater then wanted width)
 	int _oldSize;            //!< size of data
+	
 };
-
-//! \endcond docNever
 
 #endif // ARX_TOOLS_CRASHREPORTER_QHEXEDIT_XBYTEARRAY_H

@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2012 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -19,4 +19,9 @@
 
 #include "graphics/texture/TextureStage.h"
 
-TextureStage::TextureStage(unsigned int stage) : mStage(stage) { }
+TextureStage::TextureStage(unsigned int stage)
+	: mStage(stage)
+	, m_wrapMode(WrapRepeat)
+	, m_minFilter(FilterLinear)
+	, m_magFilter(FilterLinear)
+{ }

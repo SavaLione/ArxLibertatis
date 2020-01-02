@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2017 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -87,10 +87,8 @@ void CrashHandlerImpl::processCrash() {
 	platform::process_handle reporter = 0;
 	{
 		fs::path executable = platform::getHelperExecutable("arxcrashreporter");
-		char argument[256];
-		strcpy(argument, "--crashinfo=");
-		strcat(argument, m_SharedMemoryName.c_str());
-		const char * args[] = { executable.string().c_str(), argument, NULL };
+		std::string arg = "--crashinfo=" + m_SharedMemoryName;
+		const char * args[] = { executable.string().c_str(), arg.c_str(), NULL };
 		reporter = platform::runAsync(args);
 	}
 	
@@ -186,6 +184,14 @@ void CrashHandlerImpl::processCrash() {
 			std::string distro = platform::getOSDistribution();
 			if(!distro.empty()) {
 				ofs << "- distribution: " << distro << '\n';
+			}
+			std::string libc = platform::getCLibraryVersion();
+			if(!libc.empty()) {
+				ofs << "- libc: " << libc << '\n';
+			}
+			std::string threading = platform::getThreadLibraryVersion();
+			if(!threading.empty()) {
+				ofs << "- threading: " << threading << '\n';
 			}
 			std::string cpu = platform::getCPUName();
 			if(!cpu.empty()) {

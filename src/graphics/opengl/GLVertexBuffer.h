@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2017 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -34,7 +34,7 @@
 #include "io/log/Logger.h"
 
 template <class Vertex>
-static void setVertexArray(OpenGLRenderer * renderer, const Vertex * vertex, const void * ref);
+static void setVertexArray(OpenGLRenderer * renderer, const Vertex * vertices, const void * ref);
 
 // cached vertex array definitions
 enum GLArrayClientState {
@@ -125,8 +125,8 @@ public:
 	
 	using Base::capacity;
 	
-	BaseGLVertexBuffer(OpenGLRenderer * renderer, size_t capacity, Renderer::BufferUsage usage)
-		: Base(capacity)
+	BaseGLVertexBuffer(OpenGLRenderer * renderer, size_t size, Renderer::BufferUsage usage)
+		: Base(size)
 		, m_renderer(renderer)
 		, m_buffer(GL_NONE)
 		, m_offset(0)
@@ -240,8 +240,8 @@ public:
 	
 	using Base::capacity;
 	
-	GLVertexBuffer(OpenGLRenderer * renderer, size_t capacity, Renderer::BufferUsage usage)
-		: Base(renderer, capacity, usage)
+	GLVertexBuffer(OpenGLRenderer * renderer, size_t size, Renderer::BufferUsage usage)
+		: Base(renderer, size, usage)
 		, m_initialized(false)
 	{ }
 	
@@ -307,8 +307,8 @@ public:
 	
 	using Base::capacity;
 	
-	GLShadowVertexBuffer(OpenGLRenderer * renderer, size_t capacity, Renderer::BufferUsage usage)
-		: Base(renderer, capacity, usage)
+	GLShadowVertexBuffer(OpenGLRenderer * renderer, size_t size, Renderer::BufferUsage usage)
+		: Base(renderer, size, usage)
 		, m_lockedFlags(0)
 		, m_lockedOffset(0)
 		, m_lockedCount(0)
@@ -362,8 +362,8 @@ public:
 	
 	using Base::capacity;
 	
-	GLMapVertexBuffer(OpenGLRenderer * renderer, size_t capacity, Renderer::BufferUsage usage)
-		: Base(renderer, capacity, usage)
+	GLMapVertexBuffer(OpenGLRenderer * renderer, size_t size, Renderer::BufferUsage usage)
+		: Base(renderer, size, usage)
 	{ }
 	
 	Vertex * lock(BufferFlags flags, size_t offset, size_t count) {
@@ -415,9 +415,9 @@ public:
 	
 	using Base::capacity;
 	
-	GLMapRangeVertexBuffer(OpenGLRenderer * renderer, size_t capacity,
+	GLMapRangeVertexBuffer(OpenGLRenderer * renderer, size_t size,
 	                       Renderer::BufferUsage usage)
-		: Base(renderer, capacity, usage)
+		: Base(renderer, size, usage)
 	{ }
 	
 	Vertex * lock(BufferFlags flags, size_t offset, size_t count) {
@@ -473,9 +473,9 @@ public:
 	
 	using Base::capacity;
 	
-	BaseGLPersistentVertexBuffer(OpenGLRenderer * renderer, size_t capacity, Renderer::BufferUsage usage,
+	BaseGLPersistentVertexBuffer(OpenGLRenderer * renderer, size_t size, Renderer::BufferUsage usage,
 	                             size_t multiplier = 1)
-		: Base(renderer, capacity, usage)
+		: Base(renderer, size, usage)
 		, m_multiplier(multiplier)
 		, m_mapping(NULL)
 	{
@@ -579,9 +579,9 @@ class GLPersistentUnsynchronizedVertexBuffer
 	
 public:
 	
-	GLPersistentUnsynchronizedVertexBuffer(OpenGLRenderer * renderer, size_t capacity,
+	GLPersistentUnsynchronizedVertexBuffer(OpenGLRenderer * renderer, size_t size,
 	                                       Renderer::BufferUsage usage)
-		: Base(renderer, capacity, usage)
+		: Base(renderer, size, usage)
 	{ }
 	
 	void discardBuffer() {
@@ -606,8 +606,8 @@ class GLPersistentOrphanVertexBuffer
 	
 public:
 	
-	GLPersistentOrphanVertexBuffer(OpenGLRenderer * renderer, size_t capacity, Renderer::BufferUsage usage)
-		: Base(renderer, capacity, usage)
+	GLPersistentOrphanVertexBuffer(OpenGLRenderer * renderer, size_t size, Renderer::BufferUsage usage)
+		: Base(renderer, size, usage)
 	{ }
 	
 	void discardBuffer() {
@@ -638,9 +638,9 @@ public:
 	
 	using Base::capacity;
 	
-	GLPersistentFenceVertexBuffer(OpenGLRenderer * renderer, size_t capacity, Renderer::BufferUsage usage,
+	GLPersistentFenceVertexBuffer(OpenGLRenderer * renderer, size_t size, Renderer::BufferUsage usage,
 	                              size_t fenceCount)
-		: Base(renderer, capacity, usage, fenceCount)
+		: Base(renderer, size, usage, fenceCount)
 	{
 		
 		m_position = 0;

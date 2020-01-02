@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2016 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -76,8 +76,8 @@ static void processDirectory(PakDirectory & dir, const fs::path & prefix,
 			if(action == UnpakExtract || action == UnpakManifest) {
 				
 				PakFile * file = entry.second;
-				char * data = file->readAlloc();
-				arx_assert(file->size() == 0 || data != NULL);
+				
+				std::string buffer = file->read();
 				
 				if(action == UnpakExtract) {
 					
@@ -88,7 +88,7 @@ static void processDirectory(PakDirectory & dir, const fs::path & prefix,
 						std::exit(1);
 					}
 					
-					if(ofs.write(data, file->size()).fail()) {
+					if(ofs.write(buffer.data(), buffer.size()).fail()) {
 						LogError << "Error writing to file: " << filepath;
 						std::exit(1);
 					}
@@ -96,21 +96,8 @@ static void processDirectory(PakDirectory & dir, const fs::path & prefix,
 				}
 				
 				if(action == UnpakManifest) {
-					
-					util::md5 hash;
-					hash.init();
-					hash.update(data, file->size());
-					char checksum[hash.size];
-					hash.finalize(checksum);
-					
-					for(size_t i = 0; i < hash.size; i++) {
-						std::cout << std::setfill('0') << std::hex << std::setw(2) << int(u8(checksum[i]));
-					}
-					std::cout << " *";
-					
+					std::cout << util::md5::compute(buffer) << " *";
 				}
-				
-				std::free(data);
 				
 			}
 			
@@ -255,7 +242,7 @@ int utf8_main(int argc, char ** argv) {
 	}
 	
 	if(status == RunProgram && (g_addDefaultArchives || g_archives.empty())) {
-		status = fs::paths.init();
+		status = fs::initSystemPaths();
 	}
 	
 	// When no archives have been specified, extract all archives to a default location
@@ -263,7 +250,7 @@ int utf8_main(int argc, char ** argv) {
 	if(status == RunProgram && g_archives.empty() && !g_addDefaultArchives) {
 		g_addDefaultArchives = true;
 		if(g_outputDir.empty() && g_action == UnpakExtract) {
-			g_outputDir = fs::paths.user / "unpacked";
+			g_outputDir = fs::getUserDir() / "unpacked";
 		}
 	}
 	
@@ -279,10 +266,10 @@ int utf8_main(int argc, char ** argv) {
 			{ "speech.pak", "speech_default.pak" },
 		};
 		BOOST_FOREACH(const char * const * const filenames, default_paks) {
-			if(resources.addArchive(fs::paths.find(filenames[0]))) {
+			if(resources.addArchive(fs::findDataFile(filenames[0]))) {
 				continue;
 			}
-			if(filenames[1] && resources.addArchive(fs::paths.find(filenames[1]))) {
+			if(filenames[1] && resources.addArchive(fs::findDataFile(filenames[1]))) {
 				continue;
 			}
 			std::ostringstream oss;
@@ -292,20 +279,21 @@ int utf8_main(int argc, char ** argv) {
 			}
 			LogError << oss.str();
 		}
-		BOOST_REVERSE_FOREACH(const fs::path & base, fs::paths.data) {
+		BOOST_REVERSE_FOREACH(const fs::path & base, fs::getDataDirs()) {
 			addResourceDir(resources, base);
 		}
 	}
 	
 	if(status == RunProgram) {
 		BOOST_FOREACH(const fs::path & archive, g_archives) {
-			if(fs::is_regular_file(archive)) {
+			fs::FileType type = fs::get_type(archive);
+			if(type == fs::RegularFile) {
 				if(!resources.addArchive(archive)) {
 					LogCritical << "Could not open archive " << archive << "!";
 					status = ExitFailure;
 					break;
 				}
-			} else if(fs::is_directory(archive)) {
+			} else if(type == fs::Directory) {
 				addResourceDir(resources, archive);
 			} else {
 				LogCritical << "File or directory " << archive << " does not exist!";

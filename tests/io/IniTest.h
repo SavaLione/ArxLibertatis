@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2014-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -32,13 +32,11 @@ class IniTest : public CppUnit::TestFixture {
 	CPPUNIT_TEST_SUITE_END();
 	
 public:
-	IniTest()
-		: CppUnit::TestFixture()
-	{}
 	
 	void intTest();
 	void floatTest();
 	void boolTest();
+	
 };
 
 #endif // ARX_TESTS_IO_INITEST_H

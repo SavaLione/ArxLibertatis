@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-2017 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2015-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -83,7 +83,7 @@ void FloatingStones::DrawStone()
 	mat.setDepthTest(true);
 	mat.setBlendType(RenderMaterial::Screen);
 	
-	int	nb = 256;
+	int nb = 256;
 	while(nb--) {
 		T_STONE & s = m_tstone[nb];
 		
@@ -110,16 +110,17 @@ void FloatingStones::DrawStone()
 				pd->m_rotation = 0.0000001f;
 			}
 			
-			//update mvt
+			// Update mvt
 			if(!g_gameTime.isPaused()) {
 				a = (m_currframetime * 100) / s.time;
 				s.pos.y += s.yvel * a;
 				s.ang += s.angvel * a;
-				
 				s.yvel *= 1.f - (1.f / 100.f);
-				
 				s.currtime += m_currframetime;
 			}
+			
 		}
+		
 	}
+	
 }

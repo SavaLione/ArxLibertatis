@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2016 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -41,7 +41,7 @@ ZeniMax Media Inc., Suite 120, Rockville, Maryland 20850 USA.
 ===========================================================================
 */
 // Code: Cyril Meynier
-//       Sébastien Scieux	(JPEG & PNG)
+//       Sébastien Scieux (JPEG & PNG)
 //
 // Copyright (c) 1999 ARKANE Studios SA. All rights reserved
 
@@ -80,38 +80,11 @@ enum BatchBucket {
 	BatchBucket_Subtractive
 };
 
-struct SMY_ARXMAT
-{
+struct SMY_ARXMAT {
 	unsigned long uslStartVertex;
 	unsigned long uslNbVertex;
-
 	unsigned long offset[5];
 	unsigned long count[5];
-};
-
-struct RoomBatches {
-	size_t tMatRoomSize;
-	SMY_ARXMAT * tMatRoom;
-	
-	RoomBatches()
-		: tMatRoomSize(0)
-		, tMatRoom(NULL)
-	{ }
-};
-
-// TODO This RenderBatch class should contain a pointer to the TextureContainer used by the batch
-struct ModelBatch {
-	unsigned long max[5];
-	unsigned long count[5];
-	TexturedVertex * list[5];
-	
-	ModelBatch() {
-		for(size_t i = 0; i < ARRAY_SIZE(max); i++) {
-			max[i] = 0;
-			count[i] = 0;
-			list[i] = NULL;
-		}
-	}
 };
 
 /*!
@@ -124,11 +97,11 @@ class TextureContainer : private boost::noncopyable {
 public:
 	
 	enum TCFlag {
-		NoMipmap     = (1<<0),
-		NoInsert     = (1<<1),
-		Level        = (1<<2),
-		NoColorKey   = (1<<3),
-		Intensity    = (1<<4),
+		NoMipmap   = 1 << 0,
+		NoInsert   = 1 << 1,
+		Level      = 1 << 2,
+		NoColorKey = 1 << 3,
+		Intensity  = 1 << 4,
 	};
 	
 	DECLARE_FLAGS(TCFlag, TCFlags)
@@ -191,7 +164,7 @@ public:
 	
 	/*!
 	 * End of the image in texture coordinates (image size divided by stored size).
-	 * This is usually Vec2f_ONE but may differ if only power of two textures are supported.
+	 * This is usually Vec2f(1.f) but may differ if only power of two textures are supported.
 	 */
 	Vec2f uv;
 	
@@ -201,8 +174,8 @@ public:
 	TextureContainer * m_pNext; // Linked list ptr
 	TCFlags systemflags;
 	
-	RoomBatches m_roomBatches;
-	ModelBatch m_modelBatch;
+	std::vector<SMY_ARXMAT> m_roomBatches;
+	std::vector<TexturedVertex> m_modelBatch[5];
 	
 };
 

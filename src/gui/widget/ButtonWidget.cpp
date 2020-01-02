@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-2016 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2015-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -24,63 +24,29 @@
 #include "graphics/data/TextureContainer.h"
 #include "gui/menu/MenuCursor.h"
 #include "input/Input.h"
-#include "scene/GameSound.h"
 
-ButtonWidget::ButtonWidget(const Vec2f & pos, const Vec2f & size, const char * texturePath)
-	: Widget()
+ButtonWidget::ButtonWidget(const Vec2f & size, const res::path & texture)
+	: m_texture(TextureContainer::Load(texture))
 {
-	m_pos = pos;
-	m_size = size;
 	
-	m_id = BUTTON_INVALID; //TODO remove this
-	
-	m_texture = TextureContainer::Load(texturePath);
 	arx_assert(m_texture);
 	
-	Vec2f scaledPos = RATIO_2(pos);
-	Vec2f scaledSize = RATIO_2(m_size);
-	m_rect = Rectf(scaledPos, scaledSize.x, scaledSize.y);
+	m_rect = Rectf(size.x, size.y);
+	
 }
 
-ButtonWidget::~ButtonWidget() {
-}
+ButtonWidget::~ButtonWidget() { }
 
-void ButtonWidget::SetPos(Vec2f pos) {
+void ButtonWidget::render(bool mouseOver) {
 	
-	Vec2f scaledSize = RATIO_2(m_size);
-	m_rect = Rectf(pos, scaledSize.x, scaledSize.y);
-}
-
-bool ButtonWidget::OnMouseClick() {
+	UseRenderState state(render2D().blendAdditive());
 	
-	if(!enabled) {
-		return false;
-	}
+	Color color = m_enabled ? Color::white : Color::gray(0.25f);
 	
-	ARX_SOUND_PlayMenu(SND_MENU_CLICK);
-	
-	if(clicked) {
-		clicked();
-	}
-	
-	return false;
-}
-
-void ButtonWidget::Update() {
-}
-
-void ButtonWidget::Render() {
-	Color color = (bCheck) ? Color::white : Color(63, 63, 63, 255);
 	EERIEDrawBitmap(m_rect, 0, m_texture, color);
-}
-
-void ButtonWidget::RenderMouseOver() {
-
-	pMenuCursor->SetMouseOver();
 	
-	const Vec2f cursor = Vec2f(GInput->getMousePosition());
-	if(m_rect.contains(cursor)) {
-		UseRenderState state(render2D().blendAdditive());
-		Render();
+	if(mouseOver) {
+		EERIEDrawBitmap(m_rect, 0, m_texture, color);
 	}
+	
 }

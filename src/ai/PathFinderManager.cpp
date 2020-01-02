@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2017 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -65,8 +65,7 @@ ZeniMax Media Inc., Suite 120, Rockville, Maryland 20850 USA.
 
 static const float PATHFINDER_HEURISTIC_MIN = 0.2f;
 static const float PATHFINDER_HEURISTIC_MAX = PathFinder::HEURISTIC_MAX;
-static const float PATHFINDER_HEURISTIC_RANGE = PATHFINDER_HEURISTIC_MAX
-                                                - PATHFINDER_HEURISTIC_MIN;
+static const float PATHFINDER_HEURISTIC_RANGE = PATHFINDER_HEURISTIC_MAX - PATHFINDER_HEURISTIC_MIN;
 static const float PATHFINDER_DISTANCE_MAX = 5000.0f;
 
 // Pathfinder Definitions
@@ -135,7 +134,7 @@ void PathFinderThread::queueRequest(const PATHFINDER_REQUEST & request) {
 void PathFinderThread::run() {
 	
 	BackgroundData * eb = ACTIVEBKG;
-	PathFinder pathfinder(eb->nbanchors, eb->anchors, g_staticLightsMax, (EERIE_LIGHT **)g_staticLights);
+	PathFinder pathfinder(eb->m_anchors.size(), &eb->m_anchors[0], g_staticLightsMax, g_staticLights);
 	
 	for(; !isStopRequested(); m_busy = false, sleep(PATHFINDER_UPDATE_INTERVAL)) {
 		
@@ -161,7 +160,7 @@ void PathFinderThread::run() {
 		
 		float distance;
 		if(request.entity->_npcdata->behavior & (BEHAVIOUR_MOVE_TO | BEHAVIOUR_GO_HOME)) {
-			distance = fdist(ACTIVEBKG->anchors[request.from].pos, ACTIVEBKG->anchors[request.to].pos);
+			distance = fdist(ACTIVEBKG->m_anchors[request.from].pos, ACTIVEBKG->m_anchors[request.to].pos);
 		} else if(request.entity->_npcdata->behavior & (BEHAVIOUR_WANDER_AROUND | BEHAVIOUR_FLEE | BEHAVIOUR_HIDE)) {
 			distance = request.entity->_npcdata->behavior_param;
 		} else if(request.entity->_npcdata->behavior & BEHAVIOUR_LOOK_FOR) {
@@ -199,7 +198,7 @@ void PathFinderThread::run() {
 		}
 		
 		if(!result.empty()) {
-			long * list = (long*)malloc(result.size() * sizeof(long));
+			long * list = new long[result.size()];
 			std::copy(result.begin(), result.end(), list);
 			// TODO potential memory leak
 			request.entity->_npcdata->pathfind.list = list;

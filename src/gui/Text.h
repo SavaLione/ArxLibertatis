@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2016 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -72,10 +72,14 @@ void UNICODE_ARXDrawTextCenteredScroll(Font * font, float x, float y,
                                        PlatformDuration iTimeScroll, float fSpeed,
                                        int iNbLigne, PlatformDuration iTimeOut = PlatformDurationMs(INT_MAX));
 
-long ARX_UNICODE_ForceFormattingInRect(Font * font, const std::string & text, const Rect & _rRect);
+long ARX_UNICODE_ForceFormattingInRect(Font * font, std::string::const_iterator txtbegin,
+                                       std::string::const_iterator txtend, const Rect & rect,
+                                       bool noOneLineParagraphs = false);
 long ARX_UNICODE_DrawTextInRect(Font * font, const Vec2f & pos, float maxx, const std::string & text, Color col, const Rect * pClipRect = NULL);
 
 bool ARX_Text_Init();
+void ARX_Text_scaleBookFont(float scale, int weight);
+void ARX_Text_scaleNoteFont(float scale, int weight);
 void ARX_Text_Close();
 
 /*!
@@ -96,12 +100,9 @@ void drawTextCentered(Font * font, Vec2f center, const std::string & text,
  * \param pos    The position to draw the text at
  * \param text   The text to draw
  * \param color  The text color to use
- * \param text2  An optional secend line of text - this does not affect the position
- *               of the first line
- * \param color2 The text color to use for the second line
+ * \param offset Vertical offset for the rendered text
  */
 void drawTextAt(Font * font, const Vec3f & pos, const std::string & text,
-                Color color = Color::white, const std::string & text2 = std::string(),
-                Color color2 = Color::white);
+                Color color = Color::white, float offset = 0);
 
 #endif // ARX_GUI_TEXT_H

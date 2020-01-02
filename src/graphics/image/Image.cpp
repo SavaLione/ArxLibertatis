@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2016 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -25,7 +25,6 @@
 #include <limits>
 
 #include "graphics/image/stb_image.h"
-#include "graphics/image/stb_image_write.h"
 
 #include "graphics/Math.h"
 #include "io/fs/FilePath.h"
@@ -53,7 +52,7 @@ void Image::reset() {
 	m_format = Format_Unknown;
 }
 
-const Image & Image::operator=(const Image & other) {
+Image & Image::operator=(const Image & other) {
 	
 	// Ignore self copy!
 	if(&other == this) {
@@ -82,7 +81,7 @@ size_t Image::getNumChannels(Image::Format format) {
 		case Format_R8G8B8A8: return 4;
 		case Format_B8G8R8A8: return 4;
 		case Format_Unknown:  return 0;
-		case Format_Num: ARX_DEAD_CODE();
+		case Format_Num: arx_unreachable();
 	}
 	
 	return 0;
@@ -90,37 +89,31 @@ size_t Image::getNumChannels(Image::Format format) {
 
 bool Image::load(const res::path & filename) {
 	
-	size_t size = 0;
-	void * data = g_resources->readAlloc(filename, size);
-	
-	if(!data) {
+	std::string buffer = g_resources->read(filename);
+	if(buffer.empty()) {
 		return false;
 	}
 	
-	bool ret = load(data, size, filename.string().c_str());
-	
-	free(data);
-	
-	return ret;
+	return load(buffer.data(), buffer.size(), filename.string().c_str());
 }
 
-bool Image::load(void * data, size_t size, const char * file) {
+bool Image::load(const char * data, size_t size, const char * file) {
 	
 	if(!data) {
 		return false;
 	}
 	
-	arx_assert(size <= std::numeric_limits<int>::max());
+	arx_assert(size <= size_t(std::numeric_limits<int>::max()));
 	
 	int width, height, bpp, fmt, req_bpp = 0;
 	
 	// 2bpp TGAs needs to be converted!
-	int ret = stbi::stbi_info_from_memory((const stbi::stbi_uc *)data, int(size), &width, &height, &bpp, &fmt);
+	const stbi::stbi_uc * raw = reinterpret_cast<const stbi::stbi_uc *>(data);
+	int ret = stbi::stbi_info_from_memory(raw, int(size), &width, &height, &bpp, &fmt);
 	if(ret && fmt == stbi::STBI_tga && bpp == 2)
 		req_bpp = 3;
 	
-	unsigned char * pixels = stbi::stbi_load_from_memory((const stbi::stbi_uc *)data, int(size),
-	                                                     &width, &height, &bpp, req_bpp);
+	unsigned char * pixels = stbi::stbi_load_from_memory(raw, int(size), &width, &height, &bpp, req_bpp);
 	if(!pixels) {
 		std::ostringstream message;
 		message << "error loading image";
@@ -308,8 +301,8 @@ bool Image::copy(const Image & srcImage, size_t dstX, size_t dstY,
 	return true;
 }
 
-bool Image::copy(const Image & srcImage, size_t destX, size_t destY) {
-	return copy(srcImage, destX, destY, 0, 0, srcImage.getWidth(), srcImage.getHeight());
+bool Image::copy(const Image & srcImage, size_t dstX, size_t dstY) {
+	return copy(srcImage, dstX, dstY, 0, 0, srcImage.getWidth(), srcImage.getHeight());
 }
 
 void Image::applyGamma(float gamma) {
@@ -365,13 +358,13 @@ void Image::applyGamma(float gamma) {
 			for(size_t j = 0; j < numComponents; j++) {
 				// normalize the components by max component value
 				components[j] *= reciprocal;
-				data[j] = (unsigned char)components[j];
+				data[j] = static_cast<unsigned char>(components[j]);
 			}
 			
 		} else {
 			
 			for(size_t j = 0; j < numComponents; j++) {
-				data[j] = (unsigned char)components[j];
+				data[j] = static_cast<unsigned char>(components[j]);
 			}
 			
 		}
@@ -417,7 +410,7 @@ void extendImageRight<1>(u8 * in, size_t win, size_t wout, size_t h) {
 }
 
 template <size_t N>
-static void extendImageBottomRight(u8 * in, u8 * out, size_t win, size_t wout, size_t h) {
+static void extendImageBottomRight(const u8 * in, u8 * out, size_t win, size_t wout, size_t h) {
 	for(size_t y = 0; y < h; y++) {
 		for(size_t x = win; x < wout; x++, out += N) {
 			std::memcpy(out, in, N);
@@ -427,7 +420,7 @@ static void extendImageBottomRight(u8 * in, u8 * out, size_t win, size_t wout, s
 }
 
 template <>
-void extendImageBottomRight<1>(u8 * in, u8 * out, size_t win, size_t wout, size_t h) {
+void extendImageBottomRight<1>(const u8 * in, u8 * out, size_t win, size_t wout, size_t h) {
 	for(size_t y = 0; y < h; y++, out += wout) {
 		std::memset(out, *in, wout - win);
 	}
@@ -450,7 +443,7 @@ void Image::extendClampToEdgeBorder(const Image & src) {
 			case 2: extendImageRight<2>(in, src.getWidth(), getWidth(), src.getHeight()); break;
 			case 3: extendImageRight<3>(in, src.getWidth(), getWidth(), src.getHeight()); break;
 			case 4: extendImageRight<4>(in, src.getWidth(), getWidth(), src.getHeight()); break;
-			default: ARX_DEAD_CODE();
+			default: arx_unreachable();
 		}
 	}
 	
@@ -471,7 +464,7 @@ void Image::extendClampToEdgeBorder(const Image & src) {
 			case 2: extendImageBottomRight<2>(in, out, src.getWidth(), getWidth(), h); break;
 			case 3: extendImageBottomRight<3>(in, out, src.getWidth(), getWidth(), h); break;
 			case 4: extendImageBottomRight<4>(in, out, src.getWidth(), getWidth(), h); break;
-			default: ARX_DEAD_CODE();
+			default: arx_unreachable();
 		}
 	}
 }
@@ -493,8 +486,8 @@ bool Image::toGrayscale(Format newFormat) {
 	
 	for(size_t i = 0; i < newSize; i += dstNumChannels) {
 		unsigned char grayVal = (77 * src[0] + 151 * src[1] + 28 * src[2] + 128) >> 8;
-		for(size_t i = 0; i < dstNumChannels; i++) {
-			dst[i] = grayVal;
+		for(size_t j = 0; j < dstNumChannels; j++) {
+			dst[j] = grayVal;
 		}
 		src += srcNumChannels;
 		dst += dstNumChannels;
@@ -515,11 +508,11 @@ void Image::blur(size_t radius) {
 	size_t * kernel = new size_t[kernelSize];
 	size_t * mult = new size_t[kernelSize << 8];
 	
-	memset(kernel, 0, kernelSize*sizeof(*kernel));
-	memset(mult, 0, (kernelSize << 8)*sizeof(*mult));
+	memset(kernel, 0, kernelSize * sizeof(*kernel));
+	memset(mult, 0, (kernelSize << 8) * sizeof(*mult));
 	
 	kernel[kernelSize - 1] = 0;
-	for(size_t i = 1; i< radius; i++) {
+	for(size_t i = 1; i < radius; i++) {
 		size_t szi = radius - i;
 		kernel[radius + i] = kernel[szi] = szi * szi;
 		for(size_t j = 0; j < 256; j++) {
@@ -528,7 +521,7 @@ void Image::blur(size_t radius) {
 	}
 	
 	kernel[radius] = radius * radius;
-	for(int j = 0; j < 256; j++) {
+	for(size_t j = 0; j < 256; j++) {
 		mult[(radius << 8) + j] = kernel[radius] * j;
 	}
 	
@@ -564,7 +557,7 @@ void Image::blur(size_t radius) {
 			}
 			ri = ptrdiff_t(yi) + ptrdiff_t(xl);
 			for(size_t c = 0; c < numChannels; c++) {
-				blurredChannel[c][ri] = channelVals[c] / sum;
+				blurredChannel[c][ri] = u8(channelVals[c] / sum);
 			}
 		}
 		yi += getWidth();
@@ -591,7 +584,7 @@ void Image::blur(size_t radius) {
 				read += getWidth();
 			}
 			for(size_t c = 0; c < numChannels; c++) {
-				getData()[(xl + yi) * numChannels + c] = channelVals[c] / sum;
+				getData()[(xl + yi) * numChannels + c] = u8(channelVals[c] / sum);
 			}
 		}
 		yi += getWidth();
@@ -610,9 +603,9 @@ void Image::blur(size_t radius) {
 void Image::flipY() {
 	
 	size_t imageSize = getSize();
-	size_t lineSize = imageSize / getHeight();
+	size_t lineSize = getSize(getFormat(), getWidth(), 1);
 	
-	unsigned char * swapTmp = (unsigned char *)malloc(lineSize);
+	unsigned char * swapTmp = new unsigned char[lineSize];
 	arx_assert(swapTmp);
 	
 	unsigned char * top = getData();
@@ -628,25 +621,8 @@ void Image::flipY() {
 		bottom -= lineSize;
 	}
 	
-	free(swapTmp);
+	delete[] swapTmp;
 	
-}
-
-bool Image::save(const fs::path & filename) const {
-	
-	if(getFormat() >= Format_Unknown) {
-		return false;
-	}
-	
-	int ret = 0;
-	if(filename.ext() == ".bmp") {
-		ret = stbi::stbi_write_bmp(filename.string().c_str(), int(getWidth()), int(getHeight()),
-		                           int(getNumChannels()), getData());
-	} else {
-		LogError << "Unsupported file extension: " << filename.ext();
-	}
-	
-	return ret != 0;
 }
 
 std::ostream & operator<<(std::ostream & os, Image::Format format) {
@@ -659,7 +635,7 @@ std::ostream & operator<<(std::ostream & os, Image::Format format) {
 		case Image::Format_R8G8B8A8: return os << "RGBA";
 		case Image::Format_B8G8R8A8: return os << "BGRA";
 		case Image::Format_Unknown: return os << "(invalid)";
-		case Image::Format_Num: ARX_DEAD_CODE();
+		case Image::Format_Num: arx_unreachable();
 	}
 	return os;
 }

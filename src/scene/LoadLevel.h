@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2017 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -56,8 +56,6 @@ class Entity;
 namespace res { class path; }
 struct BackgroundData;
 
-extern Vec3f g_loddpos;
-
 bool DanaeLoadLevel(const res::path & file, bool loadEntities = true);
 void DanaeClearLevel();
 void RestoreLastLoadedLightning(BackgroundData & eb);
@@ -65,9 +63,6 @@ void RestoreLastLoadedLightning(BackgroundData & eb);
 extern long FAST_RELEASE;
 
 Entity * LoadInter_Ex(const res::path & classPath, EntityInstance instance,
-                      const Vec3f & pos, const Anglef & angle,
-                      const Vec3f & trans);
-
-extern Vec3f MSP;
+                      const Vec3f & pos, const Anglef & angle);
 
 #endif // ARX_SCENE_LOADLEVEL_H

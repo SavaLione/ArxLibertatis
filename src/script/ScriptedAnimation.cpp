@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2017 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -109,7 +109,7 @@ class ForceAnimCommand : public Command {
 		}
 		
 		FinishAnim(&io, layer0.cur_anim);
-		io.lastmove = Vec3f_ZERO;
+		io.lastmove = Vec3f(0.f);
 		ANIM_Set(layer0, ea);
 		layer0.flags |= EA_FORCEPLAY;
 		
@@ -168,7 +168,11 @@ class PlayAnimCommand : public Command {
 	
 	static void setNextAnim(Entity * io, ANIM_HANDLE * ea, AnimLayer & layer, bool loop, bool nointerpol) {
 		
-		if(IsDeadNPC(io)) {
+		if(!io) {
+			return;
+		}
+		
+		if(IsDeadNPC(*io)) {
 			return;
 		}
 		
@@ -214,7 +218,7 @@ public:
 			execute = test_flag(flg, 'e');
 			if(flg & flag('p')) {
 				iot = entities.player();
-				iot->move = iot->lastmove = Vec3f_ZERO;
+				iot->move = iot->lastmove = Vec3f(0.f);
 			}
 		}
 		
@@ -258,42 +262,29 @@ public:
 		
 		if(execute) {
 			
-			std::string timername = "anim_" + ARX_SCRIPT_Timer_GetDefaultName();
-			long num2 = ARX_SCRIPT_Timer_GetFree();
-			if(num2 < 0) {
-				ScriptError << "no free timer";
-				return Failed;
-			}
-			
 			size_t pos = context.skipCommand();
 			if(pos == size_t(-1)) {
 				ScriptWarning << "used -e flag without command to execute";
 				return Success;
 			}
 			
-			SCR_TIMER & timer = scr_timer[num2];
+			std::string timername = getDefaultScriptTimerName(context.getEntity(), "anim_timer");
 			
-			timer.reset();
-			ActiveTimers++;
+			SCR_TIMER & timer = createScriptTimer(context.getEntity(), timername);
 			timer.es = context.getScript();
-			timer.exist = 1;
-			timer.io = context.getEntity();
 			timer.interval = GameDurationMs(1000);
 			// Don't assume that we successfully set the animation - use the current animation
 			if(layer.cur_anim) {
-				arx_assert(layer.altidx_cur >= 0 && layer.altidx_cur < layer.cur_anim->alt_nb);
-				if(layer.cur_anim->anims[layer.altidx_cur]->anim_time > toAnimationDuration(timer.interval)) {
-					timer.interval = toGameDuration(layer.cur_anim->anims[layer.altidx_cur]->anim_time);
+				arx_assert(layer.altidx_cur < layer.cur_anim->anims.size());
+				if(layer.currentAltAnim()->anim_time > toAnimationDuration(timer.interval)) {
+					timer.interval = toGameDuration(layer.currentAltAnim()->anim_time);
 				}
 			}
-			timer.name = timername;
 			timer.pos = pos;
 			timer.start = g_gameTime.now();
 			timer.count = 1;
-			timer.longinfo = 0;
 			
-			DebugScript(": scheduled timer #" << num2 << ' ' << timername << " in "
-			            << toMsi(timer.interval) << "ms");
+			DebugScript(": scheduled timer " << timername << " in " << toMsi(timer.interval) << "ms");
 			
 		}
 		
@@ -471,7 +462,7 @@ public:
 		
 		Entity * io = context.getEntity();
 		if(name == "none") {
-			free(io->usepath);
+			delete io->usepath;
 			io->usepath = NULL;
 		} else {
 			
@@ -481,10 +472,10 @@ public:
 				return Failed;
 			}
 			
-			free(io->usepath);
+			delete io->usepath;
 			io->usepath = NULL;
 			
-			ARX_USE_PATH * aup = (ARX_USE_PATH *)malloc(sizeof(ARX_USE_PATH));
+			ARX_USE_PATH * aup = new ARX_USE_PATH;
 			aup->_starttime = aup->_curtime = g_gameTime.now();
 			aup->aupflags = ARX_USEPATH_FORWARD;
 			if(wormspecific) {
@@ -690,7 +681,7 @@ void initAnimationNumbers() {
 	
 }
 
-}
+} // anonymous namespace
 
 void setupScriptedAnimation() {
 	

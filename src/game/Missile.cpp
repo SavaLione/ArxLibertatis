@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2017 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -72,8 +72,8 @@ ZeniMax Media Inc., Suite 120, Rockville, Maryland 20850 USA.
 
 class TextureContainer;
 
-struct ARX_MISSILE
-{
+struct ARX_MISSILE {
+	
 	ARX_SPELLS_MISSILE_TYPE type;
 	Vec3f startpos;
 	Vec3f velocity;
@@ -81,8 +81,19 @@ struct ARX_MISSILE
 	GameInstant timecreation;
 	GameInstant lastupdate;
 	GameDuration tolive;
-	LightHandle	m_light;
+	LightHandle m_light;
 	EntityHandle owner;
+	
+	ARX_MISSILE()
+		: type(MISSILE_NONE)
+		, startpos(0.f)
+		, velocity(0.f)
+		, lastpos(0.f)
+		, timecreation(0)
+		, lastupdate(0)
+		, tolive(0)
+	{ }
+	
 };
 
 static const size_t MAX_MISSILES = 100;
@@ -142,7 +153,7 @@ void ARX_MISSILES_Spawn(Entity * io, ARX_SPELLS_MISSILE_TYPE type, const Vec3f &
 
 	float dist;
 
-	dist = 1.0F / fdist(startpos, targetpos);
+	dist = 1.f / fdist(startpos, targetpos);
 	missiles[i].velocity = (targetpos - startpos) * dist;
 	missiles[i].lastupdate = missiles[i].timecreation = g_gameTime.now();
 
@@ -163,8 +174,8 @@ void ARX_MISSILES_Spawn(Entity * io, ARX_SPELLS_MISSILE_TYPE type, const Vec3f &
 				light->pos = startpos;
 			}
 
-			ARX_SOUND_PlaySFX(SND_SPELL_FIRE_WIND, &missiles[i].startpos, 2.0F);
-			ARX_SOUND_PlaySFX(SND_SPELL_FIRE_LAUNCH, &missiles[i].startpos, 2.0F);
+			ARX_SOUND_PlaySFX(g_snd.SPELL_FIRE_WIND_LOOP, &missiles[i].startpos, 2.f);
+			ARX_SOUND_PlaySFX(g_snd.SPELL_FIRE_LAUNCH, &missiles[i].startpos, 2.f);
 		}
 	}
 }
@@ -195,9 +206,8 @@ void ARX_MISSILES_Update() {
 			case MISSILE_NONE:
 			break;
 			case MISSILE_FIREBALL: {
-				Vec3f pos;
-
-				pos = missiles[i].startpos + missiles[i].velocity * Vec3f(toMsf(framediff3));
+				
+				Vec3f pos = missiles[i].startpos + missiles[i].velocity * Vec3f(toMsf(framediff3));
 				
 				EERIE_LIGHT * light = lightHandleGet(missiles[i].m_light);
 				if(light) {
@@ -207,8 +217,8 @@ void ARX_MISSILES_Update() {
 				Vec3f orgn = missiles[i].lastpos;
 				Vec3f dest = pos;
 				
-				EERIEPOLY *ep = GetMinPoly(dest);
-				EERIEPOLY *epp = GetMaxPoly(dest);
+				EERIEPOLY * ep = GetMinPoly(dest);
+				EERIEPOLY * epp = GetMaxPoly(dest);
 				
 				bool hit = false;
 				
@@ -236,7 +246,7 @@ void ARX_MISSILES_Update() {
 					spawnFireHitParticle(dest, 0);
 					PolyBoomAddScorch(dest);
 					Add3DBoom(dest);
-					DoSphericDamage(Sphere(dest, 200.0F), 180.0F, DAMAGE_AREAHALF, DAMAGE_TYPE_FIRE | DAMAGE_TYPE_MAGICAL, EntityHandle());
+					DoSphericDamage(Sphere(dest, 200.f), 180.f, DAMAGE_AREAHALF, DAMAGE_TYPE_FIRE | DAMAGE_TYPE_MAGICAL, EntityHandle());
 					break;
 				}
 				

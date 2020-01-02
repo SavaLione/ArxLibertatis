@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2017 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2014-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -57,10 +57,10 @@ void SpeedSpell::Launch() {
 		m_target = m_caster;
 	}
 	
-	ARX_SOUND_PlaySFX(SND_SPELL_SPEED_START, &entities[m_target]->pos);
+	ARX_SOUND_PlaySFX(g_snd.SPELL_SPEED_START, &entities[m_target]->pos);
 	
 	if(m_target == EntityHandle_Player) {
-		m_snd_loop = ARX_SOUND_PlaySFX(SND_SPELL_SPEED_LOOP, &entities[m_target]->pos, 1.f, ARX_SOUND_PLAY_LOOPED);
+		m_snd_loop = ARX_SOUND_PlaySFX_loop(g_snd.SPELL_SPEED_LOOP, &entities[m_target]->pos, 1.f);
 	}
 	
 	if(m_caster == EntityHandle_Player) {
@@ -100,12 +100,12 @@ void SpeedSpell::End() {
 	
 	m_targets.clear();
 	
-	if(m_caster == EntityHandle_Player)
-		ARX_SOUND_Stop(m_snd_loop);
+	ARX_SOUND_Stop(m_snd_loop);
+	m_snd_loop = audio::SourcedSample();
 	
 	Entity * target = entities.get(m_target);
 	if(target) {
-		ARX_SOUND_PlaySFX(SND_SPELL_SPEED_END, &target->pos);
+		ARX_SOUND_PlaySFX(g_snd.SPELL_SPEED_END, &target->pos);
 	}
 	
 	for(size_t i = 0; i < m_trails.size(); i++) {
@@ -138,9 +138,10 @@ Vec3f SpeedSpell::getPosition() {
 
 void DispellIllusionSpell::Launch() {
 	
-	ARX_SOUND_PlaySFX(SND_SPELL_DISPELL_ILLUSION);
+	ARX_SOUND_PlaySFX(g_snd.SPELL_DISPELL_ILLUSION);
 	
 	m_duration = GameDurationMs(1000);
+	m_hasDuration = true;
 	
 	for(size_t n = 0; n < MAX_SPELLS; n++) {
 		SpellBase * spell = spells[SpellHandle(n)];
@@ -166,21 +167,17 @@ void DispellIllusionSpell::Launch() {
 }
 
 
-void DispellIllusionSpell::Update() {
-	
-}
+void DispellIllusionSpell::Update() { }
 
 
 FireballSpell::FireballSpell()
-	: SpellBase()
+	: eCurPos(0.f)
+	, eMove(0.f)
 	, bExplo(false)
 	, m_createBallDuration(GameDurationMs(2000))
-{
-}
+{ }
 
-FireballSpell::~FireballSpell() {
-	
-}
+FireballSpell::~FireballSpell() { }
 
 void FireballSpell::Launch() {
 	
@@ -191,12 +188,9 @@ void FireballSpell::Launch() {
 		m_hand_group = ActionPoint();
 	}
 	
-	Vec3f target;
-	if(m_hand_group != ActionPoint()) {
-		target = m_hand_pos;
-	} else {
+	Vec3f target = m_hand_pos;
+	if(m_hand_group == ActionPoint()) {
 		target = m_caster_pos;
-		
 		Entity * c = entities.get(m_caster);
 		if(c) {
 			if(c->ioflags & IO_NPC) {
@@ -233,13 +227,15 @@ void FireballSpell::Launch() {
 	
 	eMove = angleToVector(Anglef(anglea, angleb, 0.f)) * 80.f;
 	
-	ARX_SOUND_PlaySFX(SND_SPELL_FIRE_LAUNCH, &m_caster_pos);
-	m_snd_loop = ARX_SOUND_PlaySFX(SND_SPELL_FIRE_WIND, &m_caster_pos, 1.f, ARX_SOUND_PLAY_LOOPED);
+	ARX_SOUND_PlaySFX(g_snd.SPELL_FIRE_LAUNCH, &m_caster_pos);
+	m_snd_loop = ARX_SOUND_PlaySFX_loop(g_snd.SPELL_FIRE_WIND_LOOP, &m_caster_pos, 1.f);
 }
 
 void FireballSpell::End() {
 	
 	ARX_SOUND_Stop(m_snd_loop);
+	m_snd_loop = audio::SourcedSample();
+	
 	endLightDelayed(m_light, GameDurationMs(500));
 }
 
@@ -280,7 +276,7 @@ void FireballSpell::Update() {
 				Vec3f * p1 = &eCurPos;
 				Vec3f p2 = entities[io->targetinfo]->pos;
 				p2.y -= 60.f;
-				afAlpha = 360.f - (glm::degrees(getAngle(p1->y, p1->z, p2.y, p2.z + glm::distance(Vec2f(p2.x, p2.z), Vec2f(p1->x, p1->z))))); //alpha entre orgn et dest;
+				afAlpha = 360.f - (glm::degrees(getAngle(p1->y, p1->z, p2.y, p2.z + glm::distance(Vec2f(p2.x, p2.z), Vec2f(p1->x, p1->z)))));
 			}
 		}
 		
@@ -304,12 +300,8 @@ void FireballSpell::Update() {
 		SpawnFireballTail(eCurPos, eMove, m_level, 0);
 	} else {
 		if(Random::getf() < 0.9f) {
-			Vec3f move = Vec3f_ZERO;
-			float dd = m_elapsed / m_createBallDuration * 10;
-			
-			dd = glm::clamp(dd, 1.f, m_level);
-			
-			SpawnFireballTail(eCurPos, move, dd, 1);
+			float dd = glm::clamp(m_elapsed / m_createBallDuration * 10, 1.f, m_level);
+			SpawnFireballTail(eCurPos, Vec3f(0.f), dd, 1);
 		}
 	}
 	
@@ -320,34 +312,28 @@ void FireballSpell::Update() {
 		LaunchFireballBoom(eCurPos, m_level);
 		
 		eMove *= 0.5f;
-		//SetTTL(1500);
 		bExplo = true;
 		
-		//m_duration = std::min(ulCurrentTime + 1500, m_duration);
-		
 		DoSphericDamage(Sphere(eCurPos, 30.f * m_level), 3.f * m_level, DAMAGE_AREA, DAMAGE_TYPE_FIRE | DAMAGE_TYPE_MAGICAL, m_caster);
-		m_duration = 0;
-		ARX_SOUND_PlaySFX(SND_SPELL_FIRE_HIT, &sphere.origin);
+		ARX_SOUND_PlaySFX(g_snd.SPELL_FIRE_HIT, &sphere.origin);
 		ARX_NPC_SpawnAudibleSound(sphere.origin, entities[m_caster]);
+		requestEnd();
 	}
 	
 	ARX_SOUND_RefreshPosition(m_snd_loop, eCurPos);
 }
 
 Vec3f FireballSpell::getPosition() {
-	
 	return eCurPos;
 }
 
-
-
 CreateFoodSpell::CreateFoodSpell()
-	: SpellBase()
-{}
+	: m_pos(0.f)
+{ }
 
 void CreateFoodSpell::Launch() {
 	
-	ARX_SOUND_PlaySFX(SND_SPELL_CREATE_FOOD, &m_caster_pos);
+	ARX_SOUND_PlaySFX(g_snd.SPELL_CREATE_FOOD, &m_caster_pos);
 	
 	m_duration = (m_launchDuration >= 0) ? m_launchDuration : GameDurationMs(3500);
 	m_hasDuration = true;
@@ -364,9 +350,7 @@ void CreateFoodSpell::Launch() {
 	m_particles.SetParams(g_particleParameters[ParticleParam_CreateFood]);
 }
 
-void CreateFoodSpell::End() {
-	
-}
+void CreateFoodSpell::End() { }
 
 void CreateFoodSpell::Update() {
 	
@@ -376,7 +360,7 @@ void CreateFoodSpell::Update() {
 	
 	if(timeRemaining < GameDurationMs(1500)) {
 		m_particles.m_parameters.m_spawnFlags = PARTICLE_CIRCULAR;
-		m_particles.m_parameters.m_gravity = Vec3f_ZERO;
+		m_particles.m_parameters.m_gravity = Vec3f(0.f);
 		
 		std::list<Particle *>::iterator i;
 		
@@ -401,15 +385,14 @@ void CreateFoodSpell::Update() {
 
 
 IceProjectileSpell::IceProjectileSpell()
-	: SpellBase()
-	, iNumber(0)
+	: iNumber(0)
 	, tex_p1(NULL)
 	, tex_p2(NULL)
 { }
 
 void IceProjectileSpell::Launch() {
 	
-	ARX_SOUND_PlaySFX(SND_SPELL_ICE_PROJECTILE_LAUNCH, &m_caster_pos);
+	ARX_SOUND_PlaySFX(g_snd.SPELL_ICE_PROJECTILE_LAUNCH, &m_caster_pos);
 	
 	m_duration = GameDurationMs(4200);
 	m_hasDuration = true;
@@ -475,7 +458,7 @@ void IceProjectileSpell::Launch() {
 			randomRange = 40;
 		}
 
-		icicle.size = Vec3f_ZERO;
+		icicle.size = Vec3f(0.f);
 		icicle.sizeMax = arx::randomVec() + Vec3f(0.f, 0.2f, 0.f);
 		icicle.sizeMax = glm::max(icicle.sizeMax, minSize);
 		
@@ -551,9 +534,9 @@ void IceProjectileSpell::Update() {
 				pd->ov = icicle.pos + arx::randomVec(-5.f, 5.f);
 				pd->move = arx::randomVec(-2.f, 2.f);
 				pd->siz = 20.f;
-				float t = std::min(Random::getf(2000.f, 4000.f),
-				                   toMsf(m_duration - m_elapsed) + Random::getf(0.f, 500.0f));
-				pd->tolive = checked_range_cast<u32>(t);
+				float tolive = std::min(Random::getf(2000.f, 4000.f),
+				                        toMsf(m_duration - m_elapsed) + Random::getf(0.f, 500.0f));
+				pd->tolive = checked_range_cast<u32>(tolive);
 				pd->tc = tex_p2;
 				pd->m_flags = FADE_IN_AND_OUT | ROTATING | DISSIPATING;
 				pd->m_rotation = 0.0000001f;
@@ -567,9 +550,9 @@ void IceProjectileSpell::Update() {
 				pd->ov = icicle.pos + arx::randomVec(-5.f, 5.f) - Vec3f(0.f, 50.f, 0.f);
 				pd->move = Vec3f(0.f, Random::getf(-2.f, 2.f), 0.f);
 				pd->siz = 0.5f;
-				float t = std::min(Random::getf(2000.f, 3000.f),
-				              toMsf(m_duration - m_elapsed) + Random::getf(0.f, 500.0f));
-				pd->tolive = checked_range_cast<u32>(t);
+				float tolive = std::min(Random::getf(2000.f, 3000.f),
+				                        toMsf(m_duration - m_elapsed) + Random::getf(0.f, 500.0f));
+				pd->tolive = checked_range_cast<u32>(tolive);
 				pd->tc = tex_p1;
 				pd->m_flags = FADE_IN_AND_OUT | ROTATING | DISSIPATING;
 				pd->m_rotation = 0.0000001f;

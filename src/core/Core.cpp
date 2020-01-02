@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2017 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -65,9 +65,9 @@ ZeniMax Media Inc., Suite 120, Rockville, Maryland 20850 USA.
 
 #include "animation/Animation.h"
 #include "animation/AnimationRender.h"
-#include "animation/Intro.h"
 
 #include "cinematic/Cinematic.h"
+#include "cinematic/CinematicLoad.h"
 #include "cinematic/CinematicKeyframer.h"
 
 #include "core/Application.h"
@@ -78,6 +78,7 @@ ZeniMax Media Inc., Suite 120, Rockville, Maryland 20850 USA.
 #include "core/GameTime.h"
 #include "core/Version.h"
 
+#include "game/Camera.h"
 #include "game/Damage.h"
 #include "game/EntityManager.h"
 #include "game/Equipment.h"
@@ -91,15 +92,6 @@ ZeniMax Media Inc., Suite 120, Rockville, Maryland 20850 USA.
 #include "game/spell/FlyingEye.h"
 #include "game/spell/Cheat.h"
 #include "game/effect/Quake.h"
-
-#include "gui/Hud.h"
-#include "gui/LoadLevelScreen.h"
-#include "gui/Menu.h"
-#include "gui/MenuWidgets.h"
-#include "gui/Speech.h"
-#include "gui/MiniMap.h"
-#include "gui/TextManager.h"
-
 #include "graphics/BaseGraphicsTypes.h"
 #include "graphics/Draw.h"
 #include "graphics/DrawLine.h"
@@ -117,13 +109,22 @@ ZeniMax Media Inc., Suite 120, Rockville, Maryland 20850 USA.
 #include "graphics/image/Image.h"
 #include "graphics/particle/ParticleEffects.h"
 #include "graphics/particle/ParticleManager.h"
+#include "graphics/particle/ParticleTextures.h"
 #include "graphics/particle/MagicFlare.h"
 #include "graphics/particle/Spark.h"
 #include "graphics/texture/TextureStage.h"
 
 #include "gui/Cursor.h"
+#include "gui/Hud.h"
 #include "gui/Interface.h"
+#include "gui/LoadLevelScreen.h"
+#include "gui/Menu.h"
+#include "gui/MenuWidgets.h"
+#include "gui/Speech.h"
+#include "gui/MiniMap.h"
 #include "gui/Text.h"
+#include "gui/TextManager.h"
+#include "gui/debug/DebugKeys.h"
 
 #include "input/Input.h"
 #include "input/Keyboard.h"
@@ -132,7 +133,6 @@ ZeniMax Media Inc., Suite 120, Rockville, Maryland 20850 USA.
 #include "io/fs/SystemPaths.h"
 #include "io/resource/ResourcePath.h"
 #include "io/resource/PakReader.h"
-#include "cinematic/CinematicLoad.h"
 #include "io/Screenshot.h"
 #include "io/log/Logger.h"
 
@@ -165,27 +165,25 @@ class TextManager;
 
 Image savegame_thumbnail;
 
-extern TextManager	*pTextManage;
-
-extern long		DONT_WANT_PLAYER_INZONE;
+extern long DONT_WANT_PLAYER_INZONE;
 
 //-----------------------------------------------------------------------------
 
-ParticleManager	*pParticleManager = NULL;
-
-TextureContainer *	GoldCoinsTC[MAX_GOLD_COINS_VISUALS]; // Gold Coins Icons
+TextureContainer * GoldCoinsTC[MAX_GOLD_COINS_VISUALS]; // Gold Coins Icons
 
 Vec2s DANAEMouse;
 Vec3f g_moveto;
-Vec3f Mscenepos;
-Vec3f lastteleport;
 EERIE_3DOBJ * GoldCoinsObj[MAX_GOLD_COINS_VISUALS];// 3D Objects For Gold Coins
-EERIE_3DOBJ	* arrowobj=NULL;			// 3D Object for arrows
-EERIE_3DOBJ * cameraobj=NULL;			// Camera 3D Object		// NEEDTO: Remove for Final
-EERIE_3DOBJ * markerobj=NULL;			// Marker 3D Object		// NEEDTO: Remove for Final
+EERIE_3DOBJ * arrowobj = NULL; // 3D Object for arrows
+EERIE_3DOBJ * cameraobj = NULL; // Camera 3D Object // NEEDTO: Remove for Final
+EERIE_3DOBJ * markerobj = NULL; // Marker 3D Object // NEEDTO: Remove for Final
 
-Vec2s STARTDRAG;
-Entity * COMBINE=NULL;
+Vec2s g_dragStartPos;
+Entity * COMBINE = NULL;
+
+bool GMOD_RESET = true;
+
+Vec3f LastValidPlayerPos;
 
 // START - Information for Player Teleport between/in Levels-------------------------------------
 std::string TELEPORT_TO_LEVEL;
@@ -202,15 +200,8 @@ Rect g_size(640, 480);
 Vec2f g_sizeRatio(1.f, 1.f);
 
 bool REQUEST_SPEECH_SKIP = false;
-long CURRENTLEVEL		= -1;
+long CURRENTLEVEL = -1;
 bool DONT_ERASE_PLAYER = false;
-bool FASTmse = false;
-
-//-----------------------------------------------------------------------------
-// EDITOR FLAGS/Vars
-//-----------------------------------------------------------------------------
-// Flag used to Launch Moulinex
-bool LOADEDD = false; // Is a Level Loaded ?
 
 ChangeLevelIcon CHANGE_LEVEL_ICON = NoChangeLevel;
 
@@ -225,21 +216,6 @@ static long LAST_WEAPON_TYPE = -1;
 
 float PULSATE;
 
-extern EERIE_CAMERA * ACTIVECAM;
-
-
-bool g_debugToggles[10];
-bool g_debugTriggers[10];
-PlatformInstant g_debugTriggersTime[10] = { 0 };
-float g_debugValues[10];
-
-// Sends ON GAME_READY msg to all IOs
-void SendGameReadyMsg()
-{
-	LogDebug("SendGameReadyMsg");
-	SendMsgToAllIO(SM_GAME_READY);
-}
-
 bool AdjustUI() {
 	
 	// Sets Danae Screen size depending on windowed/full-screen state
@@ -247,8 +223,8 @@ bool AdjustUI() {
 		
 	// Computes X & Y screen ratios compared to a standard 640x480 screen
 	
-	g_sizeRatio.x = g_size.width() * ( 1.0f / 640 );
-	g_sizeRatio.y = g_size.height() * ( 1.0f / 480 );
+	g_sizeRatio.x = float(g_size.width()) / 640.f;
+	g_sizeRatio.y = float(g_size.height()) / 480.f;
 	
 	if(!ARX_Text_Init()) {
 		return false;
@@ -277,32 +253,25 @@ void runGame() {
 	}
 }
 
-
-//*************************************************************************************
-// Entity * FlyingOverObject(EERIE_S2D * pos)
-//-------------------------------------------------------------------------------------
-// FUNCTION/RESULT:
-//   Returns IO under cursor, be it in inventories or in scene
-//   Returns NULL if no IO under cursor
-//*************************************************************************************
-Entity * FlyingOverObject(const Vec2s & pos)
-{
-	Entity* io = NULL;
-
+Entity * FlyingOverObject(const Vec2s & pos) {
+	
 	// TODO do this properly!
 	if(player.torch && eMouseState == MOUSE_IN_TORCH_ICON) {
 		return player.torch;
 	}
 	
-	if((io = GetFromInventory(pos).first) != NULL)
-		return io;
-
-	if(InInventoryPos(pos))
+	if(Entity * entity = GetFromInventory(pos).first) {
+		return entity;
+	}
+	
+	if(InInventoryPos(pos)) {
 		return NULL;
-
-	if((io = InterClick(pos)) != NULL)
-		return io;
-
+	}
+	
+	if(Entity * entity = InterClick(pos)) {
+		return entity;
+	}
+	
 	return NULL;
 }
 
@@ -320,14 +289,11 @@ static void PlayerLaunchArrow_Test(float aimratio, float poisonous, const Vec3f 
 	float wd = getEquipmentBaseModifier(IO_EQUIPITEM_ELEMENT_Damages);
 	// TODO Why ignore relative modifiers? Why not just use player.Full_damages?
 	
-	float damages = wd * (1.f + (player.m_skillFull.projectile + player.m_attributeFull.dexterity) * (1.f/50));
+	float damages = wd * (1.f + (player.m_skillFull.projectile + player.m_attributeFull.dexterity) * 0.02f);
 
 	ARX_THROWN_OBJECT_Throw(EntityHandle_Player, position, vect, quat, velocity, damages, poisonous);
 }
 
-//*************************************************************************************
-// Switches from/to Game Mode/Editor Mode
-//*************************************************************************************
 void SetEditMode() {
 	
 	LAST_JUMP_ENDTIME = 0;
@@ -346,35 +312,28 @@ void SetEditMode() {
 	
 }
 
-
-bool GMOD_RESET = true;
-
-Vec3f LastValidPlayerPos;
-Vec3f	WILL_RESTORE_PLAYER_POSITION;
-bool WILL_RESTORE_PLAYER_POSITION_FLAG = false;
-
 void levelInit() {
 	
 	arx_assert(entities.player());
 	
 	LogDebug("Initializing level ...");
 	
+	g_particleTextures.init();
 	ARX_PARTICLES_FirstInit();
 	g_renderBatcher.reset();
 	
 	progressBarAdvance(2.f);
 	LoadLevelScreen();
 	
-	if(!pParticleManager)
-		pParticleManager = new ParticleManager();
-
+	g_particleManager.Clear();
+	
 	if(GMOD_RESET)
 		ARX_GLOBALMODS_Reset();
 
 	GMOD_RESET = true;
 	
-	STARTDRAG = Vec2s_ZERO;
-	DANAEMouse = Vec2s_ZERO;
+	g_dragStartPos = Vec2s(0);
+	DANAEMouse = Vec2s(0);
 	
 	PolyBoomClear();
 	ARX_DAMAGES_Reset();
@@ -384,16 +343,16 @@ void levelInit() {
 	
 	ARX_PARTICLES_ClearAll();
 	ParticleSparkClear();
-
+	
 	if(LOAD_N_ERASE) {
 		CleanScriptLoadedIO();
 		RestoreInitialIOStatus();
-		DRAGINTER=NULL;
+		DRAGINTER = NULL;
 	}
-
+	
 	ARX_SPELLS_ResetRecognition();
 	
-	eyeball.exist=0;
+	eyeball.exist = 0;
 	
 	resetDynLights();
 	
@@ -403,13 +362,13 @@ void levelInit() {
 		UnlinkAllLinkedObjects();
 		ARX_SCRIPT_ResetAll(false);
 	}
-
-	SecondaryInventory=NULL;
-	TSecondaryInventory=NULL;
+	
+	SecondaryInventory = NULL;
+	TSecondaryInventory = NULL;
 	ARX_FOGS_Render();
-
+	
 	if(LOAD_N_ERASE) {
-
+		
 		if(!DONT_ERASE_PLAYER)
 			ARX_PLAYER_InitPlayer();
 
@@ -422,32 +381,17 @@ void levelInit() {
 		}
 	}
 	
-	InitSnapShot(fs::paths.user / "snapshot");
+	InitSnapShot(fs::getUserDir() / "snapshot");
 	
-	
-	if(FASTmse) {
-		FASTmse = false;
-		if(LOADEDD) {
-			Vec3f trans = Mscenepos;
-			player.pos = g_loddpos + trans;
-		} else {
-			player.pos.y += player.baseHeight();
-		}
-		progressBarAdvance(4.f);
-		LoadLevelScreen();
-	} else {
-		progressBarAdvance(4.f);
-		LoadLevelScreen();
-	}
+	progressBarAdvance(4.f);
+	LoadLevelScreen();
 
 	if(player.torch) {
-		ARX_SOUND_PlaySFX(SND_TORCH_LOOP, NULL, 1.0F, ARX_SOUND_PLAY_LOOPED);
+		player.torch_loop = ARX_SOUND_PlaySFX_loop(g_snd.TORCH_LOOP, NULL, 1.f);
 	}
 	
-	lastteleport = player.basePosition();
-	subj.orgTrans.pos = g_moveto = player.pos;
-
-	subj.angle = player.angle;
+	g_playerCamera.m_pos = g_moveto = player.pos;
+	g_playerCamera.angle = player.angle;
 	
 	RestoreLastLoadedLightning(*ACTIVEBKG);
 
@@ -469,9 +413,8 @@ void levelInit() {
 
 	progressBarAdvance();
 	LoadLevelScreen();
-
+	
 	PrepareIOTreatZone(1);
-	CURRENTLEVEL=GetLevelNumByName(LastLoadedScene.string());
 	
 	progressBarAdvance();
 	LoadLevelScreen();
@@ -489,24 +432,16 @@ void levelInit() {
 	ARX_PLAYER_RectifyPosition();
 
 	entities.player()->_npcdata->vvpos = -99999;
-
-	SendGameReadyMsg();
+	
+	SendMsgToAllIO(NULL, SM_GAME_READY);
+	
 	PLAYER_MOUSELOOK_ON = false;
-	player.Interface &= ~INTER_NOTE;
-
+	
+	g_note.clear();
+	
 	EntityHandle t = entities.getById("seat_stool1_0012");
 	if(ValidIONum(t)) {
 		entities[t]->ioflags |= IO_FORCEDRAW;
-	}
-	
-	if(WILL_RESTORE_PLAYER_POSITION_FLAG) {
-		Entity * io = entities.player();
-		player.pos = WILL_RESTORE_PLAYER_POSITION;
-		io->pos = player.basePosition();
-		for(size_t i = 0; i < io->obj->vertexlist.size(); i++) {
-			io->obj->vertexWorldPositions[i].v = io->obj->vertexlist[i].v + io->pos;
-		}
-		WILL_RESTORE_PLAYER_POSITION_FLAG = false;
 	}
 	
 	ARX_NPC_RestoreCuts();
@@ -517,48 +452,42 @@ void levelInit() {
 	LoadLevelScreen();
 	LoadLevelScreen(-2);
 	
-	if (	(!CheckInPoly(player.pos))
-		&&	(LastValidPlayerPos.x!=0.f)
-		&&	(LastValidPlayerPos.y!=0.f)
-		&&	(LastValidPlayerPos.z!=0.f)) {
+	if(!CheckInPoly(player.pos) && LastValidPlayerPos.x != 0.f
+	   && LastValidPlayerPos.y != 0.f && LastValidPlayerPos.z != 0.f) {
 		player.pos = LastValidPlayerPos;
 	}
-
+	
 	LastValidPlayerPos = player.pos;
-
+	
 	g_platformTime.updateFrame();
 	
 	g_gameTime.resume(GameTime::PauseInitial | GameTime::PauseMenu);
 }
 
-//*************************************************************************************
-
 void ManageNONCombatModeAnimations() {
 	arx_assert(entities.player());
 	
-	Entity *io = entities.player();
-
+	Entity * io = entities.player();
+	
 	AnimLayer & layer3 = io->animlayer[3];
-	ANIM_HANDLE ** alist=io->anims;
-
+	ANIM_HANDLE ** alist = io->anims;
+	
 	if(player.m_currentMovement & (PLAYER_LEAN_LEFT | PLAYER_LEAN_RIGHT))
 		return;
-
+	
 	if(ValidIONum(player.equiped[EQUIP_SLOT_SHIELD]) && !BLOCK_PLAYER_CONTROLS) {
-		if ( (layer3.cur_anim==NULL)  ||
-			( (layer3.cur_anim!=alist[ANIM_SHIELD_CYCLE])
-			&& (layer3.cur_anim!=alist[ANIM_SHIELD_HIT])
-			&& (layer3.cur_anim!=alist[ANIM_SHIELD_START]) ) )
-		{
+		if(layer3.cur_anim == NULL || (layer3.cur_anim != alist[ANIM_SHIELD_CYCLE]
+		                               && layer3.cur_anim != alist[ANIM_SHIELD_HIT]
+		                               && layer3.cur_anim != alist[ANIM_SHIELD_START])) {
 			changeAnimation(io, 3, alist[ANIM_SHIELD_START]);
-		} else if(layer3.cur_anim==alist[ANIM_SHIELD_START] && (layer3.flags & EA_ANIMEND)) {
+		} else if(layer3.cur_anim == alist[ANIM_SHIELD_START] && (layer3.flags & EA_ANIMEND)) {
 			changeAnimation(io, 3, alist[ANIM_SHIELD_CYCLE], EA_LOOP);
 		}
 	} else {
-		if(layer3.cur_anim==alist[ANIM_SHIELD_CYCLE]) {
+		if(layer3.cur_anim == alist[ANIM_SHIELD_CYCLE]) {
 			changeAnimation(io, 3, alist[ANIM_SHIELD_END]);
 		} else if(layer3.cur_anim == alist[ANIM_SHIELD_END] && (layer3.flags & EA_ANIMEND)) {
-			layer3.cur_anim=NULL;
+			layer3.cur_anim = NULL;
 		}
 	}
 }
@@ -569,11 +498,7 @@ static bool StrikeAimtime() {
 	
 	player.m_strikeAimRatio = glm::clamp(player.m_aimTime / player.Full_AimTime, 0.1f, 1.0f);
 	
-	if(player.m_strikeAimRatio > 0.8f) {
-		return true;
-	}
-	
-	return false;
+	return (player.m_strikeAimRatio > 0.8f);
 }
 
 static void strikeSpeak(Entity * io) {
@@ -596,18 +521,18 @@ static void strikeSpeak(Entity * io) {
 }
 
 void ManageCombatModeAnimations() {
+	
 	arx_assert(entities.player());
-		
-
+	
 	if(player.m_aimTime > 0) {
 		player.m_aimTime += g_platformTime.lastFrameDuration();
 	}
-
+	
 	Entity * const io = entities.player();
 	
 	AnimLayer & layer1 = io->animlayer[1];
 	
-	ANIM_HANDLE ** alist=io->anims;
+	ANIM_HANDLE ** alist = io->anims;
 	WeaponType weapontype = ARX_EQUIPMENT_GetPlayerWeaponType();
 	
 	if(weapontype == WEAPON_BARE && LAST_WEAPON_TYPE != weapontype) {
@@ -629,28 +554,27 @@ void ManageCombatModeAnimations() {
 			
 			// Now go for strike cycle...
 			for(long j = 0; j < 4; j++) {
-				if(layer1.cur_anim == alist[ANIM_BARE_STRIKE_LEFT_START+j*3] && (layer1.flags & EA_ANIMEND)) {
+				if(layer1.cur_anim == alist[ANIM_BARE_STRIKE_LEFT_START + j * 3] && (layer1.flags & EA_ANIMEND)) {
 					changeAnimation(io, 1, alist[ANIM_BARE_STRIKE_LEFT_CYCLE + j * 3], EA_LOOP);
 					player.m_aimTime = PlatformDuration::ofRaw(1);
-				} else if(layer1.cur_anim == alist[ANIM_BARE_STRIKE_LEFT_CYCLE+j*3] && !eeMousePressed1()) {
+				} else if(layer1.cur_anim == alist[ANIM_BARE_STRIKE_LEFT_CYCLE + j * 3] && !eeMousePressed1()) {
 					changeAnimation(io, 1, alist[ANIM_BARE_STRIKE_LEFT + j * 3]);
 					strikeSpeak(io);
-					SendIOScriptEvent(io, SM_STRIKE, "bare");
+					SendIOScriptEvent(NULL, io, SM_STRIKE, "bare");
 					player.m_weaponBlocked = AnimationDuration::ofRaw(-1); // TODO inband signaling AnimationDuration
 					player.m_strikeDirection = 0;
 					player.m_aimTime = 0;
-				} else if(layer1.cur_anim == alist[ANIM_BARE_STRIKE_LEFT+j*3]) {
+				} else if(layer1.cur_anim == alist[ANIM_BARE_STRIKE_LEFT + j * 3]) {
 					if(layer1.flags & EA_ANIMEND) {
 						changeAnimation(io, 1, alist[ANIM_BARE_WAIT], EA_LOOP);
 						player.m_strikeDirection = 0;
 						player.m_aimTime = PlatformDuration::ofRaw(1);
 						player.m_weaponBlocked = AnimationDuration::ofRaw(-1);
-					} else if( layer1.ctime > layer1.cur_anim->anims[layer1.altidx_cur]->anim_time * 0.2f
-					        && layer1.ctime < layer1.cur_anim->anims[layer1.altidx_cur]->anim_time * 0.8f
-							&& player.m_weaponBlocked == AnimationDuration::ofRaw(-1)
-					) {
-						ActionPoint id = ActionPoint();
+					} else if( layer1.ctime > layer1.currentAltAnim()->anim_time * 0.2f
+					        && layer1.ctime < layer1.currentAltAnim()->anim_time * 0.8f
+					        && player.m_weaponBlocked == AnimationDuration::ofRaw(-1)) {
 						
+						ActionPoint id = ActionPoint();
 						if(layer1.cur_anim == alist[ANIM_BARE_STRIKE_LEFT]) {
 							id = io->obj->fastaccess.left_attach;
 						} else { // Strike Right
@@ -700,18 +624,18 @@ void ManageCombatModeAnimations() {
 			
 			// Now go for strike cycle...
 			for(long j = 0; j < 4; j++) {
-				if(layer1.cur_anim == alist[ANIM_DAGGER_STRIKE_LEFT_START+j*3] && (layer1.flags & EA_ANIMEND)) {
+				if(layer1.cur_anim == alist[ANIM_DAGGER_STRIKE_LEFT_START + j * 3] && (layer1.flags & EA_ANIMEND)) {
 					changeAnimation(io, 1, alist[ANIM_DAGGER_STRIKE_LEFT_CYCLE + j * 3], EA_LOOP);
 					player.m_aimTime = PlatformDuration::ofRaw(1);
-				} else if(layer1.cur_anim == alist[ANIM_DAGGER_STRIKE_LEFT_CYCLE+j*3] && !eeMousePressed1()) {
+				} else if(layer1.cur_anim == alist[ANIM_DAGGER_STRIKE_LEFT_CYCLE + j * 3] && !eeMousePressed1()) {
 					changeAnimation(io, 1, alist[ANIM_DAGGER_STRIKE_LEFT + j * 3]);
 					strikeSpeak(io);
-					SendIOScriptEvent(io, SM_STRIKE, "dagger");
+					SendIOScriptEvent(NULL, io, SM_STRIKE, "dagger");
 					player.m_strikeDirection = 0;
 					player.m_aimTime = 0;
-				} else if(layer1.cur_anim == alist[ANIM_DAGGER_STRIKE_LEFT+j*3]) {
-					if(   layer1.ctime > layer1.cur_anim->anims[layer1.altidx_cur]->anim_time * 0.3f
-					   && layer1.ctime < layer1.cur_anim->anims[layer1.altidx_cur]->anim_time * 0.7f
+				} else if(layer1.cur_anim == alist[ANIM_DAGGER_STRIKE_LEFT + j * 3]) {
+					if(   layer1.ctime > layer1.currentAltAnim()->anim_time * 0.3f
+					   && layer1.ctime < layer1.currentAltAnim()->anim_time * 0.7f
 					) {
 						Entity * weapon = entities[player.equiped[EQUIP_SLOT_WEAPON]];
 						
@@ -731,7 +655,7 @@ void ManageCombatModeAnimations() {
 					}
 					
 					if(   player.m_weaponBlocked != AnimationDuration::ofRaw(-1)
-					   && layer1.ctime < layer1.cur_anim->anims[layer1.altidx_cur]->anim_time * 0.9f
+					   && layer1.ctime < layer1.currentAltAnim()->anim_time * 0.9f
 					) {
 						Entity * weapon = entities[player.equiped[EQUIP_SLOT_WEAPON]];
 						ARX_EQUIPMENT_Strike_Check(io, weapon, player.m_strikeAimRatio, 1);
@@ -752,18 +676,18 @@ void ManageCombatModeAnimations() {
 			
 			// Now go for strike cycle...
 			for(long j = 0; j < 4; j++) {
-				if(layer1.cur_anim == alist[ANIM_1H_STRIKE_LEFT_START+j*3] && (layer1.flags & EA_ANIMEND)) {
+				if(layer1.cur_anim == alist[ANIM_1H_STRIKE_LEFT_START + j * 3] && (layer1.flags & EA_ANIMEND)) {
 					changeAnimation(io, 1, alist[ANIM_1H_STRIKE_LEFT_CYCLE + j * 3], EA_LOOP);
 					player.m_aimTime = PlatformDuration::ofRaw(1);
-				} else if(layer1.cur_anim == alist[ANIM_1H_STRIKE_LEFT_CYCLE+j*3] && !eeMousePressed1()) {
+				} else if(layer1.cur_anim == alist[ANIM_1H_STRIKE_LEFT_CYCLE + j * 3] && !eeMousePressed1()) {
 					changeAnimation(io, 1, alist[ANIM_1H_STRIKE_LEFT + j * 3]);
 					strikeSpeak(io);
-					SendIOScriptEvent(io, SM_STRIKE, "1h");
+					SendIOScriptEvent(NULL, io, SM_STRIKE, "1h");
 					player.m_strikeDirection = 0;
 					player.m_aimTime = 0;
-				} else if(layer1.cur_anim == alist[ANIM_1H_STRIKE_LEFT+j*3]) {
-					if(   layer1.ctime > layer1.cur_anim->anims[layer1.altidx_cur]->anim_time * 0.3f
-					   && layer1.ctime < layer1.cur_anim->anims[layer1.altidx_cur]->anim_time * 0.7f
+				} else if(layer1.cur_anim == alist[ANIM_1H_STRIKE_LEFT + j * 3]) {
+					if(   layer1.ctime > layer1.currentAltAnim()->anim_time * 0.3f
+					   && layer1.ctime < layer1.currentAltAnim()->anim_time * 0.7f
 					) {
 						Entity * weapon = entities[player.equiped[EQUIP_SLOT_WEAPON]];
 						
@@ -783,7 +707,7 @@ void ManageCombatModeAnimations() {
 					}
 					
 					if(   player.m_weaponBlocked != AnimationDuration::ofRaw(-1)
-					   && layer1.ctime < layer1.cur_anim->anims[layer1.altidx_cur]->anim_time * 0.9f
+					   && layer1.ctime < layer1.currentAltAnim()->anim_time * 0.9f
 					) {
 						Entity * weapon = entities[player.equiped[EQUIP_SLOT_WEAPON]];
 						ARX_EQUIPMENT_Strike_Check(io, weapon, player.m_strikeAimRatio, 1);
@@ -804,18 +728,18 @@ void ManageCombatModeAnimations() {
 			
 			// Now go for strike cycle...
 			for(long j = 0; j < 4; j++) {
-				if(layer1.cur_anim == alist[ANIM_2H_STRIKE_LEFT_START+j*3] && (layer1.flags & EA_ANIMEND)) {
+				if(layer1.cur_anim == alist[ANIM_2H_STRIKE_LEFT_START + j * 3] && (layer1.flags & EA_ANIMEND)) {
 					changeAnimation(io, 1, alist[ANIM_2H_STRIKE_LEFT_CYCLE + j * 3], EA_LOOP);
 					player.m_aimTime = PlatformDuration::ofRaw(1);
-				} else if(layer1.cur_anim == alist[ANIM_2H_STRIKE_LEFT_CYCLE+j*3] && !eeMousePressed1()) {
+				} else if(layer1.cur_anim == alist[ANIM_2H_STRIKE_LEFT_CYCLE + j * 3] && !eeMousePressed1()) {
 					changeAnimation(io, 1, alist[ANIM_2H_STRIKE_LEFT + j * 3]);
 					strikeSpeak(io);
-					SendIOScriptEvent(io, SM_STRIKE, "2h");
+					SendIOScriptEvent(NULL, io, SM_STRIKE, "2h");
 					player.m_strikeDirection = 0;
 					player.m_aimTime = 0;
-				} else if(layer1.cur_anim == alist[ANIM_2H_STRIKE_LEFT+j*3]) {
-					if(   layer1.ctime > layer1.cur_anim->anims[layer1.altidx_cur]->anim_time * 0.3f
-					   && layer1.ctime < layer1.cur_anim->anims[layer1.altidx_cur]->anim_time * 0.7f
+				} else if(layer1.cur_anim == alist[ANIM_2H_STRIKE_LEFT + j * 3]) {
+					if(   layer1.ctime > layer1.currentAltAnim()->anim_time * 0.3f
+					   && layer1.ctime < layer1.currentAltAnim()->anim_time * 0.7f
 					) {
 						Entity * weapon = entities[player.equiped[EQUIP_SLOT_WEAPON]];
 						
@@ -835,7 +759,7 @@ void ManageCombatModeAnimations() {
 					}
 					
 					if(   player.m_weaponBlocked != AnimationDuration::ofRaw(-1)
-					   && layer1.ctime < layer1.cur_anim->anims[layer1.altidx_cur]->anim_time * 0.9f
+					   && layer1.ctime < layer1.currentAltAnim()->anim_time * 0.9f
 					) {
 						Entity * weapon = entities[player.equiped[EQUIP_SLOT_WEAPON]];
 						ARX_EQUIPMENT_Strike_Check(io, weapon, player.m_strikeAimRatio, 1);
@@ -875,7 +799,7 @@ void ManageCombatModeAnimations() {
 			} else if(layer1.cur_anim == alist[ANIM_MISSILE_STRIKE_CYCLE] && !eeMousePressed1()) {
 				EERIE_LINKEDOBJ_UnLinkObjectFromObject(io->obj, arrowobj);
 				changeAnimation(io, 1, alist[ANIM_MISSILE_STRIKE]);
-				SendIOScriptEvent(io, SM_STRIKE, "bow");
+				SendIOScriptEvent(NULL, io, SM_STRIKE, "bow");
 				StrikeAimtime();
 				player.m_strikeAimRatio = player.m_bowAimRatio;
 				Entity * quiver = Player_Arrow_Count_Decrease();
@@ -962,35 +886,34 @@ void ManageCombatModeAnimationsEND() {
 	AnimLayer & layer3 = io->animlayer[3];
 	
 	ANIM_HANDLE ** alist = io->anims;
-
+	
 	if(layer1.cur_anim
-		&&(		(layer1.cur_anim == alist[ANIM_BARE_READY])
-			||	(layer1.cur_anim == alist[ANIM_DAGGER_READY_PART_2])
-			||	(layer1.cur_anim == alist[ANIM_DAGGER_READY_PART_1])
-			||	(layer1.cur_anim == alist[ANIM_1H_READY_PART_2])
-			||	(layer1.cur_anim == alist[ANIM_1H_READY_PART_1])
-			||	(layer1.cur_anim == alist[ANIM_2H_READY_PART_2])
-			||	(layer1.cur_anim == alist[ANIM_2H_READY_PART_1])
-			||	(layer1.cur_anim == alist[ANIM_MISSILE_READY_PART_1])
-			||	(layer1.cur_anim == alist[ANIM_MISSILE_READY_PART_2])	)
-	) {
+	   && (layer1.cur_anim == alist[ANIM_BARE_READY]
+	       || layer1.cur_anim == alist[ANIM_DAGGER_READY_PART_2]
+	       || layer1.cur_anim == alist[ANIM_DAGGER_READY_PART_1]
+	       || layer1.cur_anim == alist[ANIM_1H_READY_PART_2]
+	       || layer1.cur_anim == alist[ANIM_1H_READY_PART_1]
+	       || layer1.cur_anim == alist[ANIM_2H_READY_PART_2]
+	       || layer1.cur_anim == alist[ANIM_2H_READY_PART_1]
+	       || layer1.cur_anim == alist[ANIM_MISSILE_READY_PART_1]
+	       || layer1.cur_anim == alist[ANIM_MISSILE_READY_PART_2])) {
 		player.m_aimTime = PlatformDuration::ofRaw(1);
 	}
-
+	
 	if(layer1.flags & EA_ANIMEND) {
+		
 		WeaponType weapontype = ARX_EQUIPMENT_GetPlayerWeaponType();
-
-		if(layer1.cur_anim &&
-			(	(layer1.cur_anim == io->anims[ANIM_BARE_UNREADY])
-			||	(layer1.cur_anim == io->anims[ANIM_DAGGER_UNREADY_PART_2])
-			||	(layer1.cur_anim == io->anims[ANIM_1H_UNREADY_PART_2])
-			||	(layer1.cur_anim == io->anims[ANIM_2H_UNREADY_PART_2])
-			||	(layer1.cur_anim == io->anims[ANIM_MISSILE_UNREADY_PART_2])	)
-		) {
+		
+		if(layer1.cur_anim
+		   && (layer1.cur_anim == io->anims[ANIM_BARE_UNREADY]
+		       || layer1.cur_anim == io->anims[ANIM_DAGGER_UNREADY_PART_2]
+		       || layer1.cur_anim == io->anims[ANIM_1H_UNREADY_PART_2]
+		       || layer1.cur_anim == io->anims[ANIM_2H_UNREADY_PART_2]
+		       || layer1.cur_anim == io->anims[ANIM_MISSILE_UNREADY_PART_2])) {
 			AcquireLastAnim(io);
 			layer1.cur_anim = NULL;
 		}
-
+		
 		switch(weapontype) {
 			case WEAPON_BARE: {
 				// Is Weapon Ready ? In this case go to Fight Wait anim
@@ -1044,7 +967,7 @@ void ManageCombatModeAnimationsEND() {
 						}
 						player.m_aimTime = PlatformDuration::ofRaw(1);
 						io->isHit = false;
-					} else if (layer1.cur_anim == alist[ANIM_1H_UNREADY_PART_1]) {
+					} else if(layer1.cur_anim == alist[ANIM_1H_UNREADY_PART_1]) {
 						ARX_EQUIPMENT_AttachPlayerWeaponToBack();
 						changeAnimation(io, 1, alist[ANIM_1H_UNREADY_PART_2]);
 					}
@@ -1142,13 +1065,13 @@ void ManageCombatModeAnimationsEND() {
 extern TextureContainer * ombrignon;
 
 void DrawImproveVisionInterface() {
-
+	
 	if(ombrignon) {
 		float mod = 0.6f + PULSATE * 0.35f;
-		Color3f color = Color3f((0.5f + PULSATE * (1.0f/10)) * mod, 0.f, 0.f);
 		UseRenderState state(render2D().blendAdditive());
-		EERIEDrawBitmap(Rectf(g_size), 0.0001f, ombrignon, color.to<u8>());
+		EERIEDrawBitmap(Rectf(g_size), 0.0001f, ombrignon, Color::red * ((0.5f + PULSATE * 0.1f) * mod));
 	}
+	
 }
 
 void DANAE_StartNewQuest()

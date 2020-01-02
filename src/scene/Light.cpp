@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2017 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -45,6 +45,8 @@ ZeniMax Media Inc., Suite 120, Rockville, Maryland 20850 USA.
 #include "scene/Light.h"
 
 #include <boost/array.hpp>
+#include <boost/foreach.hpp>
+#include <boost/range/size.hpp>
 
 #include "core/Application.h"
 #include "core/GameTime.h"
@@ -65,7 +67,7 @@ ZeniMax Media Inc., Suite 120, Rockville, Maryland 20850 USA.
 #include "scene/GameSound.h"
 #include "scene/Interactive.h"
 
-static const float GLOBAL_LIGHT_FACTOR=0.85f;
+static const float GLOBAL_LIGHT_FACTOR = 0.85f;
 
 static const Color3f defaultAmbient = Color3f(0.09f, 0.09f, 0.09f);
 static const int NPC_ITEMS_AMBIENT_VALUE_255 = 35;
@@ -83,14 +85,15 @@ void culledStaticLightsReset() {
 	g_culledStaticLightsCount = 0;
 }
 
-void ColorMod::updateFromEntity(Entity *io, bool inBook) {
+void ColorMod::updateFromEntity(Entity * io, bool inBook) {
+	
 	factor = Color3f::white;
 	term = Color3f::black;
 	if(io) {
 		factor *= io->special_color;
 		term += io->highlightColor;
 	}
-
+	
 	if(player.m_improve) {
 		Color3f infra = (io) ? io->infracolor : Color3f(0.6f, 0.f, 1.f);
 		
@@ -117,39 +120,23 @@ void RecalcLight(EERIE_LIGHT * el) {
 
 void EERIE_LIGHT_GlobalInit() {
 	
-	static long init = 0;
-	
-	if(!init) {
-		memset(g_staticLights, 0, sizeof(*g_staticLights) * g_staticLightsMax);
-		init = 1;
-		return;
-	}
-	
 	for(size_t i = 0; i < g_staticLightsMax; i++) {
 		if(g_staticLights[i]) {
-			EERIE_LIGHT * dynLight = lightHandleGet(g_staticLights[i]->m_ignitionLightHandle);
-			if(dynLight) {
-				dynLight->exist = 0;
+			if(EERIE_LIGHT * dynLight = lightHandleGet(g_staticLights[i]->m_ignitionLightHandle)) {
+				dynLight->m_exists = false;
 			}
-			free(g_staticLights[i]);
+			delete g_staticLights[i];
 			g_staticLights[i] = NULL;
 		}
 	}
+	
 }
 
 long EERIE_LIGHT_Create() {
 	
 	for (size_t i = 0; i < g_staticLightsMax; i++) {
 		if(!g_staticLights[i]) {
-			
-			g_staticLights[i] = (EERIE_LIGHT *)malloc(sizeof(EERIE_LIGHT));
-			if(!g_staticLights[i]) {
-				return -1;
-			}
-			
-			memset(g_staticLights[i], 0, sizeof(EERIE_LIGHT));
-			g_staticLights[i]->sample = audio::INVALID_ID;
-			g_staticLights[i]->m_ignitionLightHandle = LightHandle();
+			g_staticLights[i] = new EERIE_LIGHT;
 			return i;
 		}
 	}
@@ -181,52 +168,51 @@ void TreatBackgroundDynlights() {
 	ARX_PROFILE_FUNC();
 	
 	for(size_t i = 0; i < g_staticLightsMax; i++) {
-		EERIE_LIGHT *light = g_staticLights[i];
-
+		EERIE_LIGHT * light = g_staticLights[i];
+		
 		if(light && (light->extras & EXTRAS_SEMIDYNAMIC)) {
 			
 			float fMaxdist = player.m_telekinesis ? 850 : 300;
 			
-			if(!fartherThan(light->pos, ACTIVECAM->orgTrans.pos, fMaxdist)) {
+			if(!fartherThan(light->pos, g_camera->m_pos, fMaxdist)) {
 				ComputeLight2DPos(light);
 			} else {
 				light->m_screenRect = Rectf(1, 0, -1, 0); // Intentionally invalid
 			}
-
+			
 			if(!light->m_ignitionStatus) {
+				
 				// just extinguished
 				EERIE_LIGHT * dynLight = lightHandleGet(light->m_ignitionLightHandle);
 				if(dynLight) {
-					dynLight->exist = 0;
+					dynLight->m_exists = false;
 					light->m_ignitionLightHandle = LightHandle();
-					
 					for(size_t l = 0; l < entities.size(); l++) {
 						const EntityHandle handle = EntityHandle(l);
 						Entity * e = entities[handle];
-						
 						if(e && (e->ioflags & IO_MARKER)) {
 							Vec3f _pos2 = GetItemWorldPosition(e);
 							if(!fartherThan(light->pos, _pos2, 300.f)) {
-								SendIOScriptEvent(e, SM_CUSTOM, "douse");
+								SendIOScriptEvent(NULL, e, SM_CUSTOM, "douse");
 							}
 						}
 					}
 				}
+				
 			} else {
+				
 				// just light up
 				if(!lightHandleGet(light->m_ignitionLightHandle)) {
 					for(size_t l = 0; l < entities.size(); l++) {
 						const EntityHandle handle = EntityHandle(l);
 						Entity * e = entities[handle];
-						
 						if(e && (e->ioflags & IO_MARKER)) {
 							Vec3f _pos2 = GetItemWorldPosition(e);
 							if(!fartherThan(light->pos, _pos2, 300.f)) {
-								SendIOScriptEvent(e, SM_CUSTOM, "fire");
+								SendIOScriptEvent(NULL, e, SM_CUSTOM, "fire");
 							}
 						}
 					}
-
 					light->m_ignitionLightHandle = GetFreeDynLight();
 				}
 				
@@ -253,7 +239,7 @@ void TreatBackgroundDynlights() {
 	for(size_t i = 0; i < g_dynamicLightsMax; i++) {
 		EERIE_LIGHT * el = &g_dynamicLights[i];
 
-		if(el->exist && el->duration != 0) {
+		if(el->m_exists && el->duration != 0) {
 			const GameDuration elapsed = g_gameTime.now() - el->creationTime;
 			const GameDuration duration = el->duration;
 
@@ -274,7 +260,7 @@ void TreatBackgroundDynlights() {
 					el->rgb.b = 0.f;
 
 				if(el->rgb.r + el->rgb.g + el->rgb.b == 0) {
-					el->exist = 0;
+					el->m_exists = false;
 					el->duration = 0;
 				}
 			}
@@ -282,39 +268,23 @@ void TreatBackgroundDynlights() {
 	}
 }
 
-void PrecalcDynamicLighting(long x0, long z0, long x1, long z1, const Vec3f & camPos, float camDepth) {
+void PrecalcDynamicLighting(const Vec3f & camPos, float camDepth) {
 	
 	ARX_PROFILE_FUNC();
 	
 	g_culledDynamicLightsCount = 0;
 	
-	float fx0 = ACTIVEBKG->m_tileSize.x * x0;
-	float fz0 = ACTIVEBKG->m_tileSize.y * z0;
-	float fx1 = ACTIVEBKG->m_tileSize.x * x1;
-	float fz1 = ACTIVEBKG->m_tileSize.y * z1;
-	
-	for(size_t i = 0; i < g_dynamicLightsMax; i++) {
-		EERIE_LIGHT * el = &g_dynamicLights[i];
-
-		if(el->exist && el->rgb.r >= 0.f) {
-			if(   el->pos.x >= fx0
-			   && el->pos.x <= fx1
-			   && el->pos.z >= fz0
-			   && el->pos.z <= fz1
-			   && closerThan(el->pos, camPos, camDepth)
-			) {
-				el->treat = 1;
-				RecalcLight(el);
-				g_culledDynamicLights[g_culledDynamicLightsCount] = el;
-				g_culledDynamicLightsCount++;
-
-				if(g_culledDynamicLightsCount >= g_dynamicLightsMax)
-					g_culledDynamicLightsCount--;
+	BOOST_FOREACH(EERIE_LIGHT & light, g_dynamicLights) {
+		if(light.m_exists && light.rgb != Color3f::black) {
+			light.m_isVisible = closerThan(light.pos, camPos, camDepth + light.fallend);
+			if(light.m_isVisible) {
+				RecalcLight(&light);
+				arx_assert(g_culledDynamicLightsCount < size_t(boost::size(g_culledDynamicLights)));
+				g_culledDynamicLights[g_culledDynamicLightsCount++] = &light;
 			}
-			else if(el->treat)
-				el->treat = 0;
 		}
 	}
+	
 }
 
 void PrecalcIOLighting(const Vec3f & pos, float radius) {
@@ -325,7 +295,7 @@ void PrecalcIOLighting(const Vec3f & pos, float radius) {
 		EERIE_LIGHT * el = g_staticLights[i];
 
 		if(   el
-		   && el->exist
+		   && el->m_exists
 		   && el->m_ignitionStatus
 		   && !(el->extras & EXTRAS_SEMIDYNAMIC)
 		   && (el->pos.x >= pos.x - radius)
@@ -344,9 +314,9 @@ void PrecalcIOLighting(const Vec3f & pos, float radius) {
 	}
 }
 
-static bool lightHandleIsValid(LightHandle num)
-{
-	return (long)num.handleData() >= 0 && ((size_t)num.handleData() < g_dynamicLightsMax) && g_dynamicLights[num.handleData()].exist;
+static bool lightHandleIsValid(LightHandle num) {
+	return num.handleData() >= 0 && size_t(num.handleData()) < g_dynamicLightsMax
+	       && g_dynamicLights[num.handleData()].m_exists;
 }
 
 EERIE_LIGHT * lightHandleGet(LightHandle lightHandle) {
@@ -359,9 +329,8 @@ EERIE_LIGHT * lightHandleGet(LightHandle lightHandle) {
 
 void lightHandleDestroy(LightHandle & handle) {
 	
-	EERIE_LIGHT * light = lightHandleGet(handle);
-	if(light) {
-		light->exist = 0;
+	if(EERIE_LIGHT * light = lightHandleGet(handle)) {
+		light->m_exists = false;
 	}
 	
 	handle = LightHandle();
@@ -369,16 +338,16 @@ void lightHandleDestroy(LightHandle & handle) {
 
 void endLightDelayed(LightHandle & handle, GameDuration delay) {
 	
-	EERIE_LIGHT * light = lightHandleGet(handle);
-	if(light) {
+	if(EERIE_LIGHT * light = lightHandleGet(handle)) {
 		light->duration = delay;
 		light->creationTime = g_gameTime.now();
 	}
+	
 }
 
 void resetDynLights() {
 	for(size_t i = 0; i < g_dynamicLightsMax; i++) {
-		g_dynamicLights[i].exist = 0;
+		g_dynamicLights[i].m_exists = false;
 	}
 }
 
@@ -387,11 +356,11 @@ LightHandle GetFreeDynLight() {
 
 	for(size_t i = 1; i < g_dynamicLightsMax; i++) {
 		EERIE_LIGHT & light = g_dynamicLights[i];
-		if(!(light.exist)) {
-			light.exist = 1;
+		if(!light.m_exists) {
+			light.m_exists = true;
 			light.m_isIgnitionLight = false;
 			light.intensity = 1.3f;
-			light.treat = 1;
+			light.m_isVisible = true;
 			light.creationTime = g_gameTime.now();
 			light.duration = 0;
 			light.extras = 0;
@@ -418,13 +387,11 @@ EERIE_LIGHT * dynLightCreate() {
 
 
 void ClearDynLights() {
-
+	
 	for(size_t i = 0; i < g_dynamicLightsMax; i++) {
-		if(g_dynamicLights[i].exist) {
-			g_dynamicLights[i].exist = 0;
-		}
+		g_dynamicLights[i].m_exists = false;
 	}
-
+	
 	for(size_t i = 0; i < g_staticLightsMax; i++) {
 		if(g_staticLights[i]) {
 			g_staticLights[i]->m_ignitionLightHandle = LightHandle();
@@ -458,34 +425,35 @@ static void Insertllight(boost::array<EERIE_LIGHT *, llightsSize> & llights,
 		
 		dist -= el->fallstart;
 	}
-
+	
 	float threshold = el->fallend + 560.f;
-	if(dist > threshold)
+	if(dist > threshold) {
 		return;
-
+	}
+	
 	float val = dist - el->fallend;
-
-	if(val < 0)
-		val=0;
-
+	if(val < 0) {
+		val = 0;
+	}
+	
 	for(size_t i = 0; i < MAX_LLIGHTS; i++) {
 		if(!llights[i]) {
-			llights[i]=el;
-			values[i]=val;
+			llights[i] = el;
+			values[i] = val;
 			return;
-		} else if (val <= values[i]) { // Inserts light at the right place
+		} else if(val <= values[i]) { // Inserts light at the right place
 			for(size_t j = MAX_LLIGHTS - 1; j > i; j--) {
 				if(llights[j - 1]) {
 					llights[j] = llights[j - 1];
 					values[j] = values[j - 1];
 				}
 			}
-
-			llights[i]=el;
-			values[i]=val;
+			llights[i] = el;
+			values[i] = val;
 			return;
 		}
 	}
+	
 }
 
 void setMaxLLights(size_t count) {
@@ -545,21 +513,11 @@ void InitTileLights()
 	}
 }
 
-void ResetTileLights() {
-	
-	ARX_PROFILE_FUNC();
-	
-	for(long z = 0; z < ACTIVEBKG->m_size.y; z++)
-	for(long x = 0; x < ACTIVEBKG->m_size.x; x++) {
-		tilelights[x][z].el.clear();
-	}
-}
-
 void ComputeTileLights(short x, short z) {
 	
 	tilelights[x][z].el.clear();
 	
-	Vec2f tileCenter = (Vec2f(x, z) + 0.5f) * Vec2f(ACTIVEBKG->m_tileSize);
+	Vec2f tileCenter = (Vec2f(x, z) + 0.5f) * g_backgroundTileSize;
 	
 	for(size_t i = 0; i < g_culledDynamicLightsCount; i++) {
 		EERIE_LIGHT * light = g_culledDynamicLights[i];
@@ -579,7 +537,7 @@ void ClearTileLights() {
 	}
 }
 
-float GetColorz(const Vec3f &pos) {
+float GetColorz(const Vec3f & pos) {
 
 	ShaderLight lights[llightsSize];
 	size_t lightsCount;
@@ -638,15 +596,15 @@ float GetColorz(const Vec3f &pos) {
 		_ff.g *= div;
 		_ff.b *= div;
 		float ratio, ratio2;
-		ratio = glm::abs(needy - pos.y) * ( 1.0f / 300 );
+		ratio = glm::abs(needy - pos.y) * (1.0f / 300);
 		ratio = (1.f - ratio);
 		ratio2 = 1.f - ratio;
 		ff.r = ff.r * ratio2 + _ff.r * ratio;
 		ff.g = ff.g * ratio2 + _ff.g * ratio;
 		ff.b = ff.b * ratio2 + _ff.b * ratio;
 	}
-
-	return (std::min(ff.r, 255.f) + std::min(ff.g, 255.f) + std::min(ff.b, 255.f)) * (1.f/3);
+	
+	return (std::min(ff.r, 255.f) + std::min(ff.g, 255.f) + std::min(ff.b, 255.f)) * (1.f / 3);
 }
 
 ColorRGBA ApplyLight(ShaderLight lights[], size_t lightsCount, const glm::quat & quat, const Vec3f & position,
@@ -695,7 +653,7 @@ ColorRGBA ApplyLight(ShaderLight lights[], size_t lightsCount, const glm::quat &
 	u8 ig = clipByte255(int(tempColor.g));
 	u8 ib = clipByte255(int(tempColor.b));
 
-	return Color(ir, ig, ib, 255).toRGBA();
+	return Color(ir, ig, ib).toRGBA();
 }
 
 void ApplyTileLights(EERIEPOLY * ep, const Vec2s & pos)
@@ -754,6 +712,6 @@ void ApplyTileLights(EERIEPOLY * ep, const Vec2s & pos)
 		u8 ir = clipByte255(int(tempColor.r));
 		u8 ig = clipByte255(int(tempColor.g));
 		u8 ib = clipByte255(int(tempColor.b));
-		ep->color[j] = Color(ir, ig, ib, 255).toRGBA();
+		ep->color[j] = Color(ir, ig, ib).toRGBA();
 	}
 }

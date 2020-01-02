@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2016 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -50,12 +50,13 @@ ZeniMax Media Inc., Suite 120, Rockville, Maryland 20850 USA.
 
 #include <boost/algorithm/string/predicate.hpp>
 
-//-----------------------------------------------------------------------------
-//Used to know the true level of a "subdivided" level
-long ARX_LEVELS_GetRealNum(long num)
-{
-	switch (num)
-	{
+int ARX_LEVELS_GetRealNum(long num) {
+	
+	if(num < 0) {
+		return -1;
+	}
+	
+	switch(num) {
 		case 0:
 		case 8:
 		case 11:
@@ -85,15 +86,14 @@ long ARX_LEVELS_GetRealNum(long num)
 		case 7:
 		case 23:
 			return 7;
+		default:
+			return num;
 	}
-
-	if (num < 0) return -1;
-
-	return num;
+	
 }
 
-long GetLevelNumByName(const std::string& name)
-{
+long GetLevelNumByName(const std::string & name) {
+	
 	if ( !name.empty() )
 	{
 		if (boost::contains(name, "level10")) return 10;

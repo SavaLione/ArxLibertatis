@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2016 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -78,17 +78,11 @@ void ARX_GLOBALMODS_Reset() {
 static float Approach(float current, float desired, float increment) {
 	
 	if(desired > current) {
-		current += increment;
-
-		if (desired < current)
-			current = desired;
-	} else if (desired < current) {
-		current -= increment;
-
-		if (desired > current)
-			current = desired;
+		current = std::min(current + increment, desired);
+	} else if(desired < current) {
+		current = std::min(current - increment, desired);
 	}
-
+	
 	return current;
 }
 
@@ -97,7 +91,7 @@ void ARX_GLOBALMODS_Apply() {
 	ARX_PROFILE_FUNC();
 	
 	float baseinc = g_framedelay;
-	float incdiv1000 = g_framedelay * ( 1.0f / 1000 );
+	float incdiv1000 = g_framedelay * 0.001f;
 	
 	GLOBAL_MODS & current = g_currentFogParameters;
 	GLOBAL_MODS & desired = g_desiredFogParameters;
@@ -120,8 +114,8 @@ void ARX_GLOBALMODS_Apply() {
 	}
 	
 	float fZclipp = config.video.fogDistance * 1.2f * (DEFAULT_ZCLIP - DEFAULT_MINZCLIP) / 10.f + DEFAULT_MINZCLIP;
-	fZclipp += (ACTIVECAM->focal - 310.f) * 5.f;
-	ACTIVECAM->cdepth = std::min(current.zclip, fZclipp);
-
-	g_fogColor = current.depthcolor.to<u8>();
+	fZclipp += (g_camera->focal - 310.f) * 5.f;
+	g_camera->cdepth = std::min(current.zclip, fZclipp);
+	
+	g_fogColor = Color(current.depthcolor);
 }

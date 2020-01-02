@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2014 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -36,22 +36,22 @@ bool showDialog(DialogType type, const std::string & message, const std::string 
 		
 		default:
 		case DialogInfo:
-			[alert setAlertStyle: NSInformationalAlertStyle];
+			[alert setAlertStyle: NSAlertStyleInformational];
 			[alert runModal];
 			break;
 		
 		case DialogWarning:
-			[alert setAlertStyle: NSWarningAlertStyle];
+			[alert setAlertStyle: NSAlertStyleWarning];
 			[alert runModal];
 			break;
 		
 		case DialogError:
-			[alert setAlertStyle: NSCriticalAlertStyle];
+			[alert setAlertStyle: NSAlertStyleCritical];
 			[alert runModal];
 			break;
 		
 		case DialogWarnYesNo:
-			[alert setAlertStyle: NSWarningAlertStyle];
+			[alert setAlertStyle: NSAlertStyleWarning];
 			/* fall-through */
 		
 		case DialogYesNo:

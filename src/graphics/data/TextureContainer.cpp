@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2016 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -41,7 +41,7 @@ ZeniMax Media Inc., Suite 120, Rockville, Maryland 20850 USA.
 ===========================================================================
 */
 // Code: Cyril Meynier
-//       Sébastien Scieux	(JPEG & PNG)
+//       Sébastien Scieux (JPEG & PNG)
 //
 // Copyright (c) 1999 ARKANE Studios SA. All rights reserved
 
@@ -79,68 +79,28 @@ TextureContainer * GetTextureList() {
 	return g_ptcTextureList;
 }
 
-static void ResetModelBatch(ModelBatch * tex) {
-	
-	if(!tex) {
-		return;
-	}
-	
-	tex->count[BatchBucket_Opaque] = 0;
-	tex->count[BatchBucket_Blended] = 0;
-	tex->count[BatchBucket_Additive] = 0;
-	tex->count[BatchBucket_Subtractive] = 0;
-	tex->count[BatchBucket_Multiplicative] = 0;
-	
-	tex->max[BatchBucket_Opaque] = 0;
-	tex->max[BatchBucket_Blended] = 0;
-	tex->max[BatchBucket_Additive] = 0;
-	tex->max[BatchBucket_Subtractive] = 0;
-	tex->max[BatchBucket_Multiplicative] = 0;
-	
-	free(tex->list[BatchBucket_Opaque]);
-	tex->list[BatchBucket_Opaque] = NULL;
-	free(tex->list[BatchBucket_Blended]);
-	tex->list[BatchBucket_Blended] = NULL;
-	free(tex->list[BatchBucket_Additive]);
-	tex->list[BatchBucket_Additive] = NULL;
-	free(tex->list[BatchBucket_Subtractive]);
-	tex->list[BatchBucket_Subtractive] = NULL;
-	free(tex->list[BatchBucket_Multiplicative]);
-	tex->list[BatchBucket_Multiplicative] = NULL;
-}
-
-static void ResetRoomBatches(RoomBatches & roomBatches) {
-	roomBatches.tMatRoomSize = 0;
-	free(roomBatches.tMatRoom);
-	roomBatches.tMatRoom = NULL;
-}
-
 TextureContainer::TextureContainer(const res::path & strName, TCFlags flags)
-	: m_texName(strName)
+	: TextureHalo(NULL)
+	, m_texName(strName)
+	, m_size(0)
+	, m_dwFlags(flags)
+	, userflags(0)
+	, m_pTexture(NULL)
+	, uv(0.f)
+	, hd(0.f)
+	, m_pNext(NULL)
+	, systemflags(0)
 {
+	
 	arx_assert_msg(!strName.has_ext("bmp") && !strName.has_ext("tga"),
 	               "bad texture name: \"%s\"", strName.string().c_str());
-	
-	m_size = Vec2i_ZERO;
-	m_dwFlags = flags;
-
-	m_pTexture = NULL;
-
-	userflags = 0;
-	TextureHalo = NULL;
-	
-	m_pNext = NULL;
 	
 	// Add the texture to the head of the global texture list
 	if(!(flags & NoInsert)) {
 		m_pNext = g_ptcTextureList;
 		g_ptcTextureList = this;
 	}
-
-	systemflags = 0;
-
-	m_roomBatches = RoomBatches();
-	m_modelBatch = ModelBatch();
+	
 }
 
 TextureContainer::~TextureContainer() {
@@ -159,8 +119,6 @@ TextureContainer::~TextureContainer() {
 		}
 	}
 	
-	ResetModelBatch(&m_modelBatch);
-	ResetRoomBatches(m_roomBatches);
 }
 
 bool TextureContainer::LoadFile(const res::path & strPathname) {

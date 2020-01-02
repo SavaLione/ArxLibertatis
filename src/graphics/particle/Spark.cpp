@@ -1,5 +1,5 @@
 /*
- * Copyright 2016-2017 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2016-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -23,6 +23,7 @@
 
 #include "core/Core.h"
 #include "core/GameTime.h"
+#include "game/Camera.h"
 #include "graphics/Color.h"
 #include "graphics/GlobalFog.h"
 #include "graphics/Math.h"
@@ -40,8 +41,8 @@ struct SparkParticle {
 	
 	SparkParticle()
 		: m_duration(0)
-		, m_pos(Vec3f_ZERO)
-		, move(Vec3f_ZERO)
+		, m_pos(0.f)
+		, move(0.f)
 		, timcreation(0)
 		, rgb(Color::black.toRGB())
 		, m_tailLength(0.f)
@@ -128,8 +129,6 @@ void ParticleSparkUpdate() {
 		return;
 	}
 	
-	EERIE_CAMERA * cam = &subj;
-	
 	const GameInstant now = g_gameTime.now();
 	
 	RenderMaterial sparkMaterial;
@@ -163,12 +162,12 @@ void ParticleSparkUpdate() {
 		
 		TexturedVertex tv[3];
 		tv[0].color = spark.rgb;
-		tv[1].color = Color(102, 102, 102, 255).toRGBA();
-		tv[2].color = Color(0, 0, 0, 255).toRGBA();
+		tv[1].color = Color::gray(0.4f).toRGBA();
+		tv[2].color = Color::black.toRGBA();
 		
 		worldToClipSpace(in, tv[0]);
 		
-		if(tv[0].w < 0 || tv[0].p.z > cam->cdepth * fZFogEnd * tv[0].w) {
+		if(tv[0].w < 0 || tv[0].p.z > g_camera->cdepth * fZFogEnd * tv[0].w) {
 			continue;
 		}
 		

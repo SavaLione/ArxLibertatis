@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2015-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -23,6 +23,11 @@
 #include "platform/Platform.h"
 #include "Configure.h"
 
+#if ARX_PLATFORM == ARX_PLATFORM_WIN32
+// Make sure we get the APIENTRY define from windows.h first to avoid a re-definition warning
+#include <windows.h>
+#endif
+
 #if ARX_HAVE_EPOXY
 
 #include <epoxy/gl.h>
@@ -36,8 +41,8 @@
 
 #include <GL/glew.h>
 
-#define ARX_HAVE_GL_VER(x, y) glewIsSupported("GL_VERSION_" #x "_" #y)
-#define ARX_HAVE_GL_EXT(name) glewIsSupported("GL_" #name)
+#define ARX_HAVE_GL_VER(x, y) (glewIsSupported("GL_VERSION_" #x "_" #y) != 0)
+#define ARX_HAVE_GL_EXT(name) (glewIsSupported("GL_" #name) != 0)
 #define ARX_HAVE_GLES_VER(x, y) (false)
 #define ARX_HAVE_GLES_EXT(name) (false)
 

@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2016 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -40,21 +40,11 @@ public:
 	
 	class Callback {
 		
-	public:
-		
-		virtual ~Callback() { }
-		
 	private:
 		
 		virtual void onSamplePosition(Source & source, size_t position) = 0;
 		
 		friend class Source;
-	};
-	
-	enum Status {
-		Idle,
-		Playing,
-		Paused
 	};
 	
 	/*!
@@ -77,8 +67,6 @@ public:
 	
 	virtual aalError setPosition(const Vec3f & position) = 0;
 	virtual aalError setVelocity(const Vec3f & velocity) = 0;
-	virtual aalError setDirection(const Vec3f & direction) = 0;
-	virtual aalError setCone(const SourceCone & cone) = 0;
 	virtual aalError setFalloff(const SourceFalloff & falloff) = 0;
 	aalError setMixer(MixerId mixer);
 	
@@ -96,10 +84,10 @@ public:
 	virtual aalError resume() = 0;
 	aalError update();
 	
-	SourceId getId() const { return id; }
-	Sample * getSample() const { return sample; }
-	const Channel & getChannel() const { return channel; }
-	Status getStatus() const { return status; }
+	SourcedSample getId() const { return m_id; }
+	Sample * getSample() const { return m_sample; }
+	const Channel & getChannel() const { return m_channel; }
+	SourceStatus getStatus() const { return status; }
 	bool isPlaying() const { return status == Playing; }
 	bool isIdle() const { return status == Idle; }
 	
@@ -115,12 +103,12 @@ protected:
 	explicit Source(Sample * sample);
 	virtual ~Source();
 	
-	SourceId id;
+	SourcedSample m_id;
 	
-	Channel channel;
+	Channel m_channel;
 	
-	Sample * sample;
-	Status status;
+	Sample * m_sample;
+	SourceStatus status;
 	
 	size_t time; // Elapsed 'time'
 	
@@ -136,7 +124,7 @@ protected:
 	
 private:
 	
-	typedef std::vector<std::pair<Callback*, size_t> > CallbackList;
+	typedef std::vector<std::pair<Callback *, size_t> > CallbackList;
 	CallbackList callbacks;
 	size_t callback_i;
 	

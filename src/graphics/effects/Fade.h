@@ -1,5 +1,5 @@
 /*
- * Copyright 2013-2016 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2013-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -23,12 +23,12 @@
 #include "core/TimeTypes.h"
 #include "graphics/Color.h"
 
-extern long	FADEDIR;
+extern long FADEDIR;
 extern float LAST_FADEVALUE;
 
 enum FadeType {
-    FadeType_In,
-    FadeType_Out
+	FadeType_In,
+	FadeType_Out
 };
 
 void fadeReset();
@@ -36,7 +36,7 @@ void fadeReset();
 void fadeSetColor(Color3f color);
 
 // TODO should this really be in ingame time ?
-void fadeRequestStart(FadeType type, const PlatformDuration duration);
+void fadeRequestStart(FadeType type, PlatformDuration duration);
 
 void ManageFade();
 

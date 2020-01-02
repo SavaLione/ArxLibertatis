@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2017 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -75,40 +75,13 @@ ZeniMax Media Inc., Suite 120, Rockville, Maryland 20850 USA.
 
 #include <list>
 
-extern ParticleManager * pParticleManager;
-
-
-static void LaunchPoisonExplosion(const Vec3f & aePos) {
-	
-	// système de partoches pour l'explosion
-	ParticleSystem * pPS = new ParticleSystem();
-	
-	pPS->SetParams(g_particleParameters[ParticleParam_Poison1]);
-	pPS->SetPos(aePos);
-	pPS->Update(0);
-
-	std::list<Particle *>::iterator i;
-
-	for(i = pPS->listParticle.begin(); i != pPS->listParticle.end(); ++i) {
-		Particle * pP = *i;
-
-		if(pP->isAlive()) {
-			pP->p3Velocity = glm::clamp(pP->p3Velocity, Vec3f(0, -100, 0), Vec3f(0, 100, 0));
-		}
-	}
-
-	arx_assert(pParticleManager);
-	pParticleManager->AddSystem(pPS);
-}
-
 
 CPoisonProjectile::CPoisonProjectile()
-	: eSrc(Vec3f_ZERO)
+	: eSrc(0.f)
+	, eCurPos(0.f)
 	, lightIntensityFactor(1.f)
-	, fBetaRadCos(0.f)
-	, fBetaRadSin(0.f)
-	, bOk(false)
 	, fTrail(-1.f)
+	, eMove(0.f)
 {
 	SetDuration(GameDurationMs(2000));
 	m_elapsed = m_duration + GameDurationMs(1);
@@ -119,18 +92,14 @@ void CPoisonProjectile::Create(Vec3f _eSrc, float _fBeta)
 	SetDuration(m_duration);
 	
 	float fBetaRad = glm::radians(_fBeta);
-	fBetaRadCos = glm::cos(fBetaRad);
-	fBetaRadSin = glm::sin(fBetaRad);
+	float fBetaRadCos = glm::cos(fBetaRad);
+	float fBetaRadSin = glm::sin(fBetaRad);
 
 	eSrc = _eSrc;
 
-	bOk = false;
-	
 	eMove = Vec3f(-fBetaRadSin * 2, 0.f, fBetaRadCos * 2);
 	
-	Vec3f rayEnd = eSrc;
-	rayEnd.x -= fBetaRadSin * (50 * 20);
-	rayEnd.z += fBetaRadCos * (50 * 20);
+	Vec3f rayEnd = eSrc + eMove * 500.f;
 	
 	RaycastResult ray = RaycastLine(eSrc, rayEnd);
 	Vec3f dest = ray.hit ? ray.pos : rayEnd;
@@ -141,13 +110,6 @@ void CPoisonProjectile::Create(Vec3f _eSrc, float _fBeta)
 	Split(pathways, 0, 9, Vec3f(10 * fBetaRadCos, 10, 10 * fBetaRadSin));
 	
 	fTrail = -1;
-	
-	ParticleParams pp = g_particleParameters[ParticleParam_Poison2];
-	pp.m_direction *= -eMove;
-	
-	pPS.SetParams(pp);
-	pPS.SetPos(eSrc);
-	pPS.Update(0);
 }
 
 void CPoisonProjectile::Update(GameDuration timeDelta)
@@ -157,27 +119,7 @@ void CPoisonProjectile::Update(GameDuration timeDelta)
 	}
 
 	// on passe de 5 à 100 partoches en 1.5secs
-	if(m_elapsed < GameDurationMs(750)) {
-		pPS.m_parameters.m_nbMax = 2;
-		pPS.Update(timeDelta);
-	} else {
-		if(!bOk) {
-			bOk = true;
-			// go
-			
-			ParticleParams pp = g_particleParameters[ParticleParam_Poison3];
-			pp.m_pos = Vec3f(fBetaRadSin * 20, 0.f, fBetaRadCos * 20);
-			pp.m_direction = -eMove * 0.1f;
-			
-			pPSStream.SetParams(pp);
-		}
-
-		pPSStream.Update(timeDelta);
-		pPSStream.SetPos(eCurPos);
-
-		pPS.Update(timeDelta);
-		pPS.SetPos(eCurPos);
-
+	if(m_elapsed >= GameDurationMs(750)) {
 		fTrail = ((m_elapsed - GameDurationMs(750)) / (m_duration - GameDurationMs(750))) * 9 * (BEZIERPrecision + 2);
 	}
 
@@ -222,9 +164,4 @@ void CPoisonProjectile::Render() {
 	}
 	
 	eCurPos = lastpos;
-	
-	if(fTrail >= (i * n)) {
-		LaunchPoisonExplosion(lastpos);
-	}
-	
 }

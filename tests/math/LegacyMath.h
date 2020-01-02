@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2016 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -72,7 +72,8 @@ inline void Quat_Divide(glm::quat * dest, const glm::quat * q1, const glm::quat 
 
 //! Inverts a Quaternion
 inline void Quat_Reverse(glm::quat * q) {
-	glm::quat qw, qr;
+	glm::quat qw = quat_identity();
+	glm::quat qr;
 	Quat_Divide(&qr, q, &qw);
 	*q = qr;
 }
@@ -117,8 +118,9 @@ inline glm::quat Quat_Multiply(const glm::quat & q1, const glm::quat & q2) {
 
 //! Converts a unit quaternion into a rotation matrix.
 inline void MatrixFromQuat(glm::mat4x4 & m, const glm::quat & quat) {
+	
 	float wx, wy, wz, xx, yy, yz, xy, xz, zz, x2, y2, z2;
-
+	
 	// calculate coefficients
 	x2 = quat.x + quat.x;
 	y2 = quat.y + quat.y;
@@ -132,21 +134,22 @@ inline void MatrixFromQuat(glm::mat4x4 & m, const glm::quat & quat) {
 	wx = quat.w * x2;
 	wy = quat.w * y2;
 	wz = quat.w * z2;
-
-	m[0][0] = 1.0F - (yy + zz);
+	
+	m[0][0] = 1.f - (yy + zz);
 	m[1][0] = xy - wz;
 	m[2][0] = xz + wy;
-	m[3][0] = 0.0F;
-
+	m[3][0] = 0.f;
+	
 	m[0][1] = xy + wz;
-	m[1][1] = 1.0F - (xx + zz);
+	m[1][1] = 1.f - (xx + zz);
 	m[2][1] = yz - wx;
-	m[3][1] = 0.0F;
-
+	m[3][1] = 0.f;
+	
 	m[0][2] = xz - wy;
 	m[1][2] = yz + wx;
-	m[2][2] = 1.0F - (xx + yy);
-	m[3][2] = 0.0F;
+	m[2][2] = 1.f - (xx + yy);
+	m[3][2] = 0.f;
+	
 }
 
 //! Converts a rotation matrix into a unit quaternion.
@@ -219,7 +222,7 @@ inline glm::quat toNonNpcRotation(const Anglef & src) {
 	Anglef ang = src;
 	ang.setPitch(360 - ang.getPitch());
 	
-	glm::mat4x4 mat;
+	glm::mat4x4 mat(1.f);
 	Vec3f vect(0, 0, 1);
 	Vec3f up(0, 1, 0);
 	vect = VRotateY(vect, ang.getYaw());
@@ -230,21 +233,6 @@ inline glm::quat toNonNpcRotation(const Anglef & src) {
 	up = VRotateZ(up, ang.getRoll());
 	MatrixSetByVectors(mat, vect, up);
 	return glm::quat_cast(mat);
-}
-
-inline Vec3f camEE_RT(const Vec3f & in, const EERIE_TRANSFORM & trans) {
-	const Vec3f temp1 = in - trans.pos;
-	Vec3f temp2;
-	Vec3f temp3;
-	
-	temp2.x = (temp1.x * trans.ycos) + (temp1.z * trans.ysin);
-	temp2.z = (temp1.z * trans.ycos) - (temp1.x * trans.ysin);
-	temp3.z = (temp1.y * trans.xsin) + (temp2.z * trans.xcos);
-	temp3.y = (temp1.y * trans.xcos) - (temp2.z * trans.xsin);
-	temp2.y = (temp3.y * trans.zcos) - (temp2.x * trans.zsin);
-	temp2.x = (temp2.x * trans.zcos) + (temp3.y * trans.zsin);
-	
-	return Vec3f(temp2.x, temp2.y, temp3.z);
 }
 
 inline void VectorRotateY(Vec3f & _eIn, Vec3f & _eOut, float _fAngle) {
@@ -263,38 +251,11 @@ inline void VectorRotateZ(Vec3f & _eIn, Vec3f & _eOut, float _fAngle) {
 	_eOut.z =  _eIn.z;
 }
 
-
-inline Vec2s inventorySizeFromTextureSize_1(u32 m_dwWidth, u32 m_dwHeight) {
-	Vec2s m_inventorySize;
-	
-	unsigned long w = m_dwWidth >> 5;
-	unsigned long h = m_dwHeight >> 5;
-
-	if ((w << 5) != m_dwWidth)
-		m_inventorySize.x = (char)(w + 1);
-	else
-		m_inventorySize.x = (char)(w);
-
-	if ((h << 5) != m_dwHeight)
-		m_inventorySize.y = (char)(h + 1);
-	else
-		m_inventorySize.y = (char)(h);
-	
-	m_inventorySize.x = glm::clamp(m_inventorySize.x, short(1), short(3));
-	m_inventorySize.y = glm::clamp(m_inventorySize.y, short(1), short(3));
-
-	return m_inventorySize;
-}
-
 inline Vec2s inventorySizeFromTextureSize_2(u32 m_dwWidth, u32 m_dwHeight) {
-	Vec2s m_inventorySize;
-
 	unsigned long w = m_dwWidth >> 5;
 	unsigned long h = m_dwHeight >> 5;
-	m_inventorySize.x = char(glm::clamp(((w << 5) != m_dwWidth) ? (w + 1) : w, 1ul, 3ul));
-	m_inventorySize.y = char(glm::clamp(((h << 5) != m_dwHeight) ? (h + 1) : h, 1ul, 3ul));
-	
-	return m_inventorySize;
+	return Vec2s(char(glm::clamp(((w << 5) != m_dwWidth) ? (w + 1) : w, 1ul, 3ul)),
+	             char(glm::clamp(((h << 5) != m_dwHeight) ? (h + 1) : h, 1ul, 3ul)));
 }
 
 inline float focalToFovLegacy(float focal) {

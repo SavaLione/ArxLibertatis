@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2012 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -56,16 +56,14 @@ namespace audio {
 Backend * backend = NULL;
 
 // Global settings
-res::path sample_path;
 res::path ambiance_path;
 res::path environment_path;
-size_t stream_limit_bytes = DEFAULT_STREAMLIMIT;
 PlatformInstant session_time = 0;
 
 // Resources
-ResourceList<Mixer> g_mixers;
-ResourceList<Sample> g_samples;
-ResourceList<Ambiance> g_ambiances;
-ResourceList<Environment> g_environments;
+MixerList g_mixers;
+SampleList g_samples;
+AmbianceList g_ambiances;
+EnvironmentList g_environments;
 
 } // namespace audio

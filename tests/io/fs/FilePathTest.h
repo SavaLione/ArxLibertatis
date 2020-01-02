@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2016-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -32,9 +32,6 @@ class FilePathTest : public CppUnit::TestFixture {
 	CPPUNIT_TEST_SUITE_END();
 	
 public:
-	FilePathTest()
-		: CppUnit::TestFixture()
-	{}
 	
 	void testPath(const char * input, const char * expected);
 	void testResolve(const char * left, const char * right, const char * expected);
@@ -43,6 +40,7 @@ public:
 	void pathTest();
 	void resolveTest();
 	void parentTest();
+	
 };
 
 #endif // ARX_TESTS_IO_FS_FILEPATHTEST_H

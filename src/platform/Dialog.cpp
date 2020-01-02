@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2016 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -38,6 +38,7 @@
 #endif
 
 #include <boost/foreach.hpp>
+#include <boost/range/size.hpp>
 
 #include "core/Version.h"
 #include "platform/Process.h"
@@ -380,18 +381,18 @@ static int sdlDialogCommand(DialogType type, const std::string & message,
 		case DialogWarning:
 		case DialogError: {
 			box.buttons = buttonsOK,
-			box.numbuttons = ARRAY_SIZE(buttonsOK);
+			box.numbuttons = boost::size(buttonsOK);
 			break;
 		}
 		case DialogYesNo:
 		case DialogWarnYesNo: {
 			box.buttons = buttonsYesNo,
-			box.numbuttons = ARRAY_SIZE(buttonsYesNo);
+			box.numbuttons = boost::size(buttonsYesNo);
 			break;
 		}
 		case DialogOkCancel: {
 			box.buttons = buttonsOKCancel,
-			box.numbuttons = ARRAY_SIZE(buttonsOKCancel);
+			box.numbuttons = boost::size(buttonsOKCancel);
 			break;
 		}
 	}

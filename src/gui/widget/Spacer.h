@@ -1,5 +1,5 @@
 /*
- * Copyright 2013-2014 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2018 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -17,12 +17,32 @@
  * along with Arx Libertatis.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef ARX_GUI_DEBUGHUD_H
-#define ARX_GUI_DEBUGHUD_H
+#ifndef ARX_GUI_WIDGET_SPACER_H
+#define ARX_GUI_WIDGET_SPACER_H
 
-void ShowInfoText();
-void ShowFPS();
-void ShowFrameDurationPlot();
-void ShowDebugToggles();
+#include <string>
 
-#endif // ARX_GUI_DEBUGHUD_H
+#include "gui/widget/Widget.h"
+#include "math/Rectangle.h"
+#include "platform/Platform.h"
+
+class Spacer arx_final : public Widget {
+	
+public:
+	
+	explicit Spacer(int height) {
+		m_rect = Rectf(0, float(height));
+		setEnabled(false);
+	}
+	
+	void render(bool mouseOver = false) {
+		ARX_UNUSED(mouseOver);
+	}
+	
+	WidgetType type() const {
+		return WidgetType_Spacer;
+	}
+	
+};
+
+#endif // ARX_GUI_WIDGET_SPACER_H

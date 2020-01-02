@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2014 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -69,8 +69,8 @@ public:
 	 * The pathfinder instance does not copy the provided data and will not clean it up
 	 * The light data is only used when the stealth parameter is set to true.
 	 */
-	PathFinder(size_t map_size, const ANCHOR_DATA * map_data,
-	           size_t light_count, const EERIE_LIGHT * const * light_list);
+	PathFinder(size_t graphSize, const ANCHOR_DATA * graph,
+	           size_t lightCount, const EERIE_LIGHT * const * lights);
 	
 	typedef unsigned long NodeId;
 	typedef std::vector<NodeId> Result;
@@ -142,9 +142,9 @@ private:
 	float getIlluminationCost(const Vec3f & pos) const;
 	NodeId getNearestNode(const Vec3f & pos) const;
 	
-	float radius;
-	float height;
-	float heuristic;
+	float m_radius;
+	float m_height;
+	float m_heuristic;
 	
 	size_t map_s; // Map size
 	const ANCHOR_DATA * map_d; // Map data

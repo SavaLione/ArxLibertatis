@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2016 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2014-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -41,9 +41,6 @@ class StringTest : public CppUnit::TestFixture {
 	CPPUNIT_TEST_SUITE_END();
 	
 public:
-	StringTest()
-		: CppUnit::TestFixture()
-	{}
 	
 	void stringStoreEmptyTest();
 	void stringStoreFittingTest();
@@ -56,6 +53,7 @@ public:
 	
 	void safeGetExactTest();
 	void safeGetTooSmallTest();
+	
 };
 
 #endif // ARX_TESTS_UTIL_STRINGTEST_H

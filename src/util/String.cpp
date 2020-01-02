@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2014 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -32,22 +32,25 @@ std::string loadString(const char * data, size_t maxLength) {
 }
 
 void storeString(char * dst, size_t maxLength, const std::string & src) {
-	strncpy(dst, src.c_str(), maxLength);
+	std::memcpy(dst, src.c_str(), std::min(maxLength, src.length()));
+	if(maxLength > src.length()) {
+		std::memset(dst + src.length(), 0, maxLength - src.length());
+	}
 }
 
 struct character_escaper {
 	template <typename FinderT>
 	std::string operator()(const FinderT & match) const {
 		std::string s;
-		for(typename FinderT::const_iterator i = match.begin(); i != match.end(); i++) {
+		for(typename FinderT::const_iterator i = match.begin(); i != match.end(); ++i) {
 			s += std::string("\\") + *i;
 		}
 		return s;
 	}
 };
 
-std::string escapeString(const std::string & str, const char * escapeChars) {
-	std::string escapedStr(str);
+std::string escapeString(const std::string & text, const char * escapeChars) {
+	std::string escapedStr(text);
 	boost::find_format_all(escapedStr,
 	                       boost::token_finder(boost::is_any_of(escapeChars)),
 	                                           character_escaper());

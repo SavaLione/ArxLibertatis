@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2017 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -71,11 +71,11 @@ struct UNIQUE_HEADER3 {
 };
 
 struct FAST_VERTEX {
-	f32	sy;
-	f32	ssx;
-	f32	ssz;
-	f32	stu;
-	f32	stv;
+	f32 sy;
+	f32 ssx;
+	f32 ssz;
+	f32 stu;
+	f32 stv;
 };
 
 struct FAST_EERIEPOLY {
@@ -108,6 +108,10 @@ struct FAST_TEXTURE_CONTAINER {
 	s32 tc;
 	s32 temp;
 	char fic[256];
+};
+
+enum FastAnchorFlag {
+	FastAnchorFlagBlocked = 1 << 3
 };
 
 struct FAST_ANCHOR_DATA {
@@ -166,7 +170,6 @@ struct FAST_EP_DATA {
 		b.tile.x = px;
 		b.tile.y = py;
 		b.idx = idx;
-		b.padd = padd;
 		return b;
 	}
 	

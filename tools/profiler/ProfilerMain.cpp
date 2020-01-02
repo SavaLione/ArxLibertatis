@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2014-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -21,16 +21,6 @@
 
 #include "profiler/ui/ArxProfiler.h"
 
-#if defined(_WIN32) || defined(_WIN64)
-
-#include <windows.h>
-
-INT WINAPI WinMain(HINSTANCE, HINSTANCE, PSTR, INT) {
-	
-	QApplication app(__argc, __argv);
-	
-#else
-
 int main(int argc, char **argv) {
 	
 	#if QT_VERSION >= QT_VERSION_CHECK(5, 6, 0)
@@ -38,8 +28,6 @@ int main(int argc, char **argv) {
 	#endif
 	
 	QApplication app(argc, argv);
-	
-#endif
 
 	ArxProfiler w;
 	w.show();

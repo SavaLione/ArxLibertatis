@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2017 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2014-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -42,11 +42,9 @@
 
 
 MassLightningStrikeSpell::MassLightningStrikeSpell()
-	: m_pos(Vec3f_ZERO)
+	: m_pos(0.f)
 	, m_soundEffectPlayed(false)
-	, m_light()
-{
-}
+{ }
 
 MassLightningStrikeSpell::~MassLightningStrikeSpell() {
 	
@@ -104,8 +102,8 @@ void MassLightningStrikeSpell::Launch() {
 		light->pos = m_pos;
 	}
 	
-	ARX_SOUND_PlaySFX(SND_SPELL_LIGHTNING_START);
-	m_snd_loop = ARX_SOUND_PlaySFX(SND_SPELL_LIGHTNING_LOOP, &m_pos, 1.f, ARX_SOUND_PLAY_LOOPED);
+	ARX_SOUND_PlaySFX(g_snd.SPELL_LIGHTNING_START);
+	m_snd_loop = ARX_SOUND_PlaySFX_loop(g_snd.SPELL_LIGHTNING_LOOP, &m_pos, 1.f);
 	
 	// Draws White Flash on Screen
 	UseRenderState state(render2D().blend(BlendOne, BlendOne));
@@ -117,7 +115,9 @@ void MassLightningStrikeSpell::End() {
 	endLightDelayed(m_light, GameDurationMs(200));
 	
 	ARX_SOUND_Stop(m_snd_loop);
-	ARX_SOUND_PlaySFX(SND_SPELL_LIGHTNING_END);
+	m_snd_loop = audio::SourcedSample();
+	
+	ARX_SOUND_PlaySFX(g_snd.SPELL_LIGHTNING_END);
 	
 	for(std::vector<CLightning *>::iterator it = pTab.begin(); it != pTab.end(); ++it) {
 		delete *it;
@@ -140,26 +140,24 @@ void MassLightningStrikeSpell::Update() {
 		pTab[i]->Render();
 	}
 	
-	Vec3f position;
-
-	position = m_pos + arx::randomVec(-250.f, 250.f);
+	Vec3f position = m_pos + arx::randomVec(-250.f, 250.f);
 	ARX_SOUND_RefreshPosition(m_snd_loop, position);
 	ARX_SOUND_RefreshVolume(m_snd_loop, 1.f);
 	ARX_SOUND_RefreshPitch(m_snd_loop, Random::getf(0.8f, 1.2f));
 	
 	if(Random::getf() > 0.62f) {
 		position = m_pos + arx::randomVec(-250.f, 250.f);
-		ARX_SOUND_PlaySFX(SND_SPELL_SPARK, &position, Random::getf(0.8f, 1.2f));
+		ARX_SOUND_PlaySFX(g_snd.SPELL_SPARK, &position, Random::getf(0.8f, 1.2f));
 	}
 	
 	if(Random::getf() > 0.82f) {
 		position = m_pos + arx::randomVec(-250.f, 250.f);
-		ARX_SOUND_PlaySFX(SND_SPELL_ELECTRIC, &position, Random::getf(0.8f, 1.2f));
+		ARX_SOUND_PlaySFX(g_snd.SPELL_ELECTRIC, &position, Random::getf(0.8f, 1.2f));
 	}
 	
 	if(0 > m_duration - GameDurationMs(1800) && !m_soundEffectPlayed) {
 		m_soundEffectPlayed = true;
-		ARX_SOUND_PlaySFX(SND_SPELL_ELECTRIC, NULL, Random::getf(0.8f, 1.2f));
+		ARX_SOUND_PlaySFX(g_snd.SPELL_ELECTRIC, NULL, Random::getf(0.8f, 1.2f));
 	}
 	
 	EERIE_LIGHT * light = lightHandleGet(m_light);
@@ -169,9 +167,10 @@ void MassLightningStrikeSpell::Update() {
 	
 }
 
-
 ControlTargetSpell::ControlTargetSpell()
-	: tex_mm(NULL)
+	: eSrc(0.f)
+	, eTarget(0.f)
+	, tex_mm(NULL)
 	, fTrail(0)
 { }
 
@@ -202,11 +201,8 @@ bool ControlTargetSpell::CanLaunch()
 			tcount++;
 		}
 	}
-	if(tcount == 0) {
-		return false;
-	}
 	
-	return true;
+	return (tcount != 0);
 }
 
 void ControlTargetSpell::Launch()
@@ -229,20 +225,20 @@ void ControlTargetSpell::Launch()
 		}
 		
 		if(closerThan(ioo->pos, m_caster_pos, 900.f)) {
-			std::ostringstream oss;
-			oss << entities[m_target]->idString();
-			oss << ' ' << long(m_level);
-			SendIOScriptEvent(ioo, SM_NULL, oss.str(), "npc_control");
+			ScriptParameters parameters;
+			parameters.push_back(entities[m_target]->idString());
+			parameters.push_back(long(m_level));
+			SendIOScriptEvent(entities.get(m_caster), ioo, "npc_control", parameters);
 		}
 	}
 	
-	ARX_SOUND_PlaySFX(SND_SPELL_CONTROL_TARGET);
+	ARX_SOUND_PlaySFX(g_snd.SPELL_CONTROL_TARGET);
 	
 	m_duration = GameDurationMs(1000);
 	m_hasDuration = true;
 	
-	eSrc = Vec3f_ZERO;
-	eTarget = Vec3f_ZERO;
+	eSrc = Vec3f(0.f);
+	eTarget = Vec3f(0.f);
 	fTrail = 0.f;
 	
 	tex_mm = TextureContainer::Load("graph/obj3d/textures/(fx)_ctrl_target");
@@ -352,7 +348,7 @@ bool FreezeTimeSpell::CanLaunch() {
 }
 
 void FreezeTimeSpell::Launch() {
-	ARX_SOUND_PlaySFX(SND_SPELL_FREEZETIME);
+	ARX_SOUND_PlaySFX(g_snd.SPELL_FREEZETIME);
 	
 	float max_slowdown = std::max(0.f, g_gameTime.speed() - 0.01f);
 	m_slowdown = glm::clamp(m_level * 0.08f, 0.f, max_slowdown);
@@ -368,12 +364,12 @@ void FreezeTimeSpell::End() {
 	
 	Entity * caster = entities.get(m_caster);
 	if(caster) {
-		ARX_SOUND_PlaySFX(SND_SPELL_TELEKINESIS_END, &caster->pos);
+		ARX_SOUND_PlaySFX(g_snd.SPELL_TELEKINESIS_END, &caster->pos);
 	}
 }
 
 void MassIncinerateSpell::Launch() {
-	ARX_SOUND_PlaySFX(SND_SPELL_MASS_INCINERATE);
+	ARX_SOUND_PlaySFX(g_snd.SPELL_MASS_INCINERATE);
 	
 	m_duration = GameDurationMs(20000);
 	m_hasDuration = true;
@@ -401,16 +397,17 @@ void MassIncinerateSpell::Launch() {
 	}
 	
 	if(!m_targets.empty()) {
-		m_snd_loop = ARX_SOUND_PlaySFX(SND_SPELL_INCINERATE_LOOP, &m_caster_pos, 1.f, ARX_SOUND_PLAY_LOOPED);
-	} else {
-		m_snd_loop = audio::INVALID_ID;
+		m_snd_loop = ARX_SOUND_PlaySFX_loop(g_snd.SPELL_INCINERATE_LOOP, &m_caster_pos, 1.f);
 	}
 }
 
 void MassIncinerateSpell::End() {
 	m_targets.clear();
+	
 	ARX_SOUND_Stop(m_snd_loop);
-	ARX_SOUND_PlaySFX(SND_SPELL_INCINERATE_END);
+	m_snd_loop = audio::SourcedSample();
+	
+	ARX_SOUND_PlaySFX(g_snd.SPELL_INCINERATE_END);
 }
 
 void MassIncinerateSpell::Update() {
@@ -419,43 +416,4 @@ void MassIncinerateSpell::Update() {
 	if(caster) {
 		ARX_SOUND_RefreshPosition(m_snd_loop, caster->pos);
 	}
-}
-
-float LASTTELEPORT = 0.0F;
-
-bool TeleportSpell::CanLaunch() {
-	return !spells.ExistAnyInstanceForThisCaster(m_type, m_caster);
-}
-
-void TeleportSpell::Launch() {
-	m_duration = GameDurationMs(7000);
-	m_hasDuration = true;
-	
-	ARX_SOUND_PlaySFX(SND_SPELL_TELEPORT, &m_caster_pos);
-	
-	if(m_caster == EntityHandle_Player) {
-		LASTTELEPORT = 0.f;
-	}
-}
-
-void TeleportSpell::End() {
-	ARX_SOUND_PlaySFX(SND_MAGIC_FIZZLE, &m_caster_pos);
-}
-
-extern Vec3f lastteleport;
-
-void TeleportSpell::Update() {
-	
-	float TELEPORT = m_elapsed / m_duration;
-	
-	if(LASTTELEPORT < 0.5f && TELEPORT >= 0.5f) {
-		Vec3f pos = lastteleport;
-		lastteleport = player.pos;
-		player.pos = pos;
-		LASTTELEPORT = 32.f;
-		ARX_SOUND_PlaySFX(SND_SPELL_TELEPORTED, &player.pos);
-	} else {
-		LASTTELEPORT = TELEPORT;
-	}
-	
 }

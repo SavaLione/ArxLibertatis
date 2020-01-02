@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2016 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -50,7 +50,7 @@ public:
 		: m_pitch(0)
 		, m_yaw(0)
 		, m_roll(0)
-	{}
+	{ }
 	
 	/*!
 	 * Constructor accepting initial values.
@@ -61,23 +61,6 @@ public:
 		, m_roll(roll)
 	{ }
 	
-	/*!
-	 * Copy constructor.
-	 * \param other An angle to be copied.
-	 */
-	Angle(const Angle & other)
-		: m_pitch(other.m_pitch)
-		, m_yaw(other.m_yaw)
-		, m_roll(other.m_roll)
-	{ }
-
-	explicit Angle(const glm::quat & quat) {
-		typename vec3_traits<T>::type v = glm::eulerAngles(quat);
-		m_pitch = glm::degrees(v.x);
-		m_yaw = glm::degrees(v.y);
-		m_roll = glm::degrees(v.z);
-	}
-
 	T getPitch() const {
 		return m_pitch;
 	}
@@ -100,17 +83,6 @@ public:
 
 	void setRoll(T roll) {
 		m_roll = roll;
-	}
-
-	/*!
-	 * Set this angle to the content of another angle.
-	 * \brief Assignment operator.
-	 * \param other An euler angle to be copied.
-	 * \return Reference to this object.
-	 */
-	Angle & operator=(const Angle & other) {
-		m_pitch = other.m_pitch, m_yaw = other.m_yaw, m_roll = other.m_roll;
-		return *this;
 	}
 	
 	/*!
@@ -185,7 +157,7 @@ public:
 		return *this;
 	}
 	
-	const Angle & operator *=(T scale) {
+	const Angle & operator*=(T scale) {
 		m_pitch *= scale, m_yaw *= scale, m_roll *= scale;
 		return *this;
 	}
@@ -204,16 +176,14 @@ public:
 		m_yaw = MAKEANGLE(m_yaw);
 		m_roll = MAKEANGLE(m_roll);
 	}
-
-	static const Angle ZERO; //!< A zero angle.
-
+	
 private:
+	
 	T m_pitch;
 	T m_yaw;
 	T m_roll;
+	
 };
-
-template <class T> const Angle<T> Angle<T>::ZERO(T(0), T(0), T(0));
 
 float AngleDifference(float d, float e);
 
@@ -234,6 +204,10 @@ inline float getAngle(float x, float y) {
 //! Get the angle of the 2D vector (x0,y0)--(x1,y1), in radians.
 inline float getAngle(float x0, float y0, float x1, float y1) {
 	return getAngle(x1 - x0, y1 - y0);
+}
+
+inline glm::quat quat_identity() {
+	return glm::quat(1.f, 0.f, 0.f, 0.f);
 }
 
 #endif // ARX_MATH_ANGLE_H

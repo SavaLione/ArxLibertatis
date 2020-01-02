@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2016 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -22,7 +22,6 @@
 
 #include "math/Types.h"
 
-struct EERIE_CAMERA;
 class Entity;
 
 void MagicFlareLoadTextures();

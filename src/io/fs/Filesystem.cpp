@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2016 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -21,27 +21,51 @@
 
 #include <iterator>
 
+#include "io/fs/FilePath.h"
 #include "io/fs/FileStream.h"
 
 namespace fs {
 
-char * read_file(const path & p, size_t & size) {
+bool create_directories(const path & p) {
 	
-	fs::ifstream ifs(p, fs::fstream::in | fs::fstream::binary | fs::fstream::ate);
-	if(!ifs.is_open()) {
-		return NULL;
+	FileType type = get_type(p);
+	if(type != DoesNotExist) {
+		return type == Directory;
 	}
 	
-	size = ifs.tellg();
-	
-	char * buf = new char[size];
-	
-	if(ifs.seekg(0).read(buf, size).fail()) {
-		delete[] buf;
-		return NULL;
+	if(p.is_root() || !create_directories(p.parent())) {
+		return false;
 	}
 	
-	return buf;
+	return create_directory(p);
+}
+
+static bool clear_directory(const path & p) {
+	
+	for(directory_iterator it(p); !it.end(); ++it) {
+		fs::path entry = p / it.name();
+		if(it.link_type() == Directory) {
+			clear_directory(entry);
+		} else {
+			remove(entry);
+		}
+	}
+	
+	return remove_directory(p);
+}
+
+bool remove_all(const path & p) {
+	
+	FileType type = get_link_type(p);
+	if(type == DoesNotExist) {
+		return true;
+	}
+	
+	if(type == Directory) {
+		return clear_directory(p);
+	}
+	
+	return remove(p);
 }
 
 std::string read(const path & p) {

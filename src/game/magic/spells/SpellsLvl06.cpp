@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2017 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2014-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -54,13 +54,13 @@ void RiseDeadSpell::GetTargetAndBeta(Vec3f & target, float & beta) {
 }
 
 RiseDeadSpell::RiseDeadSpell()
-	: m_creationFailed(false)
-	, m_entity()
+	: m_targetPos(0.f)
+	, m_creationFailed(false)
 { }
 
 bool RiseDeadSpell::CanLaunch() {
 	
-	//TODO always cancel spell even if new one can't be launched ?
+	// TODO Always cancel spell even if new one can't be launched ?
 	spells.endByCaster(m_caster, SPELL_RISE_DEAD);
 	
 	float beta;
@@ -69,7 +69,7 @@ bool RiseDeadSpell::CanLaunch() {
 	GetTargetAndBeta(target, beta);
 
 	if(!ARX_INTERACTIVE_ConvertToValidPosForIO(NULL, &target)) {
-		ARX_SOUND_PlaySFX(SND_MAGIC_FIZZLE);
+		ARX_SOUND_PlaySFX(g_snd.MAGIC_FIZZLE);
 		return false;
 	}
 
@@ -84,7 +84,7 @@ void RiseDeadSpell::Launch() {
 	GetTargetAndBeta(target, beta);
 	
 	m_targetPos = target;
-	ARX_SOUND_PlaySFX(SND_SPELL_RAISE_DEAD, &m_targetPos);
+	ARX_SOUND_PlaySFX(g_snd.SPELL_RAISE_DEAD, &m_targetPos);
 	
 	m_hasDuration = m_launchDuration >= 0;
 	m_duration = m_hasDuration ? m_launchDuration : 0;
@@ -117,12 +117,12 @@ void RiseDeadSpell::End() {
 	
 	Entity * entity = entities.get(m_entity);
 	if(entity) {
-		ARX_SOUND_PlaySFX(SND_SPELL_ELECTRIC, &entity->pos);
+		ARX_SOUND_PlaySFX(g_snd.SPELL_ELECTRIC, &entity->pos);
 		
 		if(entity->scriptload && (entity->ioflags & IO_NOSAVE)) {
-			AddRandomSmoke(entity, 100);
+			AddRandomSmoke(*entity, 100);
 			Vec3f posi = entity->pos;
-			posi.y-=100.f;
+			posi.y -= 100.f;
 			MakeCoolFx(posi);
 			
 			EERIE_LIGHT * light = dynLightCreate();
@@ -168,7 +168,7 @@ void RiseDeadSpell::Update() {
 	GameDuration tim = m_fissure.m_elapsed;
 	
 	if(tim > GameDurationMs(3000) && m_entity == EntityHandle() && !m_creationFailed) {
-		ARX_SOUND_PlaySFX(SND_SPELL_ELECTRIC, &m_targetPos);
+		ARX_SOUND_PlaySFX(g_snd.SPELL_ELECTRIC, &m_targetPos);
 		
 		Cylinder phys = Cylinder(m_targetPos, 50, -200);
 		
@@ -185,21 +185,14 @@ void RiseDeadSpell::Update() {
 				
 				io->summoner = m_caster;
 				
-				io->ioflags|=IO_NOSAVE;
+				io->ioflags |= IO_NOSAVE;
 				m_entity = io->index();
-				io->scriptload=1;
+				io->scriptload = 1;
 				
 				ARX_INTERACTIVE_Teleport(io, phys.origin);
 				SendInitScriptEvent(io);
 				
-				Entity * caster = entities.get(m_caster);
-				if(caster) {
-					EVENT_SENDER = caster;
-				} else {
-					EVENT_SENDER = NULL;
-				}
-				
-				SendIOScriptEvent(io, SM_SUMMONED);
+				SendIOScriptEvent(entities.get(m_caster), io, SM_SUMMONED);
 				
 				Vec3f pos = m_fissure.m_eSrc;
 				pos += arx::randomVec3f() * 100.f;
@@ -210,20 +203,21 @@ void RiseDeadSpell::Update() {
 			
 			m_light = LightHandle();
 		} else {
-			ARX_SOUND_PlaySFX(SND_MAGIC_FIZZLE);
+			ARX_SOUND_PlaySFX(g_snd.MAGIC_FIZZLE);
 			m_creationFailed = true;
-			m_duration = 0;
+			requestEnd();
 		}
 	} else if(!g_gameTime.isPaused() && tim < GameDurationMs(4000)) {
-	  if(Random::getf() > 0.95f) {
+		if(Random::getf() > 0.95f) {
 			MakeCoolFx(m_fissure.m_eSrc);
 		}
 	}
+	
 }
 
 void ParalyseSpell::Launch() {
 	
-	ARX_SOUND_PlaySFX(SND_SPELL_PARALYSE, &entities[m_target]->pos);
+	ARX_SOUND_PlaySFX(g_snd.SPELL_PARALYSE, &entities[m_target]->pos);
 	
 	m_duration = (m_launchDuration >= 0) ? m_launchDuration : GameDurationMs(5000);
 	m_hasDuration = true;
@@ -254,27 +248,23 @@ void ParalyseSpell::End() {
 		target->ioflags &= ~IO_FREEZESCRIPT;
 	}
 	
-	ARX_SOUND_PlaySFX(SND_SPELL_PARALYSE_END);
+	ARX_SOUND_PlaySFX(g_snd.SPELL_PARALYSE_END);
 }
 
 Vec3f ParalyseSpell::getPosition() {
-	
 	return getTargetPosition();
 }
 
-CreateFieldSpell::CreateFieldSpell()
-	: m_entity()
-{
-}
 
+CreateFieldSpell::CreateFieldSpell() { }
 
 void CreateFieldSpell::Launch() {
 	
 	GameInstant start = g_gameTime.now();
 	if(m_flags & SPELLCAST_FLAG_RESTORE) {
-		//move time of creation back by 4 seconds or whatever elapsed after game time 0 (if it is smaller)
-		//prevents difference between creation time and elapsed time of m_field (or as small as possible)
-		//related to m_field.Update() with comment below
+		// Move time of creation back by 4 seconds or whatever elapsed after game time 0 (if it is smaller)
+		// Prevents difference between creation time and elapsed time of m_field (or as small as possible)
+		// related to m_field.Update() with comment below
 		start -= std::min(start - GameInstant(0), GameDurationMs(4000));
 	}
 	m_timcreation = start;
@@ -284,29 +274,26 @@ void CreateFieldSpell::Launch() {
 	m_fManaCostPerSecond = 1.2f;
 	
 	Vec3f target;
-	float beta = 0.f;
-	bool displace = false;
+	float beta;
+	bool displace;
 	if(m_caster == EntityHandle_Player) {
 		target = entities.player()->pos;
 		beta = player.angle.getYaw();
 		displace = true;
 	} else {
 		Entity * io = entities.get(m_caster);
-		if(io) {
-			target = io->pos;
-			beta = io->angle.getYaw();
-			displace = (io->ioflags & IO_NPC) == IO_NPC;
-		} else {
-			ARX_DEAD_CODE();
-		}
+		arx_assert(io);
+		target = io->pos;
+		beta = io->angle.getYaw();
+		displace = (io->ioflags & IO_NPC) == IO_NPC;
 	}
 	if(displace) {
 		target += angleToVectorXZ(beta) * 250.f;
 	}
 	
-	//don't play sound for persistent fields
+	// Don't play sound for persistent fields
 	if(!(m_flags & SPELLCAST_FLAG_RESTORE)) {
-		ARX_SOUND_PlaySFX(SND_SPELL_CREATE_FIELD, &target);
+		ARX_SOUND_PlaySFX(g_snd.SPELL_CREATE_FIELD, &target);
 	}
 	
 	res::path cls = "graph/obj3d/interactive/fix_inter/blue_cube/blue_cube";
@@ -333,26 +320,22 @@ void CreateFieldSpell::Launch() {
 		}
 		
 		if(m_flags & SPELLCAST_FLAG_RESTORE) {
-			//fast forward the field's animation so that players don't see it
-			//being casted in front of them on game load
+			// Fast forward the field's animation so that players don't see it
+			// being casted in front of them on game load
 			m_field.Update(GameDurationMs(4000));
 		}
 		
 	} else {
-		//make the spell end in ARX_SPELLS_Update()
-		m_duration = 0;
-		m_hasDuration = true;
+		requestEnd();
 	}
+	
 }
 
 void CreateFieldSpell::End() {
 	
 	endLightDelayed(m_field.lLightId, GameDurationMs(800));
 	
-	Entity * io = entities.get(m_entity);
-	if(io) {
-		delete io;
-	}
+	delete entities.get(m_entity);
 }
 
 void CreateFieldSpell::Update() {
@@ -361,9 +344,8 @@ void CreateFieldSpell::Update() {
 	if(io) {
 		io->pos = m_field.eSrc;
 		
-		if (IsAnyNPCInPlatform(io))
-		{
-			m_duration = 0;
+		if(IsAnyNPCInPlatform(io)) {
+			requestEnd();
 		}
 		
 		m_field.Update(g_gameTime.lastFrameDuration());
@@ -378,7 +360,7 @@ Vec3f CreateFieldSpell::getPosition() {
 
 void DisarmTrapSpell::Launch() {
 	
-	ARX_SOUND_PlaySFX(SND_SPELL_DISARM_TRAP);
+	ARX_SOUND_PlaySFX(g_snd.SPELL_DISARM_TRAP);
 	
 	m_duration = GameDurationMs(1);
 	m_hasDuration = true;
@@ -420,7 +402,7 @@ bool SlowDownSpell::CanLaunch() {
 
 void SlowDownSpell::Launch() {
 	
-	ARX_SOUND_PlaySFX(SND_SPELL_SLOW_DOWN, &entities[m_target]->pos);
+	ARX_SOUND_PlaySFX(g_snd.SPELL_SLOW_DOWN, &entities[m_target]->pos);
 	
 	if(m_caster == EntityHandle_Player) {
 		m_duration = 0;
@@ -437,7 +419,7 @@ void SlowDownSpell::Launch() {
 
 void SlowDownSpell::End() {
 	
-	ARX_SOUND_PlaySFX(SND_SPELL_SLOW_DOWN_END);
+	ARX_SOUND_PlaySFX(g_snd.SPELL_SLOW_DOWN_END);
 	m_targets.clear();
 }
 

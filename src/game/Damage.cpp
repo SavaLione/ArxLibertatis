@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2017 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -52,12 +52,14 @@ ZeniMax Media Inc., Suite 120, Rockville, Maryland 20850 USA.
 #include <limits>
 #include <string>
 #include <vector>
+#include <sstream>
 
 #include "ai/Paths.h"
 
 #include "core/GameTime.h"
 #include "core/Core.h"
 
+#include "game/Camera.h"
 #include "game/EntityManager.h"
 #include "game/Equipment.h"
 #include "game/Inventory.h"
@@ -100,11 +102,17 @@ ZeniMax Media Inc., Suite 120, Rockville, Maryland 20850 USA.
 class TextureContainer;
 
 struct DAMAGE_INFO {
-	short exist;
+	
+	bool exist;
 	GameInstant start_time;
 	GameInstant lastupd;
 	
 	DamageParameters params;
+	
+	DAMAGE_INFO()
+		: exist(false)
+	{ }
+	
 };
 
 const size_t MAX_DAMAGES = 200;
@@ -127,85 +135,130 @@ DamageHandle DamageCreate(const DamageParameters & params) {
 
 void DamageRequestEnd(DamageHandle handle) {
 	if(handle.handleData() >= 0) {
-		g_damages[handle.handleData()].exist = 0;
+		g_damages[handle.handleData()].exist = false;
 	}
 }
 
-
-
 extern Vec3f PUSH_PLAYER_FORCE;
 
-static float Blood_Pos = 0.f;
-static GameDuration Blood_Duration = 0;
-
-static void ARX_DAMAGES_IgnitIO(Entity * io, float dmg)
-{
-	if(!io || (io->ioflags & IO_INVULNERABILITY))
+static void ARX_DAMAGES_IgnitIO(Entity * source, Entity * io, float dmg) {
+	
+	if(!io || (io->ioflags & IO_INVULNERABILITY)) {
 		return;
-
-	if(io->ignition <= 0.f && io->ignition + dmg > 1.f)
-		SendIOScriptEvent(io, SM_ENTERZONE, "cook_s");
-
-	if(io->ioflags & IO_FIX)
-		io->ignition += dmg * ( 1.0f / 10 );
-	else if(io->ioflags & IO_ITEM)
-		io->ignition += dmg * ( 1.0f / 8 );
-	else if(io->ioflags & IO_NPC)
-		io->ignition += dmg * ( 1.0f / 4 );
+	}
+	
+	if(io->ignition <= 0.f && io->ignition + dmg > 1.f) {
+		SendIOScriptEvent(source, io, SM_ENTERZONE, "cook_s");
+	}
+	
+	if(io->ioflags & IO_FIX) {
+		io->ignition += dmg * 0.1f;
+	} else if(io->ioflags & IO_ITEM) {
+		io->ignition += dmg * 0.125f;
+	} else if(io->ioflags & IO_NPC) {
+		io->ignition += dmg * 0.25f;
+	}
+	
 }
- 
-void ARX_DAMAGE_Reset_Blood_Info()
-{
+
+class ScreenFxBloodSplash {
+	
+	GameDuration Blood_Duration;
+	GameDuration duration;
+	float Blood_Pos;
+	float Last_Blood_Pos;
+	
+public:
+	
+	ScreenFxBloodSplash()
+		: Blood_Pos(0.f)
+		, Last_Blood_Pos(0.f)
+	{ }
+	
+	void reset();
+	void hit(float strength);
+	void render();
+	
+};
+
+static ScreenFxBloodSplash g_screenFxBloodSplash;
+
+void ScreenFxBloodSplash::reset() {
 	Blood_Pos = 0.f;
 	Blood_Duration = 0;
 }
 
-void ARX_DAMAGE_Show_Hit_Blood()
-{
-	Color color;
-	static float Last_Blood_Pos = 0.f;
-	static GameDuration duration;
+void ScreenFxBloodSplash::hit(float strength) {
+	if(Blood_Pos == 0.f) {
+		Blood_Pos = 0.000001f;
+		Blood_Duration = GameDurationMsf(100.f + strength * 200.f);
+	} else {
+		Blood_Duration += GameDurationMsf(strength * 800.f);
+	}
+}
 
+void ScreenFxBloodSplash::render() {
+	
+	Color color;
 	if(Blood_Pos > 2.f) { // end of blood flash
 		Blood_Pos = 0.f;
 		duration = 0;
-	} else if (Blood_Pos > 1.f) {
+	} else if(Blood_Pos > 1.f) {
 		
 		if(player.poison > 1.f)
-			color = Color3f(Blood_Pos - 1.f, 1.f, Blood_Pos - 1.f).to<u8>();
+			color = Color::rgb(Blood_Pos - 1.f, 1.f, Blood_Pos - 1.f);
 		else
-			color = Color3f(1.f, Blood_Pos - 1.f, Blood_Pos - 1.f).to<u8>();
+			color = Color::rgb(1.f, Blood_Pos - 1.f, Blood_Pos - 1.f);
 		
 		UseRenderState state(render2D().blend(BlendZero, BlendSrcColor));
 		EERIEDrawBitmap(Rectf(g_size), 0.00009f, NULL, color);
 	} else if(Blood_Pos > 0.f) {
 		
 		if(player.poison > 1.f)
-			color = Color3f(1.f - Blood_Pos, 1.f, 1.f - Blood_Pos).to<u8>();
+			color = Color::rgb(1.f - Blood_Pos, 1.f, 1.f - Blood_Pos);
 		else
-			color = Color3f(1.f, 1.f - Blood_Pos, 1.f - Blood_Pos).to<u8>();
+			color = Color::rgb(1.f, 1.f - Blood_Pos, 1.f - Blood_Pos);
 		
 		UseRenderState state(render2D().blend(BlendZero, BlendSrcColor));
 		EERIEDrawBitmap(Rectf(g_size), 0.00009f, NULL, color);
 	}
-
+	
 	if(Blood_Pos > 0.f) {
 		if(Blood_Pos > 1.f) {
 			if(Last_Blood_Pos <= 1.f) {
 				Blood_Pos = 1.0001f;
 				duration = 0;
 			}
-
-			if(duration > Blood_Duration)
+			if(duration > Blood_Duration) {
 				Blood_Pos += g_gameTime.lastFrameDuration() / GameDurationMs(300);
-
+			}
 			duration += g_gameTime.lastFrameDuration();
-		}
-		else
+		} else {
 			Blood_Pos += g_gameTime.lastFrameDuration() / GameDurationMs(40);
+		}
 	}
-
+	
 	Last_Blood_Pos = Blood_Pos;
+}
+
+void ARX_DAMAGE_Reset_Blood_Info() {
+	g_screenFxBloodSplash.reset();
+}
+
+void ARX_DAMAGE_Show_Hit_Blood() {
+	g_screenFxBloodSplash.render();
+}
+
+
+static ScriptParameters getOuchEventParameter(const Entity * entity) {
+	
+	std::ostringstream oss;
+	oss.setf(std::ios_base::fixed, std::ios_base::floatfield);
+	oss.precision(2);
+	
+	oss << entity->dmg_sum;
+	
+	return oss.str();
 }
 
 float ARX_DAMAGES_DamagePlayer(float dmg, DamageType type, EntityHandle source) {
@@ -224,22 +277,14 @@ float ARX_DAMAGES_DamagePlayer(float dmg, DamageType type, EntityHandle source) 
 
 	entities.player()->dmg_sum += dmg;
 	
+	Entity * sender = ValidIONum(source) ? entities[source] : NULL;
+	
 	GameDuration elapsed = g_gameTime.now() - entities.player()->ouch_time;
 	if(elapsed > GameDurationMs(500)) {
-		Entity * oes = EVENT_SENDER;
-
-		if(ValidIONum(source))
-			EVENT_SENDER = entities[source];
-		else
-			EVENT_SENDER = NULL;
-
 		entities.player()->ouch_time = g_gameTime.now();
-		char tex[32];
-		sprintf(tex, "%5.2f", double(entities.player()->dmg_sum));
-		SendIOScriptEvent( entities.player(), SM_OUCH, tex );
-		EVENT_SENDER = oes;
+		SendIOScriptEvent(sender, entities.player(), SM_OUCH, getOuchEventParameter(entities.player()));
 		float power = entities.player()->dmg_sum / player.lifePool.max * 220.f;
-		AddQuakeFX(power * 3.5f, 500 + power * 3, Random::getf(200.f, 300.f) + power, false);
+		AddQuakeFX(power * 3.5f, GameDurationMsf(500 + power * 3), Random::getf(200.f, 300.f) + power, false);
 		entities.player()->dmg_sum = 0.f;
 	}
 
@@ -281,14 +326,14 @@ float ARX_DAMAGES_DamagePlayer(float dmg, DamageType type, EntityHandle source) 
 			player.lifePool.current = 0.f;
 
 			if(alive) {
-				//g_canResumeGame = false;
+				
 				ARX_PLAYER_BecomesDead();
 
 				if((type & DAMAGE_TYPE_FIRE) || (type & DAMAGE_TYPE_FAKEFIRE)) {
-					ARX_SOUND_PlayInterface(SND_PLAYER_DEATH_BY_FIRE);
+					ARX_SOUND_PlayInterface(g_snd.PLAYER_DEATH_BY_FIRE);
 				}
 
-				SendIOScriptEvent(entities.player(), SM_DIE);
+				SendIOScriptEvent(sender, entities.player(), SM_DIE);
 
 				for(size_t i = 1; i < entities.size(); i++) {
 					const EntityHandle handle = EntityHandle(i);
@@ -296,7 +341,6 @@ float ARX_DAMAGES_DamagePlayer(float dmg, DamageType type, EntityHandle source) 
 					
 					if(ioo && (ioo->ioflags & IO_NPC)) {
 						if(ioo->targetinfo == EntityHandle(TARGET_PLAYER)) {
-							EVENT_SENDER = entities.player();
 							std::string killer;
 							if(source == EntityHandle_Player) {
 								killer = "player";
@@ -305,7 +349,7 @@ float ARX_DAMAGES_DamagePlayer(float dmg, DamageType type, EntityHandle source) 
 							} else if(ValidIONum(source)) {
 								killer = entities[source]->idString();
 							}
-							SendIOScriptEvent(entities[handle], SM_NULL, killer, "target_death");
+							SendIOScriptEvent(entities.player(), entities[handle], "target_death", killer);
 						}
 					}
 				}
@@ -316,13 +360,8 @@ float ARX_DAMAGES_DamagePlayer(float dmg, DamageType type, EntityHandle source) 
 			return damagesdone;
 
 		float t = dmg / player.lifePool.max;
-
-		if(Blood_Pos == 0.f) {
-			Blood_Pos = 0.000001f;
-			Blood_Duration = GameDurationMsf(100.f + t * 200.f);
-		} else {
-			Blood_Duration += GameDurationMsf(t * 800.f);
-		}
+		
+		g_screenFxBloodSplash.hit(t);
 	}
 
 	// revient les barres
@@ -431,171 +470,153 @@ void ARX_DAMAGES_DamageFIX(Entity * io, float dmg, EntityHandle source, bool isS
 	   || !io->show
 	   || !(io->ioflags & IO_FIX)
 	   || (io->ioflags & IO_INVULNERABILITY)
-	   || !io->script.data
+	   || !io->script.valid
 	) {
 		return;
 	}
 
 	io->dmg_sum += dmg;
-
-	if (ValidIONum(source))
-		EVENT_SENDER = entities[source];
-	else
-		EVENT_SENDER = NULL;
-
+	
+	Entity * sender = ValidIONum(source) ? entities[source] : NULL;
+	
 	GameDuration elapsed = g_gameTime.now() - io->ouch_time;
 	if(elapsed > GameDurationMs(500)) {
 		io->ouch_time = g_gameTime.now();
-		char tex[32];
-		sprintf(tex, "%5.2f", double(io->dmg_sum));
-		SendIOScriptEvent(io, SM_OUCH, tex);
+		SendIOScriptEvent(sender, io, SM_OUCH, getOuchEventParameter(io));
 		io->dmg_sum = 0.f;
 	}
-
-	if(Random::getf(0.f, 100.f) > io->durability)
-		io->durability -= dmg * ( 1.0f / 2 ); //1.f;
-
+	
+	if(Random::getf(0.f, 100.f) > io->durability) {
+		io->durability -= dmg * 0.5f;
+	}
+	
 	if(io->durability <= 0.f) {
 		io->durability = 0.f;
-		SendIOScriptEvent(io, SM_BREAK);
+		SendIOScriptEvent(sender, io, SM_BREAK);
 	} else {
-		char dmm[32];
-
-		if(EVENT_SENDER == entities.player()) {
+		
+		ScriptParameters parameters(dmg);
+		if(source == EntityHandle_Player) {
 			if(isSpellHit) {
-				sprintf(dmm, "%f spell", double(dmg));
-			}
-			else
-				switch(ARX_EQUIPMENT_GetPlayerWeaponType())
-				{
+				parameters.push_back("spell");
+			} else {
+				switch(ARX_EQUIPMENT_GetPlayerWeaponType()) {
 					case WEAPON_BARE:
-						sprintf(dmm, "%f bare", double(dmg));
+						parameters.push_back("bare");
 						break;
 					case WEAPON_DAGGER:
-						sprintf(dmm, "%f dagger", double(dmg));
+						parameters.push_back("dagger");
 						break;
 					case WEAPON_1H:
-						sprintf(dmm, "%f 1h", double(dmg));
+						parameters.push_back("1h");
 						break;
 					case WEAPON_2H:
-						sprintf(dmm, "%f 2h", double(dmg));
+						parameters.push_back("2h");
 						break;
 					case WEAPON_BOW:
-						sprintf(dmm, "%f arrow", double(dmg));
+						parameters.push_back("arrow");
 						break;
-					default:
-						sprintf(dmm, "%f", double(dmg));
-						break;
+					default: break;
 				}
+			}
 		}
-		else
-			sprintf(dmm, "%f", double(dmg));
-
-		if(SendIOScriptEvent(io, SM_HIT, dmm) != ACCEPT)
-			return;
+		
+		SendIOScriptEvent(sender, io, SM_HIT, parameters);
+		
 	}
+	
 }
 
-extern Entity * FlyingOverIO;
-extern MASTER_CAMERA_STRUCT MasterCamera;
-
-void ARX_DAMAGES_ForceDeath(Entity * io_dead, Entity * io_killer) {
+void ARX_DAMAGES_ForceDeath(Entity & io_dead, Entity * io_killer) {
 	
-	if(io_dead->mainevent == "dead") {
+	if(io_dead.mainevent == SM_DEAD) {
 		return;
 	}
-
-	Entity * old_sender = EVENT_SENDER;
-	EVENT_SENDER = io_killer;
-
-	if(io_dead == DRAGINTER)
-		Set_DragInter(NULL);
-
-	if(io_dead == FlyingOverIO)
-		FlyingOverIO = NULL;
-
-	if((MasterCamera.exist & 1) && (MasterCamera.io == io_dead))
-		MasterCamera.exist = 0;
-
-	if((MasterCamera.exist & 2) && (MasterCamera.want_io == io_dead))
-		MasterCamera.exist = 0;
-
-	lightHandleDestroy(io_dead->dynlight);
 	
-	//Kill all speeches
-
-	ARX_NPC_Behaviour_Reset(io_dead);
-
-	ARX_SPEECH_ReleaseIOSpeech(io_dead);
-
-	//Kill all Timers...
-	ARX_SCRIPT_Timer_Clear_For_IO(io_dead);
-
-	if(io_dead->mainevent != "dead") {
-		if(SendIOScriptEvent(io_dead, SM_DIE) != REFUSE && ValidIOAddress(io_dead)) {
-			io_dead->infracolor = Color3f::blue;
+	if(&io_dead == DRAGINTER) {
+		Set_DragInter(NULL);
+	}
+	
+	if(&io_dead == FlyingOverIO) {
+		FlyingOverIO = NULL;
+	}
+	
+	if(g_cameraEntity == &io_dead) {
+		g_cameraEntity = NULL;
+	}
+	
+	lightHandleDestroy(io_dead.dynlight);
+	
+	ARX_NPC_Behaviour_Reset(&io_dead);
+	
+	ARX_SPEECH_ReleaseIOSpeech(&io_dead);
+	
+	ARX_SCRIPT_Timer_Clear_For_IO(&io_dead);
+	
+	if(io_dead.mainevent != SM_DEAD) {
+		if(SendIOScriptEvent(io_killer, &io_dead, SM_DIE) != REFUSE && ValidIOAddress(&io_dead)) {
+			io_dead.infracolor = Color3f::blue;
 		}
 	}
 	
-	if (!ValidIOAddress(io_dead))
+	if(!ValidIOAddress(&io_dead)) {
 		return;
-
-	ARX_SCRIPT_SetMainEvent(io_dead, "dead");
-
-	if(fartherThan(io_dead->pos, ACTIVECAM->orgTrans.pos, 3200.f)) {
-		io_dead->animlayer[0].ctime = AnimationDurationMs(9999999);
-		io_dead->animBlend.lastanimtime = 0;
 	}
-
-	std::string killer;
-
-	if(io_dead->ioflags & IO_NPC)
-		io_dead->_npcdata->weaponinhand = 0;
-
-	ARX_INTERACTIVE_DestroyDynamicInfo(io_dead);
-
+	
+	io_dead.mainevent = SM_DEAD;
+	
+	if(fartherThan(io_dead.pos, g_camera->m_pos, 3200.f)) {
+		io_dead.animlayer[0].ctime = AnimationDurationMs(9999999);
+		io_dead.animBlend.lastanimtime = 0;
+	}
+	
+	if(io_dead.ioflags & IO_NPC) {
+		io_dead._npcdata->weaponinhand = 0;
+	}
+	
+	ARX_INTERACTIVE_DestroyDynamicInfo(&io_dead);
+	
+	ScriptParameters killer;
 	if(io_killer == entities.player()) {
-		killer = "player";
-	} else {
-		if(io_killer)
-			killer = io_killer->idString();
+		killer.push_back("player");
+	} else if(io_killer) {
+		killer.push_back(io_killer->idString());
 	}
-
+	
 	for(size_t i = 1; i < entities.size(); i++) {
 		const EntityHandle handle = EntityHandle(i);
 		Entity * ioo = entities[handle];
-
-		if(ioo == io_dead)
+		
+		if(ioo == &io_dead) {
 			continue;
-
+		}
+		
 		if(ioo && (ioo->ioflags & IO_NPC)) {
 			if(ValidIONum(ioo->targetinfo))
-				if(entities[ioo->targetinfo] == io_dead) {
-					EVENT_SENDER = io_dead;
-					Stack_SendIOScriptEvent(entities[handle], SM_NULL, killer, "target_death");
+				if(entities[ioo->targetinfo] == &io_dead) {
+					Stack_SendIOScriptEvent(&io_dead, entities[handle], "target_death", killer);
 					ioo->targetinfo = EntityHandle(TARGET_NONE);
 					ioo->_npcdata->reachedtarget = 0;
 				}
 
 			if(ValidIONum(ioo->_npcdata->pathfind.truetarget))
-				if(entities[ioo->_npcdata->pathfind.truetarget] == io_dead) {
-					EVENT_SENDER = io_dead;
-					Stack_SendIOScriptEvent(entities[handle], SM_NULL, killer, "target_death");
+				if(entities[ioo->_npcdata->pathfind.truetarget] == &io_dead) {
+					Stack_SendIOScriptEvent(&io_dead, entities[handle], "target_death", killer);
 					ioo->_npcdata->pathfind.truetarget = EntityHandle(TARGET_NONE);
 					ioo->_npcdata->reachedtarget = 0;
 				}
 		}
 	}
 
-	io_dead->animlayer[1].cur_anim = NULL;
-	io_dead->animlayer[2].cur_anim = NULL;
-	io_dead->animlayer[3].cur_anim = NULL;
+	io_dead.animlayer[1].cur_anim = NULL;
+	io_dead.animlayer[2].cur_anim = NULL;
+	io_dead.animlayer[3].cur_anim = NULL;
 
-	if(io_dead->ioflags & IO_NPC) {
-		io_dead->_npcdata->lifePool.current = 0;
+	if(io_dead.ioflags & IO_NPC) {
+		io_dead._npcdata->lifePool.current = 0;
 
-		if(io_dead->_npcdata->weapon) {
-			Entity * ioo = io_dead->_npcdata->weapon;
+		if(io_dead._npcdata->weapon) {
+			Entity * ioo = io_dead._npcdata->weapon;
 			if(ValidIOAddress(ioo)) {
 				ioo->show = SHOW_FLAG_IN_SCENE;
 				ioo->ioflags |= IO_NO_NPC_COLLIDE;
@@ -604,13 +625,14 @@ void ARX_DAMAGES_ForceDeath(Entity * io_dead, Entity * io_killer) {
 			}
 		}
 	}
-
-	EVENT_SENDER = old_sender;
+	
 }
 
 static void ARX_DAMAGES_PushIO(Entity * io_target, EntityHandle source, float power) {
+	
 	if(power > 0.f && ValidIONum(source)) {
-		power *= ( 1.0f / 20 );
+		
+		power *= 0.05f;
 		Entity * io = entities[source];
 		Vec3f vect = io_target->pos - io->pos;
 		vect = glm::normalize(vect);
@@ -622,7 +644,9 @@ static void ARX_DAMAGES_PushIO(Entity * io_target, EntityHandle source, float po
 		} else {
 			io_target->move += vect;
 		}
+		
 	}
+	
 }
 
 void ARX_DAMAGES_DealDamages(EntityHandle target, float dmg, EntityHandle source, DamageType flags, Vec3f * pos) {
@@ -639,6 +663,7 @@ void ARX_DAMAGES_DealDamages(EntityHandle target, float dmg, EntityHandle source
 	}
 
 	if(target == EntityHandle_Player) {
+		
 		if(flags & DAMAGE_TYPE_POISON) {
 			if(Random::getf(0.f, 100.f) > player.m_miscFull.resistPoison) {
 				damagesdone = dmg;
@@ -654,27 +679,32 @@ void ARX_DAMAGES_DealDamages(EntityHandle target, float dmg, EntityHandle source
 				damagesdone = ARX_DAMAGES_DamagePlayer(dmg, flags, source);
 			}
 		}
-
-		if(flags & DAMAGE_TYPE_FIRE)
-			ARX_DAMAGES_IgnitIO(io_target, damagesdone);
+		
+		if(flags & DAMAGE_TYPE_FIRE) {
+			ARX_DAMAGES_IgnitIO(io_source, io_target, damagesdone);
+		}
+		
 	} else {
 		if(io_target->ioflags & IO_NPC) {
+			
 			if(flags & DAMAGE_TYPE_POISON) {
+				
 				if(Random::getf(0.f, 100.f) > io_target->_npcdata->resist_poison) {
 					damagesdone = dmg;
 					io_target->_npcdata->poisonned += damagesdone;
 				} else {
 					damagesdone = 0;
 				}
+				
 			} else {
+				
 				if(flags & DAMAGE_TYPE_FIRE) {
 					if(Random::getf(0.f, 100.f) <= io_target->_npcdata->resist_fire) {
 						dmg = 0;
 					}
-
-					ARX_DAMAGES_IgnitIO(io_target, dmg);
+					ARX_DAMAGES_IgnitIO(io_source, io_target, dmg);
 				}
-
+				
 				if(flags & DAMAGE_TYPE_DRAIN_MANA) {
 					damagesdone = ARX_DAMAGES_DrainMana(io_target, dmg);
 				} else {
@@ -699,9 +729,6 @@ void ARX_DAMAGES_DealDamages(EntityHandle target, float dmg, EntityHandle source
 	}
 }
 
-//*************************************************************************************
-// flags & 1 == spell damage
-//*************************************************************************************
 float ARX_DAMAGES_DamageNPC(Entity * io, float dmg, EntityHandle source, bool isSpellHit, const Vec3f * pos) {
 	
 	if(   !io
@@ -728,28 +755,26 @@ float ARX_DAMAGES_DamageNPC(Entity * io, float dmg, EntityHandle source, bool is
 	io->dmg_sum += dmg;
 	
 	GameDuration elapsed = g_gameTime.now() - io->ouch_time;
+	
 	if(elapsed > GameDurationMs(500)) {
-		if(ValidIONum(source))
-			EVENT_SENDER = entities[source];
-		else
-			EVENT_SENDER = NULL;
-
+		
+		Entity * sender = ValidIONum(source) ? entities[source] : NULL;
+		
 		io->ouch_time = g_gameTime.now();
-		char tex[32];
-
-		if(EVENT_SENDER && EVENT_SENDER->summoner == EntityHandle_Player) {
-			EVENT_SENDER = entities.player();
-			sprintf(tex, "%5.2f summoned", double(io->dmg_sum));
-		} else {
-			sprintf(tex, "%5.2f", double(io->dmg_sum));
+		
+		ScriptParameters parameters = getOuchEventParameter(io);
+		if(sender && sender->summoner == EntityHandle_Player) {
+			sender = entities.player();
+			parameters.push_back("summoned");
 		}
-
-		SendIOScriptEvent(io, SM_OUCH, tex);
+		
+		SendIOScriptEvent(sender, io, SM_OUCH, parameters);
+		
 		io->dmg_sum = 0.f;
 		
 		spells.endByTarget(io->index(), SPELL_CONFUSE);
 	}
-
+	
 	if(dmg >= 0.f) {
 		if(ValidIONum(source)) {
 			Entity * pio = NULL;
@@ -784,51 +809,45 @@ float ARX_DAMAGES_DamageNPC(Entity * io, float dmg, EntityHandle source, bool is
 			}
 		}
 
-		if(io->script.data != NULL) {
+		if(io->script.valid) {
 			if(source.handleData() >= EntityHandle_Player.handleData()) {
-				if(ValidIONum(source))
-					EVENT_SENDER = entities[source];
-				else
-					EVENT_SENDER = NULL;
-
-				char dmm[256];
-
-				if(EVENT_SENDER == entities.player()) {
+				
+				ScriptParameters parameters(dmg);
+				if(source == EntityHandle_Player) {
 					if(isSpellHit) {
-						sprintf(dmm, "%f spell", double(dmg));
-					}
-					else
+						parameters.push_back("spell");
+					} else {
 						switch (ARX_EQUIPMENT_GetPlayerWeaponType()) {
 							case WEAPON_BARE:
-								sprintf(dmm, "%f bare", double(dmg));
+								parameters.push_back("bare");
 								break;
 							case WEAPON_DAGGER:
-								sprintf(dmm, "%f dagger", double(dmg));
+								parameters.push_back("dagger");
 								break;
 							case WEAPON_1H:
-								sprintf(dmm, "%f 1h", double(dmg));
+								parameters.push_back("1h");
 								break;
 							case WEAPON_2H:
-								sprintf(dmm, "%f 2h", double(dmg));
+								parameters.push_back("2h");
 								break;
 							case WEAPON_BOW:
-								sprintf(dmm, "%f arrow", double(dmg));
+								parameters.push_back("arrow");
 								break;
-							default:
-								sprintf(dmm, "%f", double(dmg));
-								break;
+							default: break;
 						}
+					}
 				}
-				else
-					sprintf(dmm, "%f", double(dmg));
-
-				if(EVENT_SENDER && EVENT_SENDER->summoner == EntityHandle_Player) {
-					EVENT_SENDER = entities.player();
-					sprintf(dmm, "%f summoned", double(dmg));
+				
+				Entity * sender = ValidIONum(source) ? entities[source] : NULL;
+				if(sender && sender->summoner == EntityHandle_Player) {
+					sender = entities.player();
+					parameters.push_back("summoned");
 				}
-
-				if(SendIOScriptEvent(io, SM_HIT, dmm) != ACCEPT)
+				
+				if(SendIOScriptEvent(sender, io, SM_HIT, parameters) != ACCEPT) {
 					return damagesdone;
+				}
+				
 			}
 		}
 
@@ -846,29 +865,28 @@ float ARX_DAMAGES_DamageNPC(Entity * io, float dmg, EntityHandle source, bool is
 		
 		if(io->_npcdata->lifePool.current <= 0.f) {
 			io->_npcdata->lifePool.current = 0.f;
-
 			if(source != EntityHandle_Player || ValidIONum(player.equiped[EQUIP_SLOT_WEAPON])) {
 				if((dmg >= io->_npcdata->lifePool.max * ( 1.0f / 2 )) && pos)
 					ARX_NPC_TryToCutSomething(io, pos);
 			}
-
 			if(ValidIONum(source)) {
 				long xp = io->_npcdata->xpvalue;
-				ARX_DAMAGES_ForceDeath(io, entities[source]);
-
-				if(source == EntityHandle_Player || entities[source]->summoner == EntityHandle_Player)
+				ARX_DAMAGES_ForceDeath(*io, entities[source]);
+				if(source == EntityHandle_Player || entities[source]->summoner == EntityHandle_Player) {
 					ARX_PLAYER_Modify_XP(xp);
+				}
+			} else {
+				ARX_DAMAGES_ForceDeath(*io, NULL);
 			}
-			else ARX_DAMAGES_ForceDeath(io, NULL);
 		}
+		
 	}
-
+	
 	return damagesdone;
 }
 
-void ARX_DAMAGES_Reset()
-{
-	memset(g_damages, 0, sizeof(DAMAGE_INFO)*MAX_DAMAGES);
+void ARX_DAMAGES_Reset() {
+	std::fill_n(g_damages, boost::size(g_damages), DAMAGE_INFO());
 }
 
 extern TextureContainer * TC_fire2;
@@ -885,9 +903,9 @@ static void ARX_DAMAGES_AddVisual(DAMAGE_INFO & di, const Vec3f & pos, float dmg
 	if(di.lastupd + GameDurationMs(200) < now) {
 		di.lastupd = now;
 		if(di.params.type & DAMAGE_TYPE_MAGICAL) {
-			ARX_SOUND_PlaySFX(SND_SPELL_MAGICAL_HIT, &pos, Random::getf(0.8f, 1.2f));
+			ARX_SOUND_PlaySFX(g_snd.SPELL_MAGICAL_HIT, &pos, Random::getf(0.8f, 1.2f));
 		} else {
-			ARX_SOUND_PlaySFX(SND_SPELL_FIRE_HIT, &pos, Random::getf(0.8f, 1.2f));
+			ARX_SOUND_PlaySFX(g_snd.SPELL_FIRE_HIT, &pos, Random::getf(0.8f, 1.2f));
 		}
 	}
 	
@@ -934,7 +952,7 @@ static void ARX_DAMAGES_UpdateDamage(DamageHandle j, GameInstant now) {
 	if(damage.params.flags & DAMAGE_FLAG_FOLLOW_SOURCE) {
 		if(damage.params.source == EntityHandle_Player) {
 			damage.params.pos = player.pos;
-		} else if (ValidIONum(damage.params.source)) {
+		} else if(ValidIONum(damage.params.source)) {
 			damage.params.pos = entities[damage.params.source]->pos;
 		}
 	}
@@ -988,18 +1006,16 @@ static void ARX_DAMAGES_UpdateDamage(DamageHandle j, GameInstant now) {
 					if(damage.params.type & DAMAGE_TYPE_FIELD) {
 						GameDuration elapsed = g_gameTime.now() - io->collide_door_time;
 						if(elapsed > GameDurationMs(500)) {
-							EVENT_SENDER = NULL;
 							io->collide_door_time = g_gameTime.now();
 							
-							const char * param = "";
+							ScriptParameters parameters;
+							if(damage.params.type & DAMAGE_TYPE_COLD) {
+								parameters = "cold";
+							} else if(damage.params.type & DAMAGE_TYPE_FIRE) {
+								parameters = "fire";
+							}
 							
-							if(damage.params.type & DAMAGE_TYPE_FIRE)
-								param = "fire";
-							
-							if(damage.params.type & DAMAGE_TYPE_COLD)
-								param = "cold";
-							
-							SendIOScriptEvent(io, SM_COLLIDE_FIELD, param);
+							SendIOScriptEvent(NULL, io, SM_COLLIDE_FIELD, parameters);
 						}
 					}
 					
@@ -1011,7 +1027,7 @@ static void ARX_DAMAGES_UpdateDamage(DamageHandle j, GameInstant now) {
 						}
 						break;
 						case DAMAGE_AREAHALF: {
-							float ratio = (damage.params.radius - (dist * ( 1.0f / 2 ))) * divradius;
+							float ratio = (damage.params.radius - dist * 0.5f) * divradius;
 							ratio = glm::clamp(ratio, 0.f, 1.f);
 							dmg = dmg * ratio + 1.f;
 						}
@@ -1070,12 +1086,12 @@ static void ARX_DAMAGES_UpdateDamage(DamageHandle j, GameInstant now) {
 								   && !(damage.params.type & DAMAGE_TYPE_FIRE)
 								   && !(damage.params.type & DAMAGE_TYPE_COLD)
 								) {
-									dmg -= player.m_miscFull.resistMagic * ( 1.0f / 100 ) * dmg;
+									dmg -= player.m_miscFull.resistMagic * 0.01f * dmg;
 									dmg = std::max(0.0f, dmg);
 								}
 								if(damage.params.type & DAMAGE_TYPE_FIRE) {
 									dmg = ARX_SPELLS_ApplyFireProtection(entities.player(), dmg);
-									ARX_DAMAGES_IgnitIO(entities.player(), dmg);
+									ARX_DAMAGES_IgnitIO(entities.get(damage.params.source), entities.player(), dmg);
 								}
 								if(damage.params.type & DAMAGE_TYPE_COLD) {
 									dmg = ARX_SPELLS_ApplyColdProtection(entities.player(), dmg);
@@ -1096,13 +1112,13 @@ static void ARX_DAMAGES_UpdateDamage(DamageHandle j, GameInstant now) {
 							} else {
 								if(damage.params.type & DAMAGE_TYPE_FIRE) {
 									dmg = ARX_SPELLS_ApplyFireProtection(io, dmg);
-									ARX_DAMAGES_IgnitIO(io, dmg);
+									ARX_DAMAGES_IgnitIO(entities.get(damage.params.source), io, dmg);
 								}
 								if(   (damage.params.type & DAMAGE_TYPE_MAGICAL)
 								   && !(damage.params.type & DAMAGE_TYPE_FIRE)
 								   && !(damage.params.type & DAMAGE_TYPE_COLD)
 								) {
-									dmg -= io->_npcdata->resist_magic * ( 1.0f / 100 ) * dmg;
+									dmg -= io->_npcdata->resist_magic * 0.01f * dmg;
 									dmg = std::max(0.0f, dmg);
 								}
 								if(damage.params.type & DAMAGE_TYPE_COLD) {
@@ -1262,10 +1278,8 @@ void CheckForIgnition(const Sphere & sphere, bool mode, long flag) {
 					io->ignition = 0;
 					lightHandleDestroy(io->ignit_light);
 					
-					if(io->ignit_sound != audio::INVALID_ID) {
-						ARX_SOUND_Stop(io->ignit_sound);
-						io->ignit_sound = audio::INVALID_ID;
-					}
+					ARX_SOUND_Stop(io->ignit_sound);
+					io->ignit_sound = audio::SourcedSample();
 				}
 			}
 		}
@@ -1307,7 +1321,7 @@ void DoSphericDamage(const Sphere & sphere, float dmg, DamageArea flags, DamageT
 				for(size_t kk = 0; kk < ioo->obj->vertexlist.size(); kk += 1) {
 					if(kk != k) {
 						Vec3f posi = (entities[handle]->obj->vertexWorldPositions[k].v
-									  + entities[handle]->obj->vertexWorldPositions[kk].v) * 0.5f;
+						             + entities[handle]->obj->vertexWorldPositions[kk].v) * 0.5f;
 						float dist = fdist(sphere.origin, posi);
 						if(dist <= sphere.radius) {
 							count2++;
@@ -1330,7 +1344,7 @@ void DoSphericDamage(const Sphere & sphere, float dmg, DamageArea flags, DamageT
 			}
 		}
 		
-		float ratio = glm::max(count, count2) / (ioo->obj->vertexlist.size() * ( 1.0f / 2 ));
+		float ratio = glm::max(count, count2) / (float(ioo->obj->vertexlist.size()) / 2.f);
 		
 		if(ratio > 2.f)
 			ratio = 2.f;
@@ -1342,7 +1356,7 @@ void DoSphericDamage(const Sphere & sphere, float dmg, DamageArea flags, DamageT
 						dmg = dmg * (sphere.radius + 30 - mindist) * rad;
 						break;
 					case DAMAGE_AREAHALF:
-						dmg = dmg * (sphere.radius + 30 - mindist * ( 1.0f / 2 )) * rad;
+						dmg = dmg * (sphere.radius + 30 - mindist * 0.5f) * rad;
 						break;
 					case DAMAGE_FULL: break;
 				}
@@ -1350,7 +1364,7 @@ void DoSphericDamage(const Sphere & sphere, float dmg, DamageArea flags, DamageT
 				if(handle == EntityHandle_Player) {
 					if(typ & DAMAGE_TYPE_FIRE) {
 						dmg = ARX_SPELLS_ApplyFireProtection(ioo, dmg);
-						ARX_DAMAGES_IgnitIO(entities.player(), dmg);
+						ARX_DAMAGES_IgnitIO(entities.get(numsource), entities.player(), dmg);
 					}
 					
 					if(typ & DAMAGE_TYPE_COLD) {
@@ -1362,7 +1376,7 @@ void DoSphericDamage(const Sphere & sphere, float dmg, DamageArea flags, DamageT
 				} else {
 					if(typ & DAMAGE_TYPE_FIRE) {
 						dmg = ARX_SPELLS_ApplyFireProtection(ioo, dmg * ratio);
-						ARX_DAMAGES_IgnitIO(ioo, dmg);
+						ARX_DAMAGES_IgnitIO(entities.get(numsource), ioo, dmg);
 					}
 					
 					if(typ & DAMAGE_TYPE_COLD) {
@@ -1376,7 +1390,7 @@ void DoSphericDamage(const Sphere & sphere, float dmg, DamageArea flags, DamageT
 			if(mindist <= sphere.radius + 30.f) {
 				if(typ & DAMAGE_TYPE_FIRE) {
 					dmg = ARX_SPELLS_ApplyFireProtection(ioo, dmg * ratio);
-					ARX_DAMAGES_IgnitIO(entities[handle], dmg);
+					ARX_DAMAGES_IgnitIO(entities.get(numsource), entities[handle], dmg);
 				}
 				
 				if(typ & DAMAGE_TYPE_COLD) {
@@ -1389,8 +1403,10 @@ void DoSphericDamage(const Sphere & sphere, float dmg, DamageArea flags, DamageT
 		}
 	}
 	
-	if (typ & DAMAGE_TYPE_FIRE)
-		CheckForIgnition(sphere, 1, 0);
+	if(typ & DAMAGE_TYPE_FIRE) {
+		CheckForIgnition(sphere, true, 0);
+	}
+	
 }
 
 void ARX_DAMAGES_DurabilityRestore(Entity * io, float percent)
@@ -1405,27 +1421,29 @@ void ARX_DAMAGES_DurabilityRestore(Entity * io, float percent)
 	if (percent >= 100.f) {
 		io->durability = io->max_durability;
 	} else {
-		float ratio			= percent * ( 1.0f / 100 );
-		float to_restore	= (io->max_durability - io->durability) * ratio;
-		float v				= Random::getf(0.f, 100.f) - percent;
-
+		
+		float ratio = percent * 0.01f;
+		float to_restore = (io->max_durability - io->durability) * ratio;
+		float v = Random::getf(0.f, 100.f) - percent;
+		
 		if (v <= 0.f) {
 			float mloss = 1.f;
 
 			if(io->ioflags & IO_ITEM) {
-				io->_itemdata->price -= checked_range_cast<long>(io->_itemdata->price / io->max_durability);
+				io->_itemdata->price -= checked_range_cast<long>(float(io->_itemdata->price) / io->max_durability);
 			}
 
 			io->max_durability -= mloss;
 		} else {
-			if (v > 50.f)
+			
+			if(v > 50.f) {
 				v = 50.f;
-
-			v *= ( 1.0f / 100 );
+			}
+			v *= 0.01f;
+			
 			float mloss = io->max_durability * v;
-
 			if(io->ioflags & IO_ITEM) {
-				io->_itemdata->price -= static_cast<long>(io->_itemdata->price * v);
+				io->_itemdata->price -= static_cast<long>(float(io->_itemdata->price) * v);
 			}
 
 			io->max_durability -= mloss;
@@ -1455,20 +1473,21 @@ void ARX_DAMAGES_DurabilityCheck(Entity * io, float ratio)
 void ARX_DAMAGES_DurabilityLoss(Entity * io, float loss) {
 	
 	arx_assert(io);
-
+	
 	io->durability -= loss;
-
+	
 	if(io->durability <= 0) {
-		SendIOScriptEvent(io, SM_BREAK);
+		SendIOScriptEvent(NULL, io, SM_BREAK);
 	}
+	
 }
 
-void ARX_DAMAGES_DamagePlayerEquipment(float damages)
-{
-	float ratio = damages * ( 1.0f / 20 );
-
-	if(ratio > 1.f)
+void ARX_DAMAGES_DamagePlayerEquipment(float damages) {
+	
+	float ratio = damages * 0.05f;
+	if(ratio > 1.f) {
 		ratio = 1.f;
+	}
 	
 	for(size_t i = 0; i < MAX_EQUIPED; i++) {
 		Entity * todamage = entities.get(player.equiped[i]);
@@ -1476,6 +1495,7 @@ void ARX_DAMAGES_DamagePlayerEquipment(float damages)
 			ARX_DAMAGES_DurabilityCheck(todamage, ratio);
 		}
 	}
+	
 }
 
 float ARX_DAMAGES_ComputeRepairPrice(const Entity * torepair, const Entity * blacksmith)
@@ -1489,7 +1509,7 @@ float ARX_DAMAGES_ComputeRepairPrice(const Entity * torepair, const Entity * bla
 	if(torepair->durability == torepair->max_durability) return -1.f;
 
 	float ratio = (torepair->max_durability - torepair->durability) / torepair->max_durability;
-	float price = torepair->_itemdata->price * ratio;
+	float price = float(torepair->_itemdata->price) * ratio;
 
 	if(blacksmith->shop_multiply != 0.f)
 		price *= blacksmith->shop_multiply;

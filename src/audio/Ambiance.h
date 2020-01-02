@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2016 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -67,21 +67,21 @@ public:
 	void setType(PlayingAmbianceType type) { m_type = type; }
 	PlayingAmbianceType getType() const { return m_type; }
 	
-	const Channel & getChannel() const { return channel; }
-	const res::path & getName() const { return name; }
+	const Channel & getChannel() const { return m_channel; }
+	const res::path & getName() const { return m_name; }
 	
-	aalError setVolume(float volume);
+	void setVolume(float volume);
 	
-	bool isPaused() const { return status == Paused; }
-	bool isPlaying() const { return status == Playing; }
-	bool isIdle() const { return status == Idle; }
-	bool isLooped() const { return loop; }
+	bool isPaused() const { return m_status == Paused; }
+	bool isPlaying() const { return m_status == Playing; }
+	bool isIdle() const { return m_status == Idle; }
+	bool isLooped() const { return m_loop; }
 	
-	aalError play(const Channel & channel, bool loop = true, PlatformDuration fade_interval = 0);
-	aalError stop(PlatformDuration fade_interval = 0);
-	aalError pause();
-	aalError resume();
-	aalError update();
+	void play(const Channel & channel, bool loop = true, PlatformDuration fadeInterval = 0);
+	void stop(PlatformDuration fadeInterval = 0);
+	void pause();
+	void resume();
+	void update();
 	
 	struct Track;
 	typedef std::vector<Track> TrackList;
@@ -94,26 +94,20 @@ private:
 		FadeDown
 	};
 	
-	enum Status {
-		Idle,
-		Playing,
-		Paused
-	};
+	SourceStatus m_status;
+	bool m_loop;
+	Fade m_fade;
 	
-	Status status;
-	bool loop;
-	Fade fade;
-	
-	Channel channel;
-	PlatformDuration fade_time;
-	PlatformDuration fade_interval;
-	float fade_max;
-	PlatformInstant start;
+	Channel m_channel;
+	PlatformDuration m_fadeTime;
+	PlatformDuration m_fadeInterval;
+	float m_fadeMax;
+	PlatformInstant m_start;
 	PlatformDuration m_time;
 	
-	TrackList tracks;
+	TrackList m_tracks;
 	
-	res::path name;
+	res::path m_name;
 	
 	PlayingAmbianceType m_type;
 	

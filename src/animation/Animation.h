@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2016 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -49,79 +49,100 @@ ZeniMax Media Inc., Suite 120, Rockville, Maryland 20850 USA.
 
 #include <stddef.h>
 #include <string>
+#include <utility>
+#include <vector>
 
 #include "core/TimeTypes.h"
+#include "io/resource/ResourcePath.h"
 #include "math/Types.h"
 #include "graphics/BaseGraphicsTypes.h"
 #include "graphics/GraphicsTypes.h"
 
 class Entity;
 
-struct EERIE_FRAME
-{
-	long		num_frame;
-	bool  stepSound;
-	bool  f_translate;
-	bool  f_rotate;
+struct EERIE_FRAME {
+	
+	long num_frame;
+	bool stepSound;
+	bool f_translate;
+	bool f_rotate;
 	AnimationDuration time;
-	Vec3f	translate;
-	glm::quat	quat;
-	audio::SampleId	sample;
+	Vec3f translate;
+	glm::quat quat;
+	audio::SampleHandle sample;
+	
+	EERIE_FRAME()
+		: num_frame(0)
+		, stepSound(false)
+		, f_translate(false)
+		, f_rotate(false)
+		, translate(0.f)
+		, quat(quat_identity())
+	{ }
+	
 };
 
-struct EERIE_GROUP
-{
-	int		key;
-	Vec3f	translate;
-	glm::quat	quat;
-	Vec3f	zoom;
+struct EERIE_GROUP {
+	
+	int key;
+	Vec3f translate;
+	glm::quat quat;
+	Vec3f zoom;
+	
+	EERIE_GROUP()
+		: key(0)
+		, translate(0.f)
+		, quat(quat_identity())
+		, zoom(1.f)
+	{ }
+	
 };
 
-struct EERIE_ANIM
-{
+struct EERIE_ANIM {
+	
 	AnimationDuration anim_time;
-	long		nb_groups;
-	long		nb_key_frames;
-	EERIE_FRAME *	frames;
-	EERIE_GROUP  *  groups;
-	unsigned char *	voidgroups;
+	std::vector<EERIE_FRAME> frames;
+	std::vector<EERIE_GROUP> groups;
+	std::vector<bool> voidgroups;
 	
 	EERIE_ANIM()
 		: anim_time(0)
-		, nb_groups(0)
-		, nb_key_frames(0)
-		, frames(NULL)
-		, groups(NULL)
-		, voidgroups(NULL)
 	{ }
+	
+	size_t nb_groups() {
+		return voidgroups.size();
+	}
+	
 };
 
 struct ANIM_HANDLE {
-
-	ANIM_HANDLE();
-
+	
 	res::path path; // empty path means an unallocated slot
-	EERIE_ANIM ** anims;
-	short alt_nb;
+	std::vector<EERIE_ANIM *> anims;
 	long locks;
+	
+	ANIM_HANDLE()
+		: locks(0)
+	{ }
+	
 };
 
 // Animation playing flags
 enum AnimUseTypeFlag {
-	EA_LOOP       = (1<<0),	// Must be looped at end (indefinitely...)
-	EA_REVERSE    = (1<<1),	// Is played reversed (from end to start)
-	EA_PAUSED     = (1<<2),	// Is paused
-	EA_ANIMEND    = (1<<3),	// Has just finished
-	EA_STATICANIM = (1<<4),	// Is a static Anim (no movement offset returned).
-	EA_STOPEND    = (1<<5),	// Must Be Stopped at end.
-	EA_FORCEPLAY  = (1<<6),	// User controlled... MUST be played...
-	EA_EXCONTROL  = (1<<7)	// ctime externally set, no update.
+	EA_LOOP       = 1 << 0, // Must be looped at end (indefinitely...)
+	EA_REVERSE    = 1 << 1, // Is played reversed (from end to start)
+	EA_PAUSED     = 1 << 2, // Is paused
+	EA_ANIMEND    = 1 << 3, // Has just finished
+	EA_STATICANIM = 1 << 4, // Is a static Anim (no movement offset returned).
+	EA_STOPEND    = 1 << 5, // Must Be Stopped at end.
+	EA_FORCEPLAY  = 1 << 6, // User controlled... MUST be played...
+	EA_EXCONTROL  = 1 << 7  // ctime externally set, no update.
 };
 DECLARE_FLAGS(AnimUseTypeFlag, AnimUseType)
 DECLARE_FLAGS_OPERATORS(AnimUseType)
 
 struct AnimLayer {
-
+	
 	AnimLayer()
 		: cur_anim(NULL)
 		, altidx_cur(0)
@@ -131,14 +152,18 @@ struct AnimLayer {
 		, currentInterpolation(0.f)
 		, currentFrame(0)
 	{}
-
+	
 	ANIM_HANDLE * cur_anim;
-	short altidx_cur; // idx to alternate anims...
+	u16 altidx_cur; // idx to alternate anims...
 	AnimationDuration ctime;
 	AnimUseType flags;
 	long lastframe;
 	float currentInterpolation;
 	long currentFrame;
+	
+	EERIE_ANIM * currentAltAnim() {
+		return cur_anim->anims[altidx_cur];
+	}
 };
 
 /*!
@@ -183,10 +208,10 @@ void setAnimation(Entity * entity, ANIM_HANDLE * animation,
  */
 void stopAnimation(Entity * entity, size_t layer = 0);
 
-short ANIM_GetAltIdx(ANIM_HANDLE * ah, long old);
+u16 ANIM_GetAltIdx(const ANIM_HANDLE & ah, u16 old);
 void ANIM_Set(AnimLayer & layer, ANIM_HANDLE * anim);
 
-Vec3f GetAnimTotalTranslate(ANIM_HANDLE * eanim, long alt_idx);
+Vec3f GetAnimTotalTranslate(ANIM_HANDLE * eanim, size_t alt_idx);
 
 void EERIE_ANIMMANAGER_ClearAll();
 void EERIE_ANIMMANAGER_PurgeUnused();
@@ -194,14 +219,14 @@ void EERIE_ANIMMANAGER_ReleaseHandle(ANIM_HANDLE * anim);
 ANIM_HANDLE * EERIE_ANIMMANAGER_Load(const res::path & path);
 ANIM_HANDLE * EERIE_ANIMMANAGER_Load_NoWarning(const res::path & path);
 
-void PrepareAnim(AnimLayer & layer, AnimationDuration time, Entity *io);
+void PrepareAnim(AnimLayer & layer, AnimationDuration time, Entity * io);
 void ResetAnim(AnimLayer & layer);
 
 void AcquireLastAnim(Entity * io);
 void FinishAnim(Entity * io, ANIM_HANDLE * eanim);
 
-void ARX_SOUND_PushAnimSamples();
-void ARX_SOUND_PopAnimSamples();
+std::vector< std::pair<res::path, size_t> > ARX_SOUND_PushAnimSamples();
+void ARX_SOUND_PopAnimSamples(const std::vector< std::pair<res::path, size_t> > & samples);
 
 void ReleaseAnimFromIO(Entity * io, long num);
 

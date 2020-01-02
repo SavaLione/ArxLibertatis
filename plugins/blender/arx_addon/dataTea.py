@@ -1,4 +1,4 @@
-# Copyright 2014-2017 Arx Libertatis Team (see the AUTHORS file)
+# Copyright 2014-2019 Arx Libertatis Team (see the AUTHORS file)
 #
 # This file is part of Arx Libertatis.
 #
@@ -25,7 +25,9 @@ from ctypes import (
 
 from .dataCommon import (
     SavedVec3,
-    ArxQuat
+    ArxQuat,
+    SerializationException,
+    UnexpectedValueException
 )
 
 class THEA_HEADER(LittleEndianStructure):
@@ -98,18 +100,10 @@ import logging
 from ctypes import sizeof
 
 
-class SerializationException(Exception):
-    pass
-
-
-class UnexpectedValueException(SerializationException):
-    pass
-
-
 from typing import List
 from collections import namedtuple
 
-TeaFrame = namedtuple("TeaFrame", ['duration', 'flags', 'translation', 'rotation', 'groups'])
+TeaFrame = namedtuple("TeaFrame", ['duration', 'flags', 'translation', 'rotation', 'groups', 'sampleName'])
 
 class TeaSerializer(object):
     def __init__(self):
@@ -132,6 +126,15 @@ class TeaSerializer(object):
                                                                                                   header.nb_frames,
                                                                                                   header.nb_groups,
                                                                                                   header.nb_key_frames))
+
+        if header.nb_frames < 0:
+            raise UnexpectedValueException("header.nb_frames = " + str(header.nb_frames))
+
+        if header.nb_groups < 0:
+            raise UnexpectedValueException("header.nb_groups = " + str(header.nb_groups))
+
+        if header.nb_key_frames < 0:
+            raise UnexpectedValueException("header.nb_key_frames = " + str(header.nb_key_frames))
 
         results = []
         for i in range(header.nb_key_frames):
@@ -200,9 +203,13 @@ class TeaSerializer(object):
             num_sample = c_int32.from_buffer_copy(data, pos)
             pos += sizeof(c_int32)
 
+            sampleName = None
             if num_sample.value != -1:
                 sample = THEA_SAMPLE.from_buffer_copy(data, pos)
                 pos += sizeof(THEA_SAMPLE)
+
+                sampleName = sample.sample_name.decode('iso-8859-1');
+
                 self.log.debug("sample_size: {0}".format(sample.sample_size))
                 pos += sample.sample_size  # skip data
 
@@ -213,7 +220,8 @@ class TeaSerializer(object):
                 flags=flags,
                 translation=translation,
                 rotation=rotation,
-                groups=groups
+                groups=groups,
+                sampleName=sampleName
             ))
 
         # Sanity check the deserialized data

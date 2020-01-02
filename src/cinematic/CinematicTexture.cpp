@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2017 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -64,14 +64,14 @@ CinematicBitmap::~CinematicBitmap()
 	grid.FreeGrille();
 }
 
-CinematicBitmap* CreateCinematicBitmap(const res::path & path, int scale) {
+CinematicBitmap * CreateCinematicBitmap(const res::path & path, int scale) {
 	
 	std::string name = path.basename();
 	if(name.empty()) {
 		return 0;
 	}
 	
-	CinematicBitmap	* bi = new CinematicBitmap();
+	CinematicBitmap * bi = new CinematicBitmap();
 	if(!bi)
 		return 0;
 
@@ -121,8 +121,9 @@ CinematicBitmap* CreateCinematicBitmap(const res::path & path, int scale) {
 			int w2 = (w - cinMaxSize.x) < 0 ? w : cinMaxSize.x;
 
 			Texture * tex = GRenderer->createTexture();
-			tex->create(w2, h2, cinematicImage.getFormat());
-			tex->getImage().copy(cinematicImage, 0, 0, bi->m_size.x - w, bi->m_size.y - h, w2, h2);
+			tex->create(size_t(w2), size_t(h2), cinematicImage.getFormat());
+			tex->getImage().copy(cinematicImage, 0, 0,
+			                     size_t(bi->m_size.x - w), size_t(bi->m_size.y - h), size_t(w2), size_t(h2));
 			tex->upload();
 			
 			{
@@ -151,16 +152,16 @@ CinematicBitmap* CreateCinematicBitmap(const res::path & path, int scale) {
 }
 
 bool CinematicGrid::AllocGrille(Vec2i nb, Vec2f t, Vec2f d, int scale) {
+	
 	m_scale = scale;
 	Vec2i oldnb = nb + Vec2i(1);
 	nb *= scale;
 	Vec2f oldd = d;
-	d /= (float)scale;
+	d /= float(scale);
 	
 	m_nbvertexs = size_t(nb.x + 1) * size_t(nb.y + 1);
 	m_vertexs.reserve(m_nbvertexs);
 	
-	//vertexs
 	m_count = nb;
 	t *= .5f;
 	Vec2f dep = -t;
@@ -193,7 +194,7 @@ bool CinematicGrid::AllocGrille(Vec2i nb, Vec2f t, Vec2f d, int scale) {
 
 				if(olddxx > (t.x * 2.f)) {
 					dxx = t.x - depxx;
-					dxx /= (float)scale;
+					dxx /= float(scale);
 				}
 				
 			}
@@ -205,7 +206,7 @@ bool CinematicGrid::AllocGrille(Vec2i nb, Vec2f t, Vec2f d, int scale) {
 
 			if(olddyy > (t.y * 2.f)) {
 				d.y = t.y - dep.y;
-				d.y /= (float)scale;
+				d.y /= float(scale);
 			}
 		
 	}
@@ -233,8 +234,8 @@ void CinematicGrid::AddQuadUVs(Vec2i depc, Vec2i tc, Vec2i bitmappos, Vec2i bitm
 	m_mats[matIdx].nbvertexs = (tc.x + 1) * (tc.y + 1);
 	
 	float v = 0.f;
-	float du = 0.999999f / (float)tc.x;
-	float dv = 0.999999f / (float)tc.y;
+	float du = 0.999999f / float(tc.x);
+	float dv = 0.999999f / float(tc.y);
 	tc.y++;
 	tc.x++;
 	int tcyy = tc.y;
@@ -248,8 +249,6 @@ void CinematicGrid::AddQuadUVs(Vec2i depc, Vec2i tc, Vec2i bitmappos, Vec2i bitm
 		while(tcxx--) {
 			int i0, i1, i2, i3;
 			GetIndNumCube(depcxx, depcyy, &i0, &i1, &i2, &i3);
-
-			//uvs
 			C_UV cuv;
 			cuv.indvertex = i0;
 			cuv.uv.x = u;
@@ -285,7 +284,7 @@ void CinematicGrid::AddQuadUVs(Vec2i depc, Vec2i tc, Vec2i bitmappos, Vec2i bitm
 
 void CinematicGrid::ReajustUV() {
 	
-	C_UV* uvs = m_uvs.data();
+	C_UV * uvs = m_uvs.data();
 	
 	for(std::vector<C_INDEXED>::iterator mat = m_mats.begin(); mat != m_mats.end(); ++mat) {
 		
@@ -297,8 +296,8 @@ void CinematicGrid::ReajustUV() {
 		Vec2i size = tex->getStoredSize();
 		
 		if(size.x != mat->bitmap.x || size.y != mat->bitmap.y) {
-			float dx = (.999999f * mat->bitmap.x) / size.x;
-			float dy = (.999999f * mat->bitmap.y) / size.y;
+			float dx = (0.999999f * float(mat->bitmap.x)) / float(size.x);
+			float dy = (0.999999f * float(mat->bitmap.y)) / float(size.y);
 
 			int nb2 = mat->nbvertexs;
 
@@ -324,13 +323,9 @@ size_t CinematicGrid::AddMaterial(Texture * tex) {
 	
 	size_t matIdx = m_mats.size();
 	m_mats.resize(matIdx + 1);
-
-	int deb;
-	if(matIdx == 0)
-		deb = 0;
-	else
-		deb = m_mats[matIdx-1].startind + m_mats[matIdx-1].nbind;
-
+	
+	int deb = (matIdx == 0) ? 0 : m_mats[matIdx - 1].startind + m_mats[matIdx - 1].nbind;
+	
 	m_mats[matIdx].tex = tex;
 	m_mats[matIdx].startind = deb;
 	m_mats[matIdx].nbind = 0;

@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2017 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2014-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -36,11 +36,9 @@
 #include "scene/GameSound.h"
 #include "scene/Interactive.h"
 
-
-
 HealSpell::HealSpell()
-	: SpellBase()
-{}
+	: m_pos(0.f)
+{ }
 
 bool HealSpell::CanLaunch() {
 	
@@ -50,7 +48,7 @@ bool HealSpell::CanLaunch() {
 void HealSpell::Launch() {
 	
 	if(!(m_flags & SPELLCAST_FLAG_NOSOUND)) {
-		ARX_SOUND_PlaySFX(SND_SPELL_HEALING, &m_caster_pos);
+		ARX_SOUND_PlaySFX(g_snd.SPELL_HEALING, &m_caster_pos);
 	}
 	
 	m_hasDuration = true;
@@ -106,7 +104,7 @@ void HealSpell::Update() {
 	
 	if(ff < GameDurationMs(1500)) {
 		m_particles.m_parameters.m_spawnFlags = PARTICLE_CIRCULAR;
-		m_particles.m_parameters.m_gravity = Vec3f_ZERO;
+		m_particles.m_parameters.m_gravity = Vec3f(0.f);
 
 		std::list<Particle *>::iterator i;
 
@@ -131,23 +129,18 @@ void HealSpell::Update() {
 		const EntityHandle handle = EntityHandle(ii);
 		Entity * e = entities[handle];
 		
-		if (    e
-			&& (e->show==SHOW_FLAG_IN_SCENE)
-			&& (e->gameFlags & GFLAG_ISINTREATZONE)
-			&& (e->ioflags & IO_NPC)
-			&& (e->_npcdata->lifePool.current>0.f)
-		) {
+		if(e && e->show == SHOW_FLAG_IN_SCENE && (e->gameFlags & GFLAG_ISINTREATZONE) && (e->ioflags & IO_NPC)
+		   && e->_npcdata->lifePool.current > 0.f) {
+			
 			float dist;
-
 			if(handle == m_caster) {
 				dist = 0;
 			} else {
 				dist = fdist(m_pos, e->pos);
 			}
-
-			if(dist<300.f) {
-				float gain = Random::getf(0.8f, 2.4f) * m_level * (300.f - dist) * (1.0f/300) * g_framedelay * (1.0f/1000);
-
+			
+			if(dist < 300.f) {
+				float gain = Random::getf(0.8f, 2.4f) * m_level * (300.f - dist) * (1.f / 300) * g_framedelay * 0.001f;
 				if(handle == EntityHandle_Player) {
 					if(!BLOCK_PLAYER_CONTROLS) {
 						player.lifePool.current = std::min(player.lifePool.current + gain, player.Full_maxlife);
@@ -156,7 +149,9 @@ void HealSpell::Update() {
 					e->_npcdata->lifePool.current = std::min(e->_npcdata->lifePool.current + gain, e->_npcdata->lifePool.max);
 				}
 			}
+			
 		}
+		
 	}
 	
 }
@@ -168,8 +163,8 @@ void DetectTrapSpell::Launch() {
 	if(m_caster == EntityHandle_Player) {
 		m_target = m_caster;
 		if(!(m_flags & SPELLCAST_FLAG_NOSOUND)) {
-			ARX_SOUND_PlayInterface(SND_SPELL_DETECT_TRAP);
-			m_snd_loop = ARX_SOUND_PlaySFX(SND_SPELL_DETECT_TRAP_LOOP, &m_caster_pos, 1.f, ARX_SOUND_PLAY_LOOPED);
+			ARX_SOUND_PlayInterface(g_snd.SPELL_DETECT_TRAP);
+			m_snd_loop = ARX_SOUND_PlaySFX_loop(g_snd.SPELL_DETECT_TRAP_LOOP, &m_caster_pos, 1.f);
 		}
 	}
 	
@@ -182,9 +177,9 @@ void DetectTrapSpell::Launch() {
 
 void DetectTrapSpell::End() {
 	
-	if(m_caster == EntityHandle_Player) {
-		ARX_SOUND_Stop(m_snd_loop);
-	}
+	ARX_SOUND_Stop(m_snd_loop);
+	m_snd_loop = audio::SourcedSample();
+	
 	m_targets.clear();
 }
 
@@ -209,10 +204,10 @@ void ArmorSpell::Launch()
 	}
 	
 	if(!(m_flags & SPELLCAST_FLAG_NOSOUND)) {
-		ARX_SOUND_PlaySFX(SND_SPELL_ARMOR_START, &entities[m_target]->pos);
+		ARX_SOUND_PlaySFX(g_snd.SPELL_ARMOR_START, &entities[m_target]->pos);
 	}
 	
-	m_snd_loop = ARX_SOUND_PlaySFX(SND_SPELL_ARMOR_LOOP, &entities[m_target]->pos, 1.f, ARX_SOUND_PLAY_LOOPED);
+	m_snd_loop = ARX_SOUND_PlaySFX_loop(g_snd.SPELL_ARMOR_LOOP, &entities[m_target]->pos, 1.f);
 	
 	if(m_caster == EntityHandle_Player) {
 		m_duration = 0;
@@ -237,10 +232,11 @@ void ArmorSpell::Launch()
 void ArmorSpell::End() {
 	
 	ARX_SOUND_Stop(m_snd_loop);
+	m_snd_loop = audio::SourcedSample();
 	
 	Entity * target = entities.get(m_target);
 	if(target) {
-		ARX_SOUND_PlaySFX(SND_SPELL_ARMOR_END, &target->pos);
+		ARX_SOUND_PlaySFX(g_snd.SPELL_ARMOR_END, &target->pos);
 		ARX_HALO_SetToNative(target);
 	}
 	
@@ -277,7 +273,7 @@ void LowerArmorSpell::Launch() {
 	spells.endByCaster(m_caster, SPELL_COLD_PROTECTION);
 	
 	if(!(m_flags & SPELLCAST_FLAG_NOSOUND)) {
-		ARX_SOUND_PlaySFX(SND_SPELL_LOWER_ARMOR, &entities[m_target]->pos);
+		ARX_SOUND_PlaySFX(g_snd.SPELL_LOWER_ARMOR, &entities[m_target]->pos);
 	}
 	
 	if(m_caster == EntityHandle_Player) {
@@ -308,7 +304,7 @@ void LowerArmorSpell::Launch() {
 
 void LowerArmorSpell::End() {
 	
-	ARX_SOUND_PlaySFX(SND_SPELL_LOWER_ARMOR_END);
+	ARX_SOUND_PlaySFX(g_snd.SPELL_LOWER_ARMOR_END);
 	
 	if(m_haloCreated) {
 		Entity * io = entities.get(m_target);
@@ -341,19 +337,15 @@ Vec3f LowerArmorSpell::getPosition() {
 	return getTargetPosition();
 }
 
-HarmSpell::HarmSpell()
-	: m_damage()
-{
-	
-}
+HarmSpell::HarmSpell() { }
 
 void HarmSpell::Launch() {
 	
 	if(!(m_flags & SPELLCAST_FLAG_NOSOUND)) {
-		ARX_SOUND_PlaySFX(SND_SPELL_HARM, &m_caster_pos);
+		ARX_SOUND_PlaySFX(g_snd.SPELL_HARM, &m_caster_pos);
 	}
 	
-	m_snd_loop = ARX_SOUND_PlaySFX(SND_SPELL_MAGICAL_SHIELD, &m_caster_pos, 1.f, ARX_SOUND_PLAY_LOOPED);
+	m_snd_loop = ARX_SOUND_PlaySFX_loop(g_snd.SPELL_MAGICAL_SHIELD_LOOP, &m_caster_pos, 1.f);
 	
 	spells.endByCaster(m_caster, SPELL_LIFE_DRAIN);
 	spells.endByCaster(m_caster, SPELL_MANA_DRAIN);
@@ -391,27 +383,21 @@ void HarmSpell::End() {
 	m_cabal.end();
 	
 	ARX_SOUND_Stop(m_snd_loop);
+	m_snd_loop = audio::SourcedSample();
 }
 
-void HarmSpell::Update()
-{
-	float scaley;
-	float offset;
-	Vec3f casterPos;
+void HarmSpell::Update() {
 	
-	if(m_caster == EntityHandle_Player) {
-		scaley = 90.f;
-		offset = 60.0f;
-		casterPos = player.pos;
-	} else {
+	float scaley = 90.f;
+	float offset = 60.f;
+	if(m_caster != EntityHandle_Player) {
 		scaley = glm::abs(entities[m_caster]->physics.cyl.height * (1.0f / 2)) + 30.f;
 		offset = -scaley;
-		casterPos = entities[m_caster]->pos;
 	}
-	
 	m_cabal.setYScale(scaley);
 	m_cabal.setOffset(offset);
 	
+	Vec3f casterPos = (m_caster == EntityHandle_Player) ? player.pos : entities[m_caster]->pos;
 	Vec3f cabalPos = m_cabal.update(casterPos);
 	ARX_SOUND_RefreshPosition(m_snd_loop, cabalPos);
 }

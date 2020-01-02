@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2016 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2014-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -27,6 +27,7 @@
 #include "game/Player.h"
 #include "game/Spells.h"
 #include "gui/Interface.h"
+#include "gui/Notification.h"
 #include "gui/Speech.h"
 #include "scene/GameSound.h"
 
@@ -95,12 +96,12 @@ void ARX_SPELLS_Precast_Launch(PrecastHandle num) {
 		
 		if(precast.launch_time == 0) {
 			precast.launch_time = g_gameTime.now();
-			ARX_SOUND_PlaySFX(SND_SPELL_CREATE_FIELD);
+			ARX_SOUND_PlaySFX(g_snd.SPELL_CREATE_FIELD);
 		}
 	} else {
-		ARX_SOUND_PlaySFX(SND_MAGIC_FIZZLE);
+		ARX_SOUND_PlaySFX(g_snd.MAGIC_FIZZLE);
 		
-		ARX_SPEECH_Add(getLocalised("player_cantcast"));
+		notification_add(getLocalised("player_cantcast"));
 		ARX_SPEECH_AddSpeech(entities.player(), "player_cantcast", ANIM_TALK_NEUTRAL);
 	}
 }
@@ -118,7 +119,7 @@ void ARX_SPELLS_Precast_Check() {
 			}
 
 			if(layer1.cur_anim && layer1.cur_anim == entities.player()->anims[ANIM_CAST]) {
-				if(layer1.ctime + AnimationDurationMs(550) > layer1.cur_anim->anims[layer1.altidx_cur]->anim_time)
+				if(layer1.ctime + AnimationDurationMs(550) > layer1.currentAltAnim()->anim_time)
 				{
 					ARX_SPELLS_Launch(Precast[i].typ,
 					                  EntityHandle_Player,

@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2012 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -66,7 +66,6 @@ public:
 	virtual PakFileHandle * getStream() = 0;
 	virtual aalError getFormat(PCMFormat & format) = 0;
 	virtual size_t getLength() = 0;
-	virtual size_t getPosition() = 0;
 	
 	virtual aalError read(void * buffer, size_t to_read, size_t & read) = 0;
 	
@@ -74,7 +73,7 @@ public:
 
 // Utilities
 Stream * createStream(const res::path & name);
-void deleteStream(Stream *& stream);
+void deleteStream(Stream * & stream);
 
 } // namespace audio
 

@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-2017 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2015-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -37,11 +37,12 @@
 #include "graphics/effects/Halo.h"
 #include "graphics/particle/ParticleEffects.h"
 #include "graphics/texture/TextureStage.h"
-#include "gui/hud/PlayerInventory.h"
-#include "gui/Menu.h"
+#include "gui/Cursor.h"
+#include "gui/Hud.h"
 #include "gui/MiniMap.h"
 #include "gui/Speech.h"
 #include "gui/TextManager.h"
+#include "gui/hud/PlayerInventory.h"
 #include "input/Input.h"
 #include "scene/GameSound.h"
 #include "scene/Interactive.h"
@@ -49,13 +50,10 @@
 
 long IN_BOOK_DRAW = 0;
 
-long FLYING_OVER = 0;
-long OLD_FLYING_OVER = 0;
-
-//used to redist points - attributes and skill
-long lCursorRedistValue = 0;
-
 PlayerBook g_playerBook;
+
+float g_bookScale = 1.0f;
+Rectf g_bookRect = Rectf(Vec2f(97, 64), 513, 313);
 
 
 void PlayerBook::open() {
@@ -72,54 +70,43 @@ void PlayerBook::close() {
 	g_playerBook.toggle();
 }
 
-static Rectf scaleRectPosAndSize(const Rectf & r, const Vec2f & scale) {
-	
-	return Rectf(
-	r.left * scale.x,
-	r.top * scale.y,
-	r.right * scale.x,
-	r.bottom * scale.y);
-}
-
 static bool MouseInBookRect(const Vec2f pos, const Vec2f size) {
 	
-	Rectf rect = scaleRectPosAndSize(Rectf(pos + BOOKDEC, size.x, size.y), g_sizeRatio);
+	Rectf rect = Rectf(pos, size.x, size.y);
 	
 	return rect.contains(Vec2f(DANAEMouse));
 }
 
 bool ARX_INTERFACE_MouseInBook() {
 	if((player.Interface & INTER_PLAYERBOOK) && !(player.Interface & INTER_COMBATMODE)) {
-		return MouseInBookRect(Vec2f(99, 65), Vec2f(500, 307));
-	} else {
-		return false;
+		return MouseInBookRect(g_bookRect.topLeft() + Vec2f(2, 1) * g_bookScale, Vec2f(500, 307) * g_bookScale);
 	}
+	return false;
 }
 
 
 static void DrawBookInterfaceItem(TextureContainer * tc, Vec2f pos, Color color, float z) {
 	arx_assert(tc);
-	
-	Rectf rect = scaleRectPosAndSize(Rectf((pos + BOOKDEC), tc->m_size.x, tc->m_size.y), g_sizeRatio);
+	Rectf rect = Rectf(pos, float(tc->m_size.x) * g_bookScale, float(tc->m_size.y) * g_bookScale);
 	EERIEDrawBitmap(rect, z, tc, color);
 }
 
-const Vec2f PlayerBookPage::m_activeTabPositions[10] = {
-	Vec2f(102.f, 82.f), Vec2f(98.f, 112.f), Vec2f(101.f, 141.f), Vec2f(100.f, 170.f), Vec2f(97.f, 199.f),
-	Vec2f(103.f, 226.f), Vec2f(101.f, 255.f), Vec2f(99.f, 283.f), Vec2f(99.f, 307.f), Vec2f(104.f, 331.f)
+const Vec2f PlayerBookPage::m_activeTabOffsets[10] = {
+	Vec2f(5.f, 18.f), Vec2f(3.f, 50.f), Vec2f(4.f, 77.f), Vec2f(3.f, 106.f), Vec2f(0.f, 135.f),
+	Vec2f(6.f, 162.f), Vec2f(4.f, 191.f), Vec2f(2.f, 219.f), Vec2f(2.f, 243.f), Vec2f(7.f, 267.f)
 };
 
-const Vec2f PlayerBookPage::m_tabPositions[10] = {
-	Vec2f(100.f, 82.f), Vec2f(98.f, 112.f), Vec2f(97.f, 143.f), Vec2f(95.f, 170.f), Vec2f(95.f, 200.f),
-	Vec2f(94.f, 229.f), Vec2f(94.f, 259.f), Vec2f(92.f, 282.f), Vec2f(90.f, 308.f), Vec2f(97.f, 331.f)
+const Vec2f PlayerBookPage::m_tabOffsets[10] = {
+	Vec2f(3.f, 18.f), Vec2f(1.f, 48.f), Vec2f(0.f, 79.f), Vec2f(-2.f, 106.f), Vec2f(-2.f, 136.f),
+	Vec2f(-3.f, 165.f), Vec2f(-3.f, 195.f), Vec2f(-5.f, 218.f), Vec2f(-7.f, 244.f), Vec2f(0.f, 267.f)
 };
 
 void PlayerBookPage::playReleaseSound() {
-	ARX_SOUND_PlayInterface(SND_MENU_RELEASE);
+	ARX_SOUND_PlayInterface(g_snd.MENU_RELEASE);
 }
 
 void PlayerBookPage::playErrorSound() {
-	ARX_SOUND_PlayInterface(SND_MENU_CLICK);
+	ARX_SOUND_PlayInterface(g_snd.MENU_CLICK);
 }
 
 void PlayerBook::clearJournal() {
@@ -127,20 +114,29 @@ void PlayerBook::clearJournal() {
 }
 
 void PlayerBookPage::drawTab(long tabNum) {
-	DrawBookInterfaceItem(g_bookResouces.accessibleTab[tabNum], m_tabPositions[tabNum], Color::white, 0.000001f);
+	Vec2f bookPos = g_bookRect.topLeft();
+	float scale = g_bookScale;
+	DrawBookInterfaceItem(g_bookResouces.accessibleTab[tabNum], bookPos + m_tabOffsets[tabNum] * scale, Color::white, 0.000001f);
 }
 
 void PlayerBookPage::drawActiveTab(long tabNum) {
-	DrawBookInterfaceItem(g_bookResouces.currentTab[tabNum], m_activeTabPositions[tabNum], Color::white, 0.000001f);
+	Vec2f bookPos = g_bookRect.topLeft();
+	float scale = g_bookScale;
+	DrawBookInterfaceItem(g_bookResouces.currentTab[tabNum], bookPos + m_activeTabOffsets[tabNum] * scale, Color::white, 0.000001f);
 }
 
-void PlayerBookPage::checkTabClick(long tabNum, long &activeTab) {
-	if(MouseInBookRect(m_tabPositions[tabNum], Vec2f(32, 32))) {
+void PlayerBookPage::checkTabClick(long tabNum, long & activeTab) {
+	
+	Vec2f bookPos = g_bookRect.topLeft();
+	float scale = g_bookScale;
+
+	if(MouseInBookRect(bookPos + m_tabOffsets[tabNum] * scale, Vec2f(32, 32) * scale)) {
 		UseRenderState state(render2D().blendAdditive());
-		DrawBookInterfaceItem(g_bookResouces.accessibleTab[tabNum], m_tabPositions[tabNum], Color::grayb(0x55), 0.000001f);
-		SpecialCursor=CURSOR_INTERACTION_ON;
+		DrawBookInterfaceItem(g_bookResouces.accessibleTab[tabNum], bookPos + m_tabOffsets[tabNum] * scale,
+		                      Color::gray(1.f / 3), 0.000001f);
+		cursorSetInteraction();
 		if(eeMouseDown1() || eeMouseDown2()) {
-			ARX_SOUND_PlayInterface(SND_BOOK_PAGE_TURN, Random::getf(0.9f, 1.1f));
+			ARX_SOUND_PlayInterface(g_snd.BOOK_PAGE_TURN, Random::getf(0.9f, 1.1f));
 			activeTab =  tabNum;
 		}
 	}
@@ -156,17 +152,17 @@ void PlayerBookPage::manageLeftTabs(long tabNum, long & activeTab) {
 	}
 }
 
-static void DrawBookTextCenter(Font* font, const Vec2f & pos, const std::string& text, Color col) {
-	
-	UNICODE_ARXDrawTextCenter(font, (BOOKDEC + pos) * g_sizeRatio, text, col);
-}
+static void DrawBookTextCenter(Font * font, const Vec2f & pos, const std::string & text, Color col) {
 
-void ARX_INTERFACE_ManageOpenedBook() {
-	g_playerBook.manage();
+	UNICODE_ARXDrawTextCenter(font, pos, text, col);
 }
 
 PlayerBook::PlayerBook()
 	: m_currentPage(BOOKMODE_STATS)
+	, lastRatio(0.f)
+	, lastHudScale(0.f)
+	, lastScaleSetting(-1.f)
+	, lastMenuMode(MenuMode(-1))
 { }
 
 bool PlayerBook::canOpenPage(ARX_INTERFACE_BOOK_MODE page) {
@@ -189,85 +185,66 @@ void PlayerBook::onClosePage() {
 }
 
 void PlayerBook::toggle() {
+	
 	if(player.Interface & INTER_PLAYERBOOK) {
-		ARX_SOUND_PlayInterface(SND_BOOK_CLOSE, Random::getf(0.9f, 1.1f));
-		SendIOScriptEvent(entities.player(), SM_BOOK_CLOSE);
-		player.Interface &=~ INTER_PLAYERBOOK;
+		ARX_SOUND_PlayInterface(g_snd.BOOK_CLOSE, Random::getf(0.9f, 1.1f));
+		SendIOScriptEvent(NULL, entities.player(), SM_BOOK_CLOSE);
+		player.Interface &= ~INTER_PLAYERBOOK;
 		g_miniMap.purgeTexContainer();
-
-		if(ARXmenu.mda) {
-			for (size_t i = 0; i < MAX_FLYOVER; i++) {
-				ARXmenu.mda->flyover[i].clear();
-			}
-			delete ARXmenu.mda;
-			ARXmenu.mda=NULL;
-		}
-
 		onClosePage();
 	} else {
-		SendIOScriptEvent(entities.player(), SM_NULL, "", "book_open");
-
-		ARX_SOUND_PlayInterface(SND_BOOK_OPEN, Random::getf(0.9f, 1.1f));
-		SendIOScriptEvent(entities.player(), SM_BOOK_OPEN);
+		ARX_SOUND_PlayInterface(g_snd.BOOK_OPEN, Random::getf(0.9f, 1.1f));
+		SendIOScriptEvent(NULL, entities.player(), SM_BOOK_OPEN);
 		ARX_INTERFACE_NoteClose();
 		player.Interface |= INTER_PLAYERBOOK;
-		map.setMapLevel(glm::clamp(ARX_LEVELS_GetRealNum(CURRENTLEVEL), 0l, 7l));
-
-		if(!ARXmenu.mda) {
-			ARXmenu.mda = new MENU_DYNAMIC_DATA();
-		}
+		map.setMapLevel(glm::clamp(ARX_LEVELS_GetRealNum(CURRENTLEVEL), 0, 7));
 	}
-
+	
 	if(player.Interface & INTER_COMBATMODE) {
-		player.Interface&=~INTER_COMBATMODE;
+		player.Interface &= ~INTER_COMBATMODE;
 		ARX_EQUIPMENT_LaunchPlayerUnReadyWeapon();
 	}
-
+	
 	if(player.Interface & INTER_INVENTORYALL) {
-		ARX_SOUND_PlayInterface(SND_BACKPACK, Random::getf(0.9f, 1.1f));
+		ARX_SOUND_PlayInterface(g_snd.BACKPACK, Random::getf(0.9f, 1.1f));
 		g_playerInventoryHud.close();
 	}
-
+	
 	pTextManage->Clear();
-
+	
 	TRUE_PLAYER_MOUSELOOK_ON = false;
+	
 }
 
 void PlayerBook::manage() {
 	arx_assert(entities.player());
-
+	
 	UseRenderState state(render2D());
-
-	GRenderer->GetTextureStage(0)->setMinFilter(TextureStage::FilterLinear);
-	GRenderer->GetTextureStage(0)->setMagFilter(TextureStage::FilterLinear);
-
-	if(ARXmenu.mode() != Mode_CharacterCreation) {
-		switch (currentPage()) {
-			case BOOKMODE_STATS: {
-				stats.manage();
-				break;
-			}
-			case BOOKMODE_SPELLS: {
-				spells.manage();
-				break;
-			}
-			case BOOKMODE_MINIMAP: {
-				map.manage();
-				break;
-			}
-			case BOOKMODE_QUESTS: {
-				questBook.manage();
-				break;
-			}
+	UseTextureState textureState(getInterfaceTextureFilter(), TextureStage::WrapClamp);
+	
+	update();
+	
+	switch(currentPage()) {
+		case BOOKMODE_STATS: {
+			stats.manage();
+			break;
 		}
-		
-		drawTopTabs();
-	} else {
-		stats.manageNewQuest();
+		case BOOKMODE_SPELLS: {
+			spells.manage();
+			break;
+		}
+		case BOOKMODE_MINIMAP: {
+			map.manage();
+			break;
+		}
+		case BOOKMODE_QUESTS: {
+			questBook.manage();
+			break;
+		}
 	}
-
-	GRenderer->GetTextureStage(0)->setMinFilter(TextureStage::FilterNearest);
-	GRenderer->GetTextureStage(0)->setMagFilter(TextureStage::FilterNearest);
+	
+	manageTopTabs();
+	
 }
 
 void PlayerBook::openPage(ARX_INTERFACE_BOOK_MODE newPage, bool _toggle) {
@@ -290,7 +267,7 @@ void PlayerBook::openPage(ARX_INTERFACE_BOOK_MODE newPage, bool _toggle) {
 		onClosePage();
 
 		// If the book is already open, play the page turn sound
-		ARX_SOUND_PlayInterface(SND_BOOK_PAGE_TURN, Random::getf(0.9f, 1.1f));
+		ARX_SOUND_PlayInterface(g_snd.BOOK_PAGE_TURN, Random::getf(0.9f, 1.1f));
 
 	} else {
 		// Otherwise open the book
@@ -350,38 +327,50 @@ ARX_INTERFACE_BOOK_MODE PlayerBook::prevPage() {
 	return currentPage();
 }
 
-void PlayerBook::drawTopTabs() {
+float PlayerBook::getScale() {
+	update();
+	return g_bookScale;
+}
+
+const Rectf & PlayerBook::getArea() {
+	update();
+	return g_bookRect;
+}
+
+void PlayerBook::manageTopTabs() {
 	
-	static const Vec2f BOOKMARKS_POS = Vec2f(216.f, 60.f);
+	float scale = g_bookScale;
+	const Vec2f BOOKMARKS_POS = g_bookRect.topLeft() + Vec2f(119.f, -4.f) * scale;
 	
 	if(m_currentPage != BOOKMODE_STATS) {
+		
 		Vec2f pos = BOOKMARKS_POS;
 		
-		TextureContainer* tcBookmarkChar = g_bookResouces.bookmark_char;
+		TextureContainer * tcBookmarkChar = g_bookResouces.bookmark_char;
 		DrawBookInterfaceItem(tcBookmarkChar, pos, Color::white, 0.000001f);
 		
 		// Check for cursor on charcter sheet bookmark
-		if(MouseInBookRect(pos, Vec2f(tcBookmarkChar->m_size.x, tcBookmarkChar->m_size.y))) {
+		if(MouseInBookRect(pos, Vec2f(tcBookmarkChar->m_size) * scale)) {
 			
 			// Draw highlighted Character sheet icon
 			UseRenderState state(render2D().blendAdditive());
-			DrawBookInterfaceItem(tcBookmarkChar, pos, Color::grayb(0x55), 0.000001f);
+			DrawBookInterfaceItem(tcBookmarkChar, pos, Color::gray(1.f / 3), 0.000001f);
 			
 			// Set cursor to interacting
-			SpecialCursor=CURSOR_INTERACTION_ON;
+			cursorSetInteraction();
 			
 			// Check for click
 			if(eeMouseDown1() || eeMouseDown2()) {
-				ARX_SOUND_PlayInterface(SND_BOOK_PAGE_TURN, Random::getf(0.9f, 1.1f));
 				openPage(BOOKMODE_STATS);
 				pTextManage->Clear();
 			}
 		}
+		
 	}
 	
 	if(m_currentPage != BOOKMODE_SPELLS) {
 		if(player.rune_flags) {
-			Vec2f pos = BOOKMARKS_POS + Vec2f(32, 0);
+			Vec2f pos = BOOKMARKS_POS + Vec2f(32, 0) * scale;
 			
 			DrawBookInterfaceItem(g_bookResouces.bookmark_magic, pos, Color::white, 0.000001f);
 
@@ -389,22 +378,21 @@ void PlayerBook::drawTopTabs() {
 				NewSpell = 2;
 				for(long nk = 0; nk < 2; nk++) {
 					// TODO this effect is barely visible
-					MagFX(Vec3f(pos * g_sizeRatio, 0.000001f), 1.f);
+					MagFX(Vec3f(pos, 0.000001f), 1.f);
 				}
 			}
 			
-			if(MouseInBookRect(pos, Vec2f(g_bookResouces.bookmark_magic->m_size.x, g_bookResouces.bookmark_magic->m_size.y))) {
+			if(MouseInBookRect(pos, Vec2f(g_bookResouces.bookmark_magic->m_size) * scale)) {
 				
 				// Draw highlighted Magic sheet icon
 				UseRenderState state(render2D().blendAdditive());
-				DrawBookInterfaceItem(g_bookResouces.bookmark_magic, pos, Color::grayb(0x55), 0.000001f);
+				DrawBookInterfaceItem(g_bookResouces.bookmark_magic, pos, Color::gray(1.f / 3), 0.000001f);
 				
 				// Set cursor to interacting
-				SpecialCursor=CURSOR_INTERACTION_ON;
+				cursorSetInteraction();
 				
 				// Check for click
 				if(eeMouseDown1() || eeMouseDown2()) {
-					ARX_SOUND_PlayInterface(SND_BOOK_PAGE_TURN, Random::getf(0.9f, 1.1f));
 					openPage(BOOKMODE_SPELLS);
 					pTextManage->Clear();
 				}
@@ -413,21 +401,20 @@ void PlayerBook::drawTopTabs() {
 	}
 	
 	if(m_currentPage != BOOKMODE_MINIMAP) {
-		Vec2f pos = BOOKMARKS_POS + Vec2f(64, 0);
+		Vec2f pos = BOOKMARKS_POS + Vec2f(64, 0) * scale;
 		
 		DrawBookInterfaceItem(g_bookResouces.bookmark_map, pos, Color::white, 0.000001f);
 		
-		if(MouseInBookRect(pos, Vec2f(g_bookResouces.bookmark_map->m_size.x, g_bookResouces.bookmark_map->m_size.y))) {
+		if(MouseInBookRect(pos, Vec2f(g_bookResouces.bookmark_map->m_size) * scale)) {
 			
 			UseRenderState state(render2D().blendAdditive());
-			DrawBookInterfaceItem(g_bookResouces.bookmark_map, pos, Color::grayb(0x55), 0.000001f);
+			DrawBookInterfaceItem(g_bookResouces.bookmark_map, pos, Color::gray(1.f / 3), 0.000001f);
 			
 			// Set cursor to interacting
-			SpecialCursor=CURSOR_INTERACTION_ON;
+			cursorSetInteraction();
 			
 			// Check for click
 			if(eeMouseDown1() || eeMouseDown2()) {
-				ARX_SOUND_PlayInterface(SND_BOOK_PAGE_TURN, Random::getf(0.9f, 1.1f));
 				openPage(BOOKMODE_MINIMAP);
 				pTextManage->Clear();
 			}
@@ -435,21 +422,20 @@ void PlayerBook::drawTopTabs() {
 	}
 	
 	if(m_currentPage != BOOKMODE_QUESTS) {
-		Vec2f pos = BOOKMARKS_POS + Vec2f(96, 0);
+		Vec2f pos = BOOKMARKS_POS + Vec2f(96, 0) * scale;
 		
 		DrawBookInterfaceItem(g_bookResouces.bookmark_quest, pos, Color::white, 0.000001f);
 		
-		if(MouseInBookRect(pos, Vec2f(g_bookResouces.bookmark_quest->m_size.x, g_bookResouces.bookmark_quest->m_size.y))) {
+		if(MouseInBookRect(pos, Vec2f(g_bookResouces.bookmark_quest->m_size) * scale)) {
 			
 			UseRenderState state(render2D().blendAdditive());
-			DrawBookInterfaceItem(g_bookResouces.bookmark_quest, pos, Color::grayb(0x55), 0.000001f);
+			DrawBookInterfaceItem(g_bookResouces.bookmark_quest, pos, Color::gray(1.f / 3), 0.000001f);
 			
 			// Set cursor to interacting
-			SpecialCursor=CURSOR_INTERACTION_ON;
+			cursorSetInteraction();
 			
 			// Check for click
 			if(eeMouseDown1() || eeMouseDown2()) {
-				ARX_SOUND_PlayInterface(SND_BOOK_PAGE_TURN, Random::getf(0.9f, 1.1f));
 				openPage(BOOKMODE_QUESTS);
 				pTextManage->Clear();
 			}
@@ -457,123 +443,230 @@ void PlayerBook::drawTopTabs() {
 	}
 }
 
+
+bool PlayerBook::needsUpdate() {
+	
+	if(lastRatio == g_sizeRatio
+	   && lastScaleSetting == config.interface.bookScale
+	   && lastHudScale == g_hudRoot.getScale()
+	   && lastMenuMode == ARXmenu.mode()) {
+		return false;
+	} else {
+		lastRatio = g_sizeRatio;
+		lastHudScale = g_hudRoot.getScale();
+		lastScaleSetting = config.interface.bookScale;
+		lastMenuMode = ARXmenu.mode();
+		return true;
+	}
+}
+
+void PlayerBook::updateScale() {
+	
+	float scale = getInterfaceScale(config.interface.bookScale, config.interface.bookScaleInteger);
+	
+	if(needsUpdate() || scale != g_bookScale) {
+		g_bookScale = scale;
+		ARX_Text_scaleBookFont(g_bookScale, config.interface.fontWeight);
+		updateRect();
+	}
+	
+}
+
+void PlayerBook::updateRect() {
+	
+	float scale = g_bookScale;
+	
+	const Rectf bookRectOrig = Rectf(Vec2f(97.f, 64.f), 513.f, 313.f);
+	
+	g_bookRect = Rectf(Vec2f(g_size.center()) - bookRectOrig.size() * scale / 2.f,
+	                   bookRectOrig.width() * scale,
+	                   bookRectOrig.height() * scale);
+	
+	if(ARXmenu.mode() != Mode_CharacterCreation) {
+		Rectf availableArea((bookRectOrig.topLeft() + Vec2f(10.f, 0.f)) * g_hudRoot.getScale(),
+		                    Vec2f(g_size.bottomRight())
+		                    - (Vec2f(640.f, 480.f) - bookRectOrig.bottomRight()) * g_hudRoot.getScale());
+		// Move book horizontally to make place for other HUD elements if needed
+		// Otherwise keep it centered in the whole screen
+		if(g_bookRect.left < availableArea.left) {
+			g_bookRect.move(availableArea.left - g_bookRect.left, 0.f);
+		}
+		if(g_bookRect.right > availableArea.right) {
+			g_bookRect.move(availableArea.right - g_bookRect.right, 0.f);
+		}
+		// Center book vertically in the available area
+		g_bookRect.move(0.f, availableArea.center().y - g_bookRect.center().y);
+	}
+	
+}
+
+void PlayerBook::update() {
+	updateScale();
+}
+
+enum ARX_INTERFACE_BOOK_ITEM
+{
+	BOOK_NOTHING,
+	BOOK_STRENGTH,
+	BOOK_MIND,
+	BOOK_DEXTERITY,
+	BOOK_CONSTITUTION,
+	BOOK_STEALTH,
+	BOOK_MECANISM,
+	BOOK_INTUITION,
+	BOOK_ETHERAL_LINK,
+	BOOK_OBJECT_KNOWLEDGE,
+	BOOK_CASTING,
+	BOOK_CLOSE_COMBAT,
+	BOOK_PROJECTILE,
+	BOOK_DEFENSE,
+	WND_ATTRIBUTES,
+	WND_SKILLS,
+	WND_STATUS,
+	WND_LEVEL,
+	WND_XP,
+	WND_HP,
+	WND_MANA,
+	WND_AC,
+	WND_RESIST_MAGIC,
+	WND_RESIST_POISON,
+	WND_DAMAGE,
+	WND_NEXT_LEVEL
+};
+
+void StatsPage::loadStrings() {
+	
+	flyover[BOOK_STRENGTH] = getLocalised("system_charsheet_strength");
+	flyover[BOOK_MIND] = getLocalised("system_charsheet_intel");
+	flyover[BOOK_DEXTERITY] = getLocalised("system_charsheet_dex");
+	flyover[BOOK_CONSTITUTION] = getLocalised("system_charsheet_consti");
+	flyover[BOOK_STEALTH] = getLocalised("system_charsheet_stealth");
+	flyover[BOOK_MECANISM] = getLocalised("system_charsheet_mecanism");
+	flyover[BOOK_INTUITION] = getLocalised("system_charsheet_intuition");
+	flyover[BOOK_ETHERAL_LINK] = getLocalised("system_charsheet_etheral_link");
+	flyover[BOOK_OBJECT_KNOWLEDGE] = getLocalised("system_charsheet_objknoledge");
+	flyover[BOOK_CASTING] = getLocalised("system_charsheet_casting");
+	flyover[BOOK_PROJECTILE] = getLocalised("system_charsheet_projectile");
+	flyover[BOOK_CLOSE_COMBAT] = getLocalised("system_charsheet_closecombat");
+	flyover[BOOK_DEFENSE] = getLocalised("system_charsheet_defense");
+	flyover[WND_ATTRIBUTES] = getLocalised("system_charsheet_atributes");
+	flyover[WND_SKILLS] = getLocalised("system_charsheet_skills");
+	flyover[WND_STATUS] = getLocalised("system_charsheet_status");
+	flyover[WND_LEVEL] = getLocalised("system_charsheet_level");
+	flyover[WND_XP] = getLocalised("system_charsheet_xpoints");
+	flyover[WND_HP] = getLocalised("system_charsheet_hp");
+	flyover[WND_MANA] = getLocalised("system_charsheet_mana");
+	flyover[WND_AC] = getLocalised("system_charsheet_ac");
+	flyover[WND_RESIST_MAGIC] = getLocalised("system_charsheet_res_magic");
+	flyover[WND_RESIST_POISON] = getLocalised("system_charsheet_res_poison");
+	flyover[WND_DAMAGE] = getLocalised("system_charsheet_damage");
+}
+
 void StatsPage::manage() {
-	BOOKDEC.x = 0;
-	BOOKDEC.y = 0;
-
-	DrawBookInterfaceItem(g_bookResouces.playerbook, Vec2f(97, 64), Color::white, 0.9999f);
-
+	
+	DrawBookInterfaceItem(g_bookResouces.playerbook, g_bookRect.topLeft(), Color::white, 0.9999f);
+	
 	manageStats();
 }
 
 void StatsPage::manageNewQuest() {
-	BOOKDEC.x = 0;
-	BOOKDEC.y = 0;
+	
+	g_playerBook.update();
 
-	arx_assert(g_bookResouces.playerbook);
-	float x = (640 - g_bookResouces.playerbook->m_size.x) / 2.f;
-	float y = (480 - g_bookResouces.playerbook->m_size.y) / 2.f;
-
-	DrawBookInterfaceItem(g_bookResouces.playerbook, Vec2f(x, y), Color::white, 0.000001f);
-
-	BOOKDEC.x = x - 97;
-	// TODO copy paste error ?
-	BOOKDEC.y = x - 64 + 19;
-
+	Vec2f bookPos = g_bookRect.topLeft();
+	DrawBookInterfaceItem(g_bookResouces.playerbook, bookPos, Color::white, 0.000001f);
+	
 	manageStats();
 }
 
 void StatsPage::manageStats()
 {
-	FLYING_OVER = 0;
+	long FLYING_OVER = 0;
 	
 	ARX_PLAYER_ComputePlayerFullStats();
+
+	Vec2f bookPos = g_bookRect.topLeft();
+	float scale = g_bookScale;
 	
 	{
 		std::stringstream ss;
 		ss << g_bookResouces.Level << " " << std::setw(3) << player.level;
-		DrawBookTextCenter(hFontInBook, Vec2f(398, 74), ss.str(), Color::black);
+		DrawBookTextCenter(hFontInBook, bookPos + Vec2f(301, 10) * scale, ss.str(), Color::black);
 	}
 	
 	{
 		std::stringstream ss;
 		ss << g_bookResouces.Xp << " " << std::setw(8) << player.xp;
-		DrawBookTextCenter(hFontInBook, Vec2f(510, 74), ss.str(), Color::black);
+		DrawBookTextCenter(hFontInBook, bookPos + Vec2f(413, 10) * scale, ss.str(), Color::black);
 	}
 	
-	if (MouseInBookRect(Vec2f(463, 74), Vec2f(87, 20)))
+	if (MouseInBookRect(bookPos + Vec2f(366, 10) * scale, Vec2f(87, 20) * scale))
 		FLYING_OVER = WND_XP;
 	
-	if(MouseInBookRect(Vec2f(97 + 41, 64 + 62), Vec2f(32, 32))) {
-		FLYING_OVER = WND_AC;
-	} else if(MouseInBookRect(Vec2f(97 + 41, 64 + 120), Vec2f(32, 32))) {
-		FLYING_OVER = WND_RESIST_MAGIC;
-	} else if(MouseInBookRect(Vec2f(97 + 41, 64 + 178), Vec2f(32, 32))) {
-		FLYING_OVER = WND_RESIST_POISON;
-	} else if(MouseInBookRect(Vec2f(97 + 211, 64 + 62), Vec2f(32, 32))) {
-		FLYING_OVER = WND_HP;
-	} else if(MouseInBookRect(Vec2f(97 + 211, 64 + 120), Vec2f(32, 32))) {
-		FLYING_OVER = WND_MANA;
-	} else if(MouseInBookRect(Vec2f(97 + 211, 64 + 178), Vec2f(32, 32))) {
-		FLYING_OVER = WND_DAMAGE;
+	{
+		Vec2f attribAreaSize = Vec2f(32, 45) * scale;
+		if(MouseInBookRect(bookPos + Vec2f(41, 62) * scale, attribAreaSize)) {
+			FLYING_OVER = WND_AC;
+		} else if(MouseInBookRect(bookPos + Vec2f(41, 120) * scale, attribAreaSize)) {
+			FLYING_OVER = WND_RESIST_MAGIC;
+		} else if(MouseInBookRect(bookPos + Vec2f(41, 178) * scale, attribAreaSize)) {
+			FLYING_OVER = WND_RESIST_POISON;
+		} else if(MouseInBookRect(bookPos + Vec2f(211, 62) * scale, attribAreaSize)) {
+			FLYING_OVER = WND_HP;
+		} else if(MouseInBookRect(bookPos + Vec2f(211, 120) * scale, attribAreaSize)) {
+			FLYING_OVER = WND_MANA;
+		} else if(MouseInBookRect(bookPos + Vec2f(211, 178) * scale, attribAreaSize)) {
+			FLYING_OVER = WND_DAMAGE;
+		}
 	}
 	
 	if(!((player.Attribute_Redistribute == 0) && (ARXmenu.mode() != Mode_CharacterCreation))) {
 		// Main Player Attributes
-		if(CheckAttributeClick(Vec2f(379, 95), &player.m_attribute.strength, g_bookResouces.ic_strength)) {
+		if(CheckAttributeClick(bookPos + Vec2f(282, 31) * scale, &player.m_attribute.strength, g_bookResouces.ic_strength)) {
 			FLYING_OVER = BOOK_STRENGTH;
-			SpecialCursor = CURSOR_REDIST;
-			lCursorRedistValue = player.Attribute_Redistribute;
+			cursorSetRedistribute(player.Attribute_Redistribute);
 		}
 
-		if(CheckAttributeClick(Vec2f(428, 95), &player.m_attribute.mind, g_bookResouces.ic_mind)) {
+		if(CheckAttributeClick(bookPos + Vec2f(331, 31) * scale, &player.m_attribute.mind, g_bookResouces.ic_mind)) {
 			FLYING_OVER = BOOK_MIND;
-			SpecialCursor = CURSOR_REDIST;
-			lCursorRedistValue = player.Attribute_Redistribute;
+			cursorSetRedistribute(player.Attribute_Redistribute);
 		}
 
-		if(CheckAttributeClick(Vec2f(477, 95), &player.m_attribute.dexterity, g_bookResouces.ic_dexterity)) {
+		if(CheckAttributeClick(bookPos + Vec2f(380, 31) * scale, &player.m_attribute.dexterity, g_bookResouces.ic_dexterity)) {
 			FLYING_OVER = BOOK_DEXTERITY;
-			SpecialCursor = CURSOR_REDIST;
-			lCursorRedistValue = player.Attribute_Redistribute;
+			cursorSetRedistribute(player.Attribute_Redistribute);
 		}
 
-		if(CheckAttributeClick(Vec2f(526, 95), &player.m_attribute.constitution, g_bookResouces.ic_constitution)) {
+		if(CheckAttributeClick(bookPos + Vec2f(429, 31) * scale, &player.m_attribute.constitution, g_bookResouces.ic_constitution)) {
 			FLYING_OVER = BOOK_CONSTITUTION;
-			SpecialCursor = CURSOR_REDIST;
-			lCursorRedistValue = player.Attribute_Redistribute;
+			cursorSetRedistribute(player.Attribute_Redistribute);
 		}
 	}
 
 	if(!((player.Skill_Redistribute == 0) && (ARXmenu.mode() != Mode_CharacterCreation))) {
-		if (CheckSkillClick(Vec2f(389, 177), &player.m_skill.stealth, g_bookResouces.ic_stealth, &player.m_skillOld.stealth)) {
+		if (CheckSkillClick(bookPos + Vec2f(293, 113) * scale, &player.m_skill.stealth, g_bookResouces.ic_stealth, player.m_skillOld.stealth)) {
 			FLYING_OVER = BOOK_STEALTH;
-			SpecialCursor = CURSOR_REDIST;
-			lCursorRedistValue = player.Skill_Redistribute;
+			cursorSetRedistribute(player.Skill_Redistribute);
 		}
 
-		if(CheckSkillClick(Vec2f(453, 177), &player.m_skill.mecanism, g_bookResouces.ic_mecanism, &player.m_skillOld.mecanism)) {
+		if(CheckSkillClick(bookPos + Vec2f(356, 113) * scale, &player.m_skill.mecanism, g_bookResouces.ic_mecanism, player.m_skillOld.mecanism)) {
 			FLYING_OVER = BOOK_MECANISM;
-			SpecialCursor = CURSOR_REDIST;
-			lCursorRedistValue = player.Skill_Redistribute;
+			cursorSetRedistribute(player.Skill_Redistribute);
 		}
 
-		if(CheckSkillClick(Vec2f(516, 177), &player.m_skill.intuition, g_bookResouces.ic_intuition, &player.m_skillOld.intuition)) {
+		if(CheckSkillClick(bookPos + Vec2f(419, 113) * scale, &player.m_skill.intuition, g_bookResouces.ic_intuition, player.m_skillOld.intuition)) {
 			FLYING_OVER = BOOK_INTUITION;
-			SpecialCursor = CURSOR_REDIST;
-			lCursorRedistValue = player.Skill_Redistribute;
+			cursorSetRedistribute(player.Skill_Redistribute);
 		}
 
-		if(CheckSkillClick(Vec2f(389, 230), &player.m_skill.etheralLink, g_bookResouces.ic_etheral_link, &player.m_skillOld.etheralLink)) {
+		if(CheckSkillClick(bookPos + Vec2f(293, 166) * scale, &player.m_skill.etheralLink, g_bookResouces.ic_etheral_link, player.m_skillOld.etheralLink)) {
 			FLYING_OVER = BOOK_ETHERAL_LINK;
-			SpecialCursor = CURSOR_REDIST;
-			lCursorRedistValue = player.Skill_Redistribute;
+			cursorSetRedistribute(player.Skill_Redistribute);
 		}
 
-		if(CheckSkillClick(Vec2f(453, 230), &player.m_skill.objectKnowledge, g_bookResouces.ic_object_knowledge, &player.m_skillOld.objectKnowledge)) {
+		if(CheckSkillClick(bookPos + Vec2f(356, 166) * scale, &player.m_skill.objectKnowledge, g_bookResouces.ic_object_knowledge, player.m_skillOld.objectKnowledge)) {
 			FLYING_OVER = BOOK_OBJECT_KNOWLEDGE;
-			SpecialCursor = CURSOR_REDIST;
-			lCursorRedistValue = player.Skill_Redistribute;
+			cursorSetRedistribute(player.Skill_Redistribute);
 
 			if(eeMouseDown1()) {
 				ARX_INVENTORY_IdentifyAll();
@@ -583,80 +676,70 @@ void StatsPage::manageStats()
 			ARX_PLAYER_ComputePlayerFullStats();
 		}
 
-		if(CheckSkillClick(Vec2f(516, 230), &player.m_skill.casting, g_bookResouces.ic_casting, &player.m_skillOld.casting)) {
+		if(CheckSkillClick(bookPos + Vec2f(419, 166) * scale, &player.m_skill.casting, g_bookResouces.ic_casting, player.m_skillOld.casting)) {
 			FLYING_OVER = BOOK_CASTING;
-			SpecialCursor = CURSOR_REDIST;
-			lCursorRedistValue = player.Skill_Redistribute;
+			cursorSetRedistribute(player.Skill_Redistribute);
 		}
 
-		if(CheckSkillClick(Vec2f(389, 284), &player.m_skill.closeCombat, g_bookResouces.ic_close_combat, &player.m_skillOld.closeCombat)) {
+		if(CheckSkillClick(bookPos + Vec2f(293, 220) * scale, &player.m_skill.closeCombat, g_bookResouces.ic_close_combat, player.m_skillOld.closeCombat)) {
 			FLYING_OVER = BOOK_CLOSE_COMBAT;
-			SpecialCursor = CURSOR_REDIST;
-			lCursorRedistValue = player.Skill_Redistribute;
+			cursorSetRedistribute(player.Skill_Redistribute);
 		}
 
-		if(CheckSkillClick(Vec2f(453, 284), &player.m_skill.projectile, g_bookResouces.ic_projectile, &player.m_skillOld.projectile)) {
+		if(CheckSkillClick(bookPos + Vec2f(356, 220) * scale, &player.m_skill.projectile, g_bookResouces.ic_projectile, player.m_skillOld.projectile)) {
 			FLYING_OVER = BOOK_PROJECTILE;
-			SpecialCursor = CURSOR_REDIST;
-			lCursorRedistValue = player.Skill_Redistribute;
+			cursorSetRedistribute(player.Skill_Redistribute);
 		}
 
-		if(CheckSkillClick(Vec2f(516, 284), &player.m_skill.defense, g_bookResouces.ic_defense, &player.m_skillOld.defense)) {
+		if(CheckSkillClick(bookPos + Vec2f(419, 220) * scale, &player.m_skill.defense, g_bookResouces.ic_defense, player.m_skillOld.defense)) {
 			FLYING_OVER = BOOK_DEFENSE;
-			SpecialCursor = CURSOR_REDIST;
-			lCursorRedistValue = player.Skill_Redistribute;
+			cursorSetRedistribute(player.Skill_Redistribute);
 		}
 	} else {
-		//------------------------------------PRIMARY
-		if(MouseInBookRect(Vec2f(379, 95), Vec2f(32, 32))) {
+		if(MouseInBookRect(bookPos + Vec2f(282, 31) * scale, Vec2f(32, 32) * scale)) {
 			FLYING_OVER = BOOK_STRENGTH;
-		} else if(MouseInBookRect(Vec2f(428, 95), Vec2f(32, 32))) {
+		} else if(MouseInBookRect(bookPos + Vec2f(331, 31) * scale, Vec2f(32, 32) * scale)) {
 			FLYING_OVER = BOOK_MIND;
-		} else if(MouseInBookRect(Vec2f(477, 95), Vec2f(32, 32))) {
+		} else if(MouseInBookRect(bookPos + Vec2f(380, 31) * scale, Vec2f(32, 32) * scale)) {
 			FLYING_OVER = BOOK_DEXTERITY;
-		} else if(MouseInBookRect(Vec2f(526, 95), Vec2f(32, 32))) {
+		} else if(MouseInBookRect(bookPos + Vec2f(429, 31) * scale, Vec2f(32, 32) * scale)) {
 			FLYING_OVER = BOOK_CONSTITUTION;
 		}
-		//------------------------------------SECONDARY
-		if(MouseInBookRect(Vec2f(389, 177), Vec2f(32, 32))) {
+		if(MouseInBookRect(bookPos + Vec2f(292, 113) * scale, Vec2f(32, 32) * scale)) {
 			FLYING_OVER = BOOK_STEALTH;
-		} else if(MouseInBookRect(Vec2f(453, 177), Vec2f(32, 32))) {
+		} else if(MouseInBookRect(bookPos + Vec2f(356, 113) * scale, Vec2f(32, 32) * scale)) {
 			FLYING_OVER = BOOK_MECANISM;
-		} else if(MouseInBookRect(Vec2f(516, 177), Vec2f(32, 32))) {
+		} else if(MouseInBookRect(bookPos + Vec2f(419, 113) * scale, Vec2f(32, 32) * scale)) {
 			FLYING_OVER = BOOK_INTUITION;
-		} else if(MouseInBookRect(Vec2f(389, 230), Vec2f(32, 32))) {
+		} else if(MouseInBookRect(bookPos + Vec2f(292, 166) * scale, Vec2f(32, 32) * scale)) {
 			FLYING_OVER = BOOK_ETHERAL_LINK;
-		} else if(MouseInBookRect(Vec2f(453, 230), Vec2f(32, 32))) {
+		} else if(MouseInBookRect(bookPos + Vec2f(356, 166) * scale, Vec2f(32, 32) * scale)) {
 			FLYING_OVER = BOOK_OBJECT_KNOWLEDGE;
-		} else if(MouseInBookRect(Vec2f(516, 230), Vec2f(32, 32))) {
+		} else if(MouseInBookRect(bookPos + Vec2f(419, 166) * scale, Vec2f(32, 32) * scale)) {
 			FLYING_OVER = BOOK_CASTING;
-		} else if(MouseInBookRect(Vec2f(389, 284), Vec2f(32, 32))) {
+		} else if(MouseInBookRect(bookPos + Vec2f(292, 220) * scale, Vec2f(32, 32) * scale)) {
 			FLYING_OVER = BOOK_CLOSE_COMBAT;
-		} else if(MouseInBookRect(Vec2f(453, 284), Vec2f(32, 32))) {
+		} else if(MouseInBookRect(bookPos + Vec2f(356, 220) * scale, Vec2f(32, 32) * scale)) {
 			FLYING_OVER = BOOK_PROJECTILE;
-		} else if(MouseInBookRect(Vec2f(516, 284), Vec2f(32, 32))) {
+		} else if(MouseInBookRect(bookPos + Vec2f(419, 220) * scale, Vec2f(32, 32) * scale)) {
 			FLYING_OVER = BOOK_DEFENSE;
 		}
 	}
 	
-	//------------------------------ SEB 04/12/2001
-	if(ARXmenu.mda && !ARXmenu.mda->flyover[FLYING_OVER].empty()) {
+	
+	if(!flyover[FLYING_OVER].empty()) {
 		
 		int t = Random::get(0, 2);
-
+		
 		pTextManage->Clear();
-		OLD_FLYING_OVER=FLYING_OVER;
-
+		
 		std::string toDisplay;
-
-		// Nuky Note: the text used never scrolls, centered function with wordwrap would be enough
 		if(FLYING_OVER == WND_XP) {
 			std::stringstream ss;
-			ss << ARXmenu.mda->flyover[WND_XP] << " " << std::setw(8) << GetXPforLevel(player.level+1)-player.xp;
-
+			ss << flyover[WND_XP] << " " << std::setw(8) << GetXPforLevel(player.level + 1) - player.xp;
 			toDisplay = ss.str();
 		} else {
-			toDisplay = ARXmenu.mda->flyover[FLYING_OVER];
+			toDisplay = flyover[FLYING_OVER];
 		}
 		
 		UNICODE_ARXDrawTextCenteredScroll(hFontInGame,
@@ -669,14 +752,12 @@ void StatsPage::manageStats()
 			0.01f,
 			3,
 			0);
-	} else {
-		OLD_FLYING_OVER=-1;
 	}
-
+	
 	//------------------------------
 	
 	{
-	Vec2f pos = Vec2f(391, 129);
+	Vec2f pos = bookPos + Vec2f(294, 63) * scale;
 	
 	std::stringstream ss3;
 	ss3 << std::setw(3) << std::setprecision(0) << std::fixed << player.m_attributeFull.strength;
@@ -692,7 +773,7 @@ void StatsPage::manageStats()
 	}
 	
 	{
-	Vec2f pos = Vec2f(440, 129);
+	Vec2f pos = bookPos + Vec2f(343, 63) * scale;
 	
 	std::stringstream ss3;
 	ss3 << std::setw(3) << std::setprecision(0) << std::fixed << player.m_attributeFull.mind;
@@ -708,7 +789,7 @@ void StatsPage::manageStats()
 	}
 	
 	{
-	Vec2f pos = Vec2f(490, 129);
+	Vec2f pos = bookPos + Vec2f(393, 63) * scale;
 	
 	std::stringstream ss3;
 	ss3 << std::setw(3) << std::setprecision(0) << std::fixed << player.m_attributeFull.dexterity;
@@ -724,7 +805,7 @@ void StatsPage::manageStats()
 	}
 	
 	{
-	Vec2f pos = Vec2f(538, 129);
+	Vec2f pos = bookPos + Vec2f(441, 63) * scale;
 	
 	std::stringstream ss3;
 	ss3 << std::setw(3) << std::setprecision(0) << std::fixed << player.m_attributeFull.constitution;
@@ -741,7 +822,7 @@ void StatsPage::manageStats()
 	
 	// Player Skills
 	{
-	Vec2f pos = Vec2f(405, 210);
+	Vec2f pos = bookPos + Vec2f(305, 144) * scale;
 	
 	std::stringstream ss3;
 	ss3 << std::setw(3) << std::setprecision(0) << std::fixed << player.m_skillFull.stealth;
@@ -757,7 +838,7 @@ void StatsPage::manageStats()
 	}
 	
 	{
-	Vec2f pos = Vec2f(469, 210);
+		Vec2f pos = bookPos + Vec2f(369, 144) * scale;
 	
 	std::stringstream ss3;
 	ss3 << std::setw(3) << std::setprecision(0) << std::fixed << player.m_skillFull.mecanism;
@@ -773,7 +854,7 @@ void StatsPage::manageStats()
 	}
 	
 	{
-	Vec2f pos = Vec2f(533, 210);
+	Vec2f pos = bookPos + Vec2f(433, 144) * scale;
 	
 	std::stringstream ss3;
 	ss3 << std::setw(3) << std::setprecision(0) << std::fixed << player.m_skillFull.intuition;
@@ -789,7 +870,7 @@ void StatsPage::manageStats()
 	}
 	
 	{
-	Vec2f pos = Vec2f(405, 265);
+	Vec2f pos = bookPos + Vec2f(305, 198) * scale;
 	
 	std::stringstream ss3;
 	ss3 << std::setw(3) << std::setprecision(0) << std::fixed << player.m_skillFull.etheralLink;
@@ -805,7 +886,7 @@ void StatsPage::manageStats()
 	}
 	
 	{
-	Vec2f pos = Vec2f(469, 265);
+	Vec2f pos = bookPos + Vec2f(369, 198) * scale;
 	
 	std::stringstream ss3;
 	ss3 << std::setw(3) << std::setprecision(0) << std::fixed << player.m_skillFull.objectKnowledge;
@@ -821,7 +902,7 @@ void StatsPage::manageStats()
 	}
 	
 	{
-	Vec2f pos = Vec2f(533, 265);
+	Vec2f pos = bookPos + Vec2f(433, 198) * scale;
 	
 	std::stringstream ss3;
 	ss3 << std::setw(3) << std::setprecision(0) << std::fixed << player.m_skillFull.casting;
@@ -837,7 +918,7 @@ void StatsPage::manageStats()
 	}
 	
 	{
-	Vec2f pos = Vec2f(405, 319);
+	Vec2f pos = bookPos + Vec2f(305, 253) * scale;
 	
 	std::stringstream ss3;
 	ss3 << std::setw(3) << std::setprecision(0) << std::fixed << player.m_skillFull.closeCombat;
@@ -853,7 +934,7 @@ void StatsPage::manageStats()
 	}
 
 	{
-	Vec2f pos = Vec2f(469, 319);
+	Vec2f pos = bookPos + Vec2f(369, 253) * scale;
 	
 	std::stringstream ss3;
 	ss3 << std::setw(3) << std::setprecision(0) << std::fixed << player.m_skillFull.projectile;
@@ -869,7 +950,7 @@ void StatsPage::manageStats()
 	}
 	
 	{
-	Vec2f pos = Vec2f(533, 319);
+	Vec2f pos = bookPos + Vec2f(433, 253) * scale;
 	
 	std::stringstream ss3;
 	ss3 << std::setw(3) << std::setprecision(0) << std::fixed << player.m_skillFull.defense;
@@ -886,69 +967,45 @@ void StatsPage::manageStats()
 	
 	// Secondary Attributes
 	{
-	Vec2f pos = Vec2f(324, 158);
-	
-	std::stringstream ss4;
-	ss4 << F2L_RoundUp(player.Full_maxlife);
-	
-	Color color = attributeModToColor(player.Full_maxlife, player.lifePool.max);
-	
-	DrawBookTextCenter(hFontInBook, pos, ss4.str(), color);
+		Vec2f pos = bookPos + Vec2f(227, 90) * scale;
+		std::string value = boost::lexical_cast<std::string>(std::ceil(player.Full_maxlife));
+		Color color = attributeModToColor(player.Full_maxlife, player.lifePool.max);
+		DrawBookTextCenter(hFontInBook, pos, value, color);
 	}
 	
 	{
-	Vec2f pos = Vec2f(324, 218);
-	
-	std::stringstream ss4;
-	ss4 << F2L_RoundUp(player.Full_maxmana);
-	
-	Color color = attributeModToColor(player.Full_maxmana, player.manaPool.max);
-	
-	DrawBookTextCenter(hFontInBook, pos, ss4.str(), color);
+		Vec2f pos = bookPos + Vec2f(227, 150) * scale;
+		std::string value = boost::lexical_cast<std::string>(std::ceil(player.Full_maxmana));
+		Color color = attributeModToColor(player.Full_maxmana, player.manaPool.max);
+		DrawBookTextCenter(hFontInBook, pos, value, color);
 	}
 	
 	{
-	Vec2f pos = Vec2f(324, 278);
-	
-	std::stringstream ss4;
-	ss4 << F2L_RoundUp(player.m_miscFull.damages);
-	
-	Color color = attributeModToColor(player.m_miscMod.damages);
-	
-	DrawBookTextCenter(hFontInBook, pos, ss4.str(), color);
+		Vec2f pos = bookPos + Vec2f(227, 210) * scale;
+		std::string value = boost::lexical_cast<std::string>(std::ceil(player.m_miscFull.damages));
+		Color color = attributeModToColor(player.m_miscMod.damages);
+		DrawBookTextCenter(hFontInBook, pos, value, color);
 	}
 	
 	{
-	Vec2f pos = Vec2f(153, 158);
-	
-	std::stringstream ss4;
-	ss4 << F2L_RoundUp(player.m_miscFull.armorClass);
-	
-	Color color = attributeModToColor(player.m_miscMod.armorClass);
-	
-	DrawBookTextCenter(hFontInBook, pos, ss4.str(), color);
+		Vec2f pos = bookPos + Vec2f(54, 90) * scale;
+		std::string value = boost::lexical_cast<std::string>(std::ceil(player.m_miscFull.armorClass));
+		Color color = attributeModToColor(player.m_miscMod.armorClass);
+		DrawBookTextCenter(hFontInBook, pos, value, color);
 	}
 	
 	{
-	Vec2f pos = Vec2f(153, 218);
-	
-	std::stringstream ss4;
-	ss4 << std::setw(3) << std::setprecision(0) << F2L_RoundUp( player.m_miscFull.resistMagic );
-	
-	Color color = attributeModToColor(player.m_miscMod.resistMagic);
-	
-	DrawBookTextCenter(hFontInBook, pos, ss4.str(), color);
+		Vec2f pos = bookPos + Vec2f(54, 150) * scale;
+		std::string value = boost::lexical_cast<std::string>(std::ceil(player.m_miscFull.resistMagic));
+		Color color = attributeModToColor(player.m_miscMod.resistMagic);
+		DrawBookTextCenter(hFontInBook, pos, value, color);
 	}
 	
 	{
-	Vec2f pos = Vec2f(153, 278);
-	
-	std::stringstream ss4;
-	ss4 << std::setw(3) << std::setprecision(0) << F2L_RoundUp( player.m_miscFull.resistPoison );
-	
-	Color color = attributeModToColor(player.m_miscMod.resistPoison);
-	
-	DrawBookTextCenter(hFontInBook, pos, ss4.str(), color);
+		Vec2f pos = bookPos + Vec2f(54, 210) * scale;
+		std::string value = boost::lexical_cast<std::string>(std::ceil(player.m_miscFull.resistPoison));
+		Color color = attributeModToColor(player.m_miscMod.resistPoison);
+		DrawBookTextCenter(hFontInBook, pos, value, color);
 	}
 	
 	RenderBookPlayerCharacter();
@@ -961,37 +1018,40 @@ void StatsPage::RenderBookPlayerCharacter() {
 	if(!entities.player()->obj)
 		return;
 	
+	float scale = g_bookScale;
+	Vec2f bookPos = g_bookRect.topLeft();
+	
 	Rect rec;
 	if (ARXmenu.mode() == Mode_CharacterCreation) {
 		
-		rec = Rect(s32((120.f + BOOKDEC.x) * g_sizeRatio.x), s32((69.f + BOOKDEC.y) * g_sizeRatio.y),
-				   s32((330.f + BOOKDEC.x) * g_sizeRatio.x), s32((300.f + BOOKDEC.y) * g_sizeRatio.y));
+		rec = Rect(Vec2i(bookPos + Vec2f(23.f, 5.f) * scale),
+		           Vec2i(bookPos + Vec2f(233.f, 236.f) * scale));
 		GRenderer->Clear(Renderer::DepthBuffer, Color::none, 1.f, 1, &rec);
 		
-			Rect vp = Rect(Vec2i(s32(139.f * g_sizeRatio.x), 0), s32(139.f * g_sizeRatio.x), s32(310.f * g_sizeRatio.y));
-			GRenderer->SetScissor(vp);
+		Rect vp = Rect(Vec2i(bookPos + Vec2f(75.f, 5.f) * scale),
+		               Vec2i(bookPos + Vec2f(212.f, 219.f) * scale));
+		GRenderer->SetScissor(vp);
+		
 	} else {
 		
-		rec = Rect(s32((118.f + BOOKDEC.x) * g_sizeRatio.x), s32((69.f + BOOKDEC.y) * g_sizeRatio.y),
-				  s32((350.f + BOOKDEC.x) * g_sizeRatio.x), s32((338.f + BOOKDEC.y) * g_sizeRatio.y));
+		rec = Rect(Vec2i(bookPos + Vec2f(21.f, 5.f) * scale),
+		           Vec2i(bookPos + Vec2f(253.f, 274.f) * scale));
 		GRenderer->Clear(Renderer::DepthBuffer, Color::none, 1.f, 1, &rec);
+		rec.right -= s32(50.f * scale);
 		
-		rec.right -= 50;
 	}
 	
-	Vec3f pos;
 	EERIE_LIGHT eLight1;
-	EERIE_LIGHT eLight2;
-	
 	eLight1.pos = Vec3f(50.f, 50.f, 200.f);
-	eLight1.exist = 1;
+	eLight1.m_exists = true;
 	eLight1.rgb = Color3f(0.15f, 0.06f, 0.003f);
 	eLight1.intensity = 8.8f;
 	eLight1.fallstart = 2020;
 	eLight1.fallend = eLight1.fallstart + 60;
 	RecalcLight(&eLight1);
 	
-	eLight2.exist = 1;
+	EERIE_LIGHT eLight2;
+	eLight2.m_exists = true;
 	eLight2.pos = Vec3f(-50.f, -50.f, -200.f);
 	eLight2.rgb = Color3f::gray(0.6f);
 	eLight2.intensity = 3.8f;
@@ -1008,22 +1068,20 @@ void StatsPage::RenderBookPlayerCharacter() {
 	g_culledDynamicLights[1] = &eLight2;
 	g_culledDynamicLightsCount = 2;
 	
-	EERIE_CAMERA * oldcam = ACTIVECAM;
-	bookcam.center = rec.center();
-	SetActiveCamera(&bookcam);
-	PrepareCamera(&bookcam, g_size);
+	Camera bookcam;
+	bookcam.angle = Anglef();
+	bookcam.m_pos = Vec3f(0.f);
+	bookcam.focal = 520.f;
+	bookcam.cdepth = 2200.f;
 	
-	Anglef ePlayerAngle = Anglef::ZERO;
+	Camera * oldcam = g_camera;
+	PrepareCamera(&bookcam, Rect(g_bookRect), rec.center());
 	
 	GRenderer->SetAntialiasing(true);
 	
+	Anglef ePlayerAngle;
+	Vec3f pos;
 	if(ARXmenu.mode() == Mode_CharacterCreation) {
-		Rect vp;
-		vp.left = static_cast<int>(rec.left + 52.f * g_sizeRatio.x);
-		vp.top = rec.top;
-		vp.right = static_cast<int>(rec.right - 21.f * g_sizeRatio.x);
-		vp.bottom = static_cast<int>(rec.bottom - 17.f * g_sizeRatio.y);
-		GRenderer->SetScissor(vp);
 		
 		switch(player.skin) {
 			case 0:
@@ -1042,6 +1100,7 @@ void StatsPage::RenderBookPlayerCharacter() {
 		
 		pos = Vec3f(8, 162, 75);
 		eLight1.pos.z = -90.f;
+		
 	} else {
 		
 		ePlayerAngle.setYaw(-20.f);
@@ -1094,7 +1153,6 @@ void StatsPage::RenderBookPlayerCharacter() {
 	
 	GRenderer->SetAntialiasing(false);
 	
-	SetActiveCamera(oldcam);
 	PrepareCamera(oldcam, g_size);
 	
 	player.bookAnimation[0].cur_anim = herowaitbook;
@@ -1103,36 +1161,33 @@ void StatsPage::RenderBookPlayerCharacter() {
 		if(weapon->type_flags & OBJECT_TYPE_2H) {
 			player.bookAnimation[0].cur_anim = herowait_2h;
 		}
+		// TODO workaround for bbox2D being relative to viewport
+		weapon->bbox2D.min += bookPos;
+		weapon->bbox2D.max += bookPos;
+	}
+	
+	if(Entity * shield = entities.get(player.equiped[EQUIP_SLOT_SHIELD])) {
+		// TODO workaround for bbox2D being relative to viewport
+		shield->bbox2D.min += bookPos;
+		shield->bbox2D.max += bookPos;
 	}
 	
 	if(Entity * tod = entities.get(player.equiped[EQUIP_SLOT_ARMOR])) {
-			tod->bbox2D.min = Vec2f(195.f, 116.f);
-			tod->bbox2D.max = Vec2f(284.f, 182.f);
-			
-			tod->bbox2D.min = (tod->bbox2D.min + BOOKDEC) * g_sizeRatio;
-			tod->bbox2D.max = (tod->bbox2D.max + BOOKDEC) * g_sizeRatio;
-			
-			tod->ioflags |= IO_ICONIC;
+		tod->bbox2D.min = bookPos + Vec2f(90.f, 52.f) * scale;
+		tod->bbox2D.max = bookPos + Vec2f(170.f, 118.f) * scale;
+		tod->ioflags |= IO_ICONIC;
 	}
 	
 	if(Entity * tod = entities.get(player.equiped[EQUIP_SLOT_LEGGINGS])) {
-			tod->bbox2D.min = Vec2f(218.f, 183.f);
-			tod->bbox2D.max = Vec2f(277.f, 322.f);
-			
-			tod->bbox2D.min = (tod->bbox2D.min + BOOKDEC) * g_sizeRatio;
-			tod->bbox2D.max = (tod->bbox2D.max + BOOKDEC) * g_sizeRatio;
-			
-			tod->ioflags |= IO_ICONIC;
+		tod->bbox2D.min = bookPos + Vec2f(110.f, 119.f) * scale;
+		tod->bbox2D.max = bookPos + Vec2f(170.f, 265.f) * scale;
+		tod->ioflags |= IO_ICONIC;
 	}
 	
 	if(Entity * tod = entities.get(player.equiped[EQUIP_SLOT_HELMET])) {
-			tod->bbox2D.min = Vec2f(218.f, 75.f);
-			tod->bbox2D.max = Vec2f(260.f, 115.f);
-			
-			tod->bbox2D.min = (tod->bbox2D.min + BOOKDEC) * g_sizeRatio;
-			tod->bbox2D.max = (tod->bbox2D.max + BOOKDEC) * g_sizeRatio;
-			
-			tod->ioflags |= IO_ICONIC;
+		tod->bbox2D.min = bookPos + Vec2f(115.f, 20.f) * scale;
+		tod->bbox2D.max = bookPos + Vec2f(153.f, 51.f) * scale;
+		tod->ioflags |= IO_ICONIC;
 	}
 	
 	if(Entity * todraw = entities.get(player.equiped[EQUIP_SLOT_RING_LEFT])) {
@@ -1144,19 +1199,16 @@ void StatsPage::RenderBookPlayerCharacter() {
 			tc2 = todraw->m_icon->getHalo();
 		
 		if(tc) {
-			todraw->bbox2D.min = Vec2f(146.f, 312.f);
+			todraw->bbox2D.min = bookPos + Vec2f(50.f, 246.f) * scale;
 			
 			if(tc2) {
-				ARX_INTERFACE_HALO_Render(todraw->halo.color, todraw->halo.flags, tc2, (todraw->bbox2D.min + BOOKDEC) * g_sizeRatio, g_sizeRatio);
+				ARX_INTERFACE_HALO_Render(todraw->halo.color, todraw->halo.flags, tc2, todraw->bbox2D.min, Vec2f(scale));
 			}
 			
 			Color color = (todraw->poisonous && todraw->poisonous_count != 0) ? Color::green : Color::white;
 			DrawBookInterfaceItem(tc, todraw->bbox2D.min, color, 0);
 			
-			todraw->bbox2D.max = todraw->bbox2D.min + Vec2f(tc->size());
-			
-			todraw->bbox2D.min = (todraw->bbox2D.min + BOOKDEC) * g_sizeRatio;
-			todraw->bbox2D.max = (todraw->bbox2D.max + BOOKDEC) * g_sizeRatio;
+			todraw->bbox2D.max = todraw->bbox2D.min + Vec2f(tc->size()) * g_bookScale;
 			
 			todraw->ioflags |= IO_ICONIC;
 		}
@@ -1171,19 +1223,16 @@ void StatsPage::RenderBookPlayerCharacter() {
 			tc2 = todraw->m_icon->getHalo();
 		
 		if(tc) {
-			todraw->bbox2D.min = Vec2f(296.f, 312.f);
+			todraw->bbox2D.min = bookPos + Vec2f(200.f, 246.f) * scale;
 			
 			if(tc2) {
-				ARX_INTERFACE_HALO_Render(todraw->halo.color, todraw->halo.flags, tc2, (todraw->bbox2D.min + BOOKDEC) * g_sizeRatio, g_sizeRatio);
+				ARX_INTERFACE_HALO_Render(todraw->halo.color, todraw->halo.flags, tc2, todraw->bbox2D.min, Vec2f(scale));
 			}
 			
 			Color color = (todraw->poisonous && todraw->poisonous_count != 0) ? Color::green : Color::white;
 			DrawBookInterfaceItem(tc, todraw->bbox2D.min, color, 0);
 			
-			todraw->bbox2D.max = todraw->bbox2D.min + Vec2f(tc->size());
-			
-			todraw->bbox2D.min = (todraw->bbox2D.min + BOOKDEC) * g_sizeRatio;
-			todraw->bbox2D.max = (todraw->bbox2D.max + BOOKDEC) * g_sizeRatio;
+			todraw->bbox2D.max = todraw->bbox2D.min + Vec2f(tc->size()) * g_bookScale;
 			
 			todraw->ioflags |= IO_ICONIC;
 		}
@@ -1196,56 +1245,63 @@ void StatsPage::RenderBookPlayerCharacter() {
 
 bool StatsPage::CheckAttributeClick(Vec2f pos, float * val, TextureContainer * tc) {
 	
-	bool rval=false;
+	bool rval = false;
 	float t = *val;
-
-	if(MouseInBookRect(pos, Vec2f(32, 32))) {
+	
+	float scale = g_bookScale;
+	
+	if(MouseInBookRect(pos, Vec2f(32, 32) * scale)) {
+		
 		rval = true;
-
-		if((eeMousePressed1() || eeMousePressed2()) && tc)
+		
+		if((eeMousePressed1() || eeMousePressed2()) && tc) {
 			DrawBookInterfaceItem(tc, pos, Color::white, 0.000001f);
-
+		}
+		
 		if(eeMouseUp1()) {
 			if(player.Attribute_Redistribute > 0) {
 				player.Attribute_Redistribute--;
 				t++;
-				*val=t;
+				*val = t;
 				playReleaseSound();
-			}
-			else
+			} else {
 				playErrorSound();
+			}
 		}
-
+		
 		if(eeMouseUp2()) {
 			if(ARXmenu.mode() == Mode_CharacterCreation) {
 				if(t > 6 && player.level == 0) {
 					player.Attribute_Redistribute++;
-					t --;
-					*val=t;
+					t--;
+					*val = t;
 					playReleaseSound();
-				}
-				else
+				} else {
 					playErrorSound();
-			}
-			else
+				}
+			} else {
 				playErrorSound();
+			}
 		}
+		
 	}
-
+	
 	return rval;
 }
 
-bool StatsPage::CheckSkillClick(Vec2f pos, float * val, TextureContainer * tc,
-                            float * oldval) {
+bool StatsPage::CheckSkillClick(Vec2f pos, float * val, TextureContainer * tc, float oldval) {
 	
-	bool rval=false;
-
+	bool rval = false;
+	
 	float t = *val;
-	float ot = *oldval;
+	float ot = oldval;
 
-	if(MouseInBookRect(pos, Vec2f(32, 32))) {
-		rval=true;
-
+	float scale = g_bookScale;
+	
+	if(MouseInBookRect(pos, Vec2f(32, 32) * scale)) {
+		
+		rval = true;
+		
 		if((eeMousePressed1() || eeMousePressed2()) && tc)
 			DrawBookInterfaceItem(tc, pos, Color::white, 0.000001f);
 		
@@ -1253,39 +1309,41 @@ bool StatsPage::CheckSkillClick(Vec2f pos, float * val, TextureContainer * tc,
 			if(player.Skill_Redistribute > 0) {
 				player.Skill_Redistribute--;
 				t++;
-				*val=t;
+				*val = t;
 				playReleaseSound();
-			}
-			else
+			} else {
 				playErrorSound();
+			}
 		}
 		
 		if(eeMouseUp2()) {
 			if(ARXmenu.mode() == Mode_CharacterCreation) {
 				if(t > ot && player.level == 0) {
 					player.Skill_Redistribute++;
-					t --;
-					*val=t;
+					t--;
+					*val = t;
 					playReleaseSound();
-				}
-				else
+				} else {
 					playErrorSound();
-			}
-			else
+				}
+			} else {
 				playErrorSound();
+			}
 		}
+		
 	}
 	
 	return rval;
 }
 
 Color StatsPage::attributeModToColor(float modValue, float baseValue) {
-	if(modValue < baseValue)
+	if(modValue < baseValue) {
 		return Color::red;
-	else if(modValue > baseValue)
+	}
+	if(modValue > baseValue) {
 		return Color::blue;
-	else
-		return Color::black;
+	}
+	return Color::black;
 }
 
 SpellsPage::SpellsPage()
@@ -1294,22 +1352,25 @@ SpellsPage::SpellsPage()
 }
 
 void SpellsPage::manage() {
-	DrawBookInterfaceItem(g_bookResouces.ptexspellbook, Vec2f(97, 64), Color::white, 0.9999f);
+	
+	DrawBookInterfaceItem(g_bookResouces.ptexspellbook, g_bookRect.topLeft(), Color::white, 0.9999f);
 	drawLeftTabs();
-
-	Rect runeDrawRect = Rect(Vec2i((Vec2f(97, 64) + Vec2f(29, 210)) * g_sizeRatio),
-							 s32(513 * 0.43f * g_sizeRatio.x),
-							 s32(313 * 0.25f * g_sizeRatio.y));
-
+	
+	float scale = g_bookScale;
+	
+	Rect runeDrawRect = Rect(Vec2i((g_bookRect.topLeft() + Vec2f(29, 210) * scale)),
+	                         s32(g_bookRect.width() * 0.43f), s32(g_bookRect.height() * 0.25f));
+	
 	ARX_SPELLS_UpdateBookSymbolDraw(runeDrawRect);
-	gui::ARX_INTERFACE_ManageOpenedBook_Finish(Vec2f(DANAEMouse));
+	gui::ARX_INTERFACE_ManageOpenedBook_Finish(Vec2f(DANAEMouse), g_bookRect, g_bookScale);
 	drawSpells();
+	
 }
 
 void SpellsPage::drawLeftTabs() {
 	
 	for(size_t i = 0; i < SPELL_TYPES_COUNT; ++i) {
-		if(spellicons[i].bSecret == false) {
+		if(!spellicons[i].bSecret) {
 			bool bOk = true;
 
 			for(long j = 0; j < 4 && spellicons[i].symbols[j] != RUNE_NONE; ++j) {
@@ -1328,10 +1389,9 @@ void SpellsPage::drawSpells() {
 	// Now Draws Spells for this level...
 	ARX_PLAYER_ComputePlayerFullStats();
 	
-	Vec2f tmpPos = Vec2f_ZERO;
-	bool	bFlyingOver = false;
+	Vec2f tmpPos(0.f);
 	
-	for(size_t i=0; i < SPELL_TYPES_COUNT; i++) {
+	for(size_t i = 0; i < SPELL_TYPES_COUNT; i++) {
 		const SPELL_ICON & spellInfo = spellicons[i];
 		
 		if(spellInfo.level != (m_currentTab + 1) || spellInfo.bSecret)
@@ -1339,36 +1399,26 @@ void SpellsPage::drawSpells() {
 		
 		// check if player can cast it
 		bool bOk = true;
-		long j = 0;
-		
-		while(j < 4 && (spellInfo.symbols[j] != RUNE_NONE)) {
+		for(long j = 0; j < 4 && spellInfo.symbols[j] != RUNE_NONE; j++) {
 			if(!player.hasRune(spellInfo.symbols[j])) {
 				bOk = false;
 			}
-			
-			j++;
 		}
 		
 		if(!bOk)
 			continue;
 			
-		Vec2f fPos = Vec2f(170.f, 135.f) + tmpPos * Vec2f(85.f, 70.f);
+		float scale = g_bookScale;
+		Vec2f bookPos = g_bookRect.topLeft();
+		Vec2f fPos = bookPos + Vec2f(73.f, 71.f) * scale + tmpPos * Vec2f(85.f, 70.f) * scale;
 		long flyingover = 0;
 		
-		if(MouseInBookRect(fPos, Vec2f(48, 48))) {
-			bFlyingOver = true;
+		if(MouseInBookRect(fPos, Vec2f(48, 48) * scale)) {
 			flyingover = 1;
 			
-			SpecialCursor=CURSOR_INTERACTION_ON;
-			DrawBookTextCenter(hFontInBook, Vec2f(208, 90), spellInfo.name, Color::none);
+			cursorSetInteraction();
+			DrawBookTextCenter(hFontInBook, bookPos + Vec2f(111, 26) * scale, spellInfo.name, Color::none);
 			
-			for(size_t si = 0; si < MAX_SPEECH; si++) {
-				if(g_speech[si].timecreation > 0) {
-					FLYING_OVER = 0;
-				}
-			}
-			
-			OLD_FLYING_OVER = FLYING_OVER;
 			pTextManage->Clear();
 			UNICODE_ARXDrawTextCenteredScroll(hFontInGame,
 				float(g_size.center().x),
@@ -1381,20 +1431,21 @@ void SpellsPage::drawSpells() {
 				2,
 				0);
 			
-			long count = 0;
+			size_t count = 0;
 			
-			for(long j = 0; j < 6; ++j)
-				if(spellInfo.symbols[j] != RUNE_NONE)
-					++count;
-			
-			for(int j = 0; j < 6; ++j) {
+			for(size_t j = 0; j < 6; ++j) {
 				if(spellInfo.symbols[j] != RUNE_NONE) {
-					Vec2f pos;
-					pos.x = 240 - (count * 32) * 0.5f + j * 32;
-					pos.y = 306;
+					++count;
+				}
+			}
+			
+			for(size_t j = 0; j < 6; ++j) {
+				if(spellInfo.symbols[j] != RUNE_NONE) {
+					Vec2f pos = bookPos + Vec2f(143.f - float(count) * 16.f + float(j) * 32.f, 242.f) * scale;
 					DrawBookInterfaceItem(gui::necklace.pTexTab[spellInfo.symbols[j]], pos, Color::white, 0.000001f);
 				}
 			}
+			
 		}
 		
 		if(spellInfo.tc) {
@@ -1415,24 +1466,20 @@ void SpellsPage::drawSpells() {
 					player.SpellToMemorize.lTimeCreation = g_gameTime.now();
 				}
 			} else {
-				color = Color(168, 208, 223, 255);
+				color = Color(168, 208, 223);
 			}
 			
 			DrawBookInterfaceItem(spellInfo.tc, fPos, color, 0.000001f);
 			
 		}
 		
-		tmpPos.x ++;
+		tmpPos.x++;
 		
 		if(tmpPos.x >= 2) {
 			tmpPos.x = 0;
-			tmpPos.y ++;
+			tmpPos.y++;
 		}
-	}
-	
-	if(!bFlyingOver) {
-		OLD_FLYING_OVER = -1;
-		FLYING_OVER = -1;
+		
 	}
 }
 
@@ -1442,7 +1489,7 @@ MapPage::MapPage()
 }
 
 void MapPage::manage() {
-	DrawBookInterfaceItem(g_bookResouces.questbook, Vec2f(97, 64), Color::white, 0.9999f);
+	DrawBookInterfaceItem(g_bookResouces.questbook, g_bookRect.topLeft(), Color::white, 0.9999f);
 	drawLeftTabs();
 	drawMaps();
 }
@@ -1454,28 +1501,34 @@ void MapPage::setMapLevel(long level) {
 void MapPage::drawMaps()
 {
 	long SHOWLEVEL = m_currentLevel;
+	Vec2f bookPos = g_bookRect.topLeft();
+	float scale = g_bookScale;
 
 	if(SHOWLEVEL >= 0 && SHOWLEVEL < 32)
-		g_miniMap.showBookEntireMap(SHOWLEVEL);
+		g_miniMap.showBookEntireMap(SHOWLEVEL, Rect(Vec2i(bookPos + Vec2f(43, 56) * scale),
+		                                            Vec2i(bookPos + Vec2f(248, 226) * scale)), scale);
 
 	SHOWLEVEL = ARX_LEVELS_GetRealNum(CURRENTLEVEL);
 
 	if(SHOWLEVEL >= 0 && SHOWLEVEL < 32)
-		g_miniMap.showBookMiniMap(SHOWLEVEL);
+		g_miniMap.showBookMiniMap(SHOWLEVEL, Rect(Vec2i(bookPos + Vec2f(263, 21) * scale),
+		                                          Vec2i(bookPos + Vec2f(480, 291) * scale)), scale);
 }
 
 void MapPage::drawLeftTabs() {
 	
-	long max_onglet = 7;
+	size_t max_onglet = 7;
 	
-	for(int i = 0; i <= max_onglet; i++) {
-		PlayerBookPage::manageLeftTabs(i, m_currentLevel);
+	for(size_t i = 0; i <= max_onglet; i++) {
+		PlayerBookPage::manageLeftTabs(long(i), m_currentLevel);
 	}
+	
 }
 
 void QuestBookPage::manage() {
+	
 	// Cache the questbook data
-	if(m_questBook.text().empty() && !g_playerQuestLogEntries.empty()) {
+	if(m_questBook.type() == Note::Undefined) {
 		std::string text;
 		for(size_t i = 0; i < g_playerQuestLogEntries.size(); ++i) {
 			std::string quest = getLocalised(g_playerQuestLogEntries[i]);
@@ -1491,6 +1544,7 @@ void QuestBookPage::manage() {
 	m_questBook.manageActions();
 	
 	m_questBook.render();
+	
 }
 
 void QuestBookPage::clear() {

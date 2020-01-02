@@ -1,5 +1,5 @@
 /*
- * Copyright 2016-2017 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2016-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -32,31 +32,38 @@
 #include "scene/Interactive.h"
 #include "scene/Light.h"
 
-void update2DFX() {
+static TextureContainer * tflare = NULL;
+
+void initLightFlares() {
+	tflare = TextureContainer::LoadUI("graph/particles/flare");
+}
+
+void updateLightFlares() {
 	
 	RaycastDebugClear();
 	
 	ARX_PROFILE_FUNC();
 	
-	Entity* pTableIO[256];
+	Entity * pTableIO[256];
 	size_t nNbInTableIO = 0;
-
-	float temp_increase = toMs(g_platformTime.lastFrameDuration()) * (1.0f/1000) * 4.f;
 	
-	const Vec3f camPos = ACTIVECAM->orgTrans.pos;
+	float temp_increase = toMs(g_platformTime.lastFrameDuration()) * 0.004f;
+	
+	const Vec3f camPos = g_camera->m_pos;
 	
 	bool bComputeIO = false;
 
+	Vec4f zFar = g_preparedCamera.m_viewToScreen * Vec4f(0.f, 0.f, g_camera->cdepth * fZFogEnd, 1.f);
+	float fZFar = zFar.z / zFar.w;
+
 	for(size_t i = 0; i < g_culledDynamicLightsCount; i++) {
-		EERIE_LIGHT *el = g_culledDynamicLights[i];
-
-		BackgroundTileData * bkgData = getFastBackgroundData(el->pos.x, el->pos.z);
-
-		if(!bkgData || !bkgData->treat) {
-			el->treat=0;
+		EERIE_LIGHT * el = g_culledDynamicLights[i];
+		
+		if(!ACTIVEBKG->isInActiveTile(el->pos)) {
+			el->m_isVisible = false;
 			continue;
 		}
-
+		
 		if(el->extras & EXTRAS_FLARE) {
 			Vec3f lv = el->pos;
 			
@@ -65,32 +72,19 @@ void update2DFX() {
 			
 			el->m_flareFader -= temp_increase;
 
-			if(!(player.Interface & INTER_COMBATMODE) && (player.Interface & INTER_PLAYERBOOK))
-				continue;
-
-			if(p.w > 0.f &&
-				pos2d.x > 0.f &&
-				pos2d.y > (cinematicBorder.CINEMA_DECAL * g_sizeRatio.y) &&
-				pos2d.x < g_size.width() &&
-				pos2d.y < (g_size.height()-(cinematicBorder.CINEMA_DECAL * g_sizeRatio.y))
-				)
-			{
+			if(p.w > 0.f && pos2d.x > 0.f && pos2d.x < g_size.width()
+			   && pos2d.y > (cinematicBorder.CINEMA_DECAL * g_sizeRatio.y)
+				 && pos2d.y < (g_size.height() - (cinematicBorder.CINEMA_DECAL * g_sizeRatio.y))) {
+				
 				Vec3f vector = lv - camPos;
 				lv -= vector * (50.f / glm::length(vector));
-
-				float fZFar=ACTIVECAM->ProjectionMatrix[3][2]*(1.f/(ACTIVECAM->cdepth*fZFogEnd))+ACTIVECAM->ProjectionMatrix[2][2];
-
-				Vec2s ees2dlv;
+				
 				Vec3f ee3dlv = lv;
-
-				ees2dlv.x = checked_range_cast<short>(pos2d.x);
-				ees2dlv.y = checked_range_cast<short>(pos2d.y);
-
+				Vec2s ees2dlv(checked_range_cast<short>(pos2d.x), checked_range_cast<short>(pos2d.y));
 				if(!bComputeIO) {
 					GetFirstInterAtPos(ees2dlv, 2, &ee3dlv, pTableIO, &nNbInTableIO);
 					bComputeIO = true;
 				}
-
 				
 				if(   pos2d.z > fZFar
 				   || RaycastLightFlare(camPos, el->pos)
@@ -107,11 +101,7 @@ void update2DFX() {
 	}
 }
 
-extern TextureContainer * tflare;
-
-
-
-void goFor2DFX() {
+void renderLightFlares() {
 	
 	ARX_PROFILE_FUNC();
 	
@@ -124,31 +114,26 @@ void goFor2DFX() {
 	
 	for(size_t i = 0; i < g_culledDynamicLightsCount; i++) {
 		const EERIE_LIGHT & el = *g_culledDynamicLights[i];
-
-		if(!el.exist || !el.treat)
+		
+		if(!el.m_exists || !el.m_isVisible || !(el.extras & EXTRAS_FLARE) || el.m_flareFader <= 0.f) {
 			continue;
-
-		if(el.extras & EXTRAS_FLARE) {
-			if(el.m_flareFader > 0.f) {
-				Vec3f ltvv = EE_RT(el.pos);
-				
-				float v = el.m_flareFader;
-
-				if(FADEDIR) {
-					v *= 1.f - LAST_FADEVALUE;
-				}
-
-				float siz;
-
-				if(el.extras & EXTRAS_FIXFLARESIZE)
-					siz = el.ex_flaresize;
-				else
-					siz = -el.ex_flaresize;
-
-				EERIEDrawSprite(el.pos, siz, tflare, (el.rgb * v).to<u8>(), ltvv.z);
-
-			}
 		}
+		
+		float v = el.m_flareFader;
+		
+		if(FADEDIR) {
+			v *= 1.f - LAST_FADEVALUE;
+		}
+		
+		float size = -el.ex_flaresize;
+		if(el.extras & EXTRAS_FIXFLARESIZE) {
+			// This is only used for one light in the whole game and makes it's flare gigantic when up close
+			// TODO Is this part of some puzze or a bug / obsolete workaround?
+			size = el.ex_flaresize;
+		}
+		
+		EERIEDrawSprite(el.pos, size, tflare, Color(el.rgb * v), EE_RT(el.pos).z);
+		
 	}
 	
 }

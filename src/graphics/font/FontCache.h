@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2013 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -33,8 +33,9 @@ public:
 	static void initialize();
 	static void shutdown();
 	
-	static Font * getFont(const res::path & fontFile, unsigned int fontSize);
-	static void releaseFont(Font * pFont);
+	static Font * getFont(const res::path & file, unsigned size, unsigned weight = 0);
+	
+	static void releaseFont(Font * font);
 	
 private:
 	
@@ -43,6 +44,7 @@ private:
 	~FontCache();
 	
 	static Impl * instance;
+	
 };
 
 #endif // ARX_GRAPHICS_FONT_FONTCACHE_H

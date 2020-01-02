@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2017 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -72,12 +72,5 @@ void ARXMenu_ResumeGame();
 // New quest
 
 void ARXMenu_NewQuest();
-
-// Save/Load quest
-
-void ARXMenu_LoadQuest(SavegameHandle num);
-void ARXMenu_SaveQuest(const std::string & name, SavegameHandle num = SavegameHandle());
-
-void ARXMenu_Private_Options_Video_SetResolution(bool fullscreen, int _iWidth, int _iHeight);
 
 #endif // ARX_GUI_MENUPUBLIC_H

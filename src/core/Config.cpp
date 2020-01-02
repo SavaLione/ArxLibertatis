@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2017 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -55,20 +55,22 @@ const std::string
 	audioDevice = "auto",
 	windowSize = BOOST_PP_STRINGIZE(ARX_DEFAULT_WIDTH) "x"
 	             BOOST_PP_STRINGIZE(ARX_DEFAULT_HEIGHT),
-	debugLevels = "",
-	bufferUpload = "",
+	debugLevels,
+	bufferUpload,
 	
 	thumbnailSize = BOOST_PP_STRINGIZE(THUMBNAIL_DEFAULT_WIDTH) "x"
-					BOOST_PP_STRINGIZE(THUMBNAIL_DEFAULT_HEIGHT);
+	                BOOST_PP_STRINGIZE(THUMBNAIL_DEFAULT_HEIGHT);
 
 const int
+	refreshRate = 0,
 	levelOfDetail = 2,
 	vsync = -1,
-	fpsLimit = 240,
+	fpsLimit = -1,
 	maxAnisotropicFiltering = 9001,
 	alphaCutoutAntialiasing = 2,
 	cinematicWidescreenMode = CinematicFadeEdges,
 	hudScaleFilter = UIFilterBilinear,
+	fontWeight = 2,
 	hrtf = audio::HRTFDefault,
 	autoReadyWeapon = AutoReadyWeaponNearEnemies,
 	mouseSensitivity = 6,
@@ -85,7 +87,8 @@ const bool
 	colorkeyAntialiasing = true,
 	limitSpeechWidth = true,
 	hudScaleInteger = true,
-	scaleCursorWithHud = true,
+	bookScaleInteger = false,
+	cursorScaleInteger = true,
 	minimizeOnFocusLost = true,
 	eax = true,
 	muteOnFocusLost = false,
@@ -106,7 +109,11 @@ const bool allowConsole = false;
 const float
 	fogDistance = 10.f,
 	gamma = 5.f,
+	fov = 75.f,
 	hudScale = 0.5f,
+	bookScale = 1.f,
+	cursorScale = 0.5f,
+	fontSize = 1.f,
 	volume = 10.f,
 	sfxVolume = 10.f,
 	speechVolume = 10.f,
@@ -171,7 +178,8 @@ const std::string
 	Input = "input",
 	Key = "key",
 	Misc = "misc";
-}
+
+} // namespace Section
 
 namespace Key {
 
@@ -182,13 +190,15 @@ const std::string language = "string";
 const std::string
 	renderer = "renderer",
 	resolution = "resolution",
+	refreshRate = "refresh_rate",
 	fullscreen = "full_screen",
 	levelOfDetail = "others_details",
 	fogDistance = "fog",
 	gamma = "gamma",
-	antialiasing = "antialiasing",
 	vsync = "vsync",
 	fpsLimit = "fps_limit",
+	fov = "fov",
+	antialiasing = "antialiasing",
 	maxAnisotropicFiltering = "max_anisotropic_filtering",
 	colorkeyAntialiasing = "colorkey_antialiasing",
 	alphaCutoutAntialiasing = "alpha_cutout_antialiasing",
@@ -202,8 +212,13 @@ const std::string
 	cinematicWidescreenMode = "cinematic_widescreen_mode",
 	hudScale = "hud_scale",
 	hudScaleInteger = "hud_scale_integer",
-	scaleCursorWithHud = "scale_cursor_with_hud",
-	hudScaleFilter = "hud_scale_filter",
+	bookScale = "book_scale",
+	bookScaleInteger = "book_scale_integer",
+	cursorScale = "cursor_scale",
+	cursorScaleInteger = "cursor_scale_integer",
+	hudScaleFilter = "scale_filter",
+	fontSize = "font_size",
+	fontWeight = "font_weight",
 	thumbnailSize = "save_thumbnail_size";
 
 // Window options
@@ -296,6 +311,9 @@ const std::string
 class ConfigReader : public IniReader {
 	
 public:
+	
+	void getActionKey(const std::string & section, const std::string & key, InputKeyId & binding) const;
+	
 	ActionKey getActionKey(const std::string & section, ControlAction index) const;
 	
 };
@@ -310,13 +328,32 @@ public:
 
 };
 
-void ConfigWriter::writeActionKey(ControlAction index, const ActionKey & actionKey) {
+void ConfigWriter::writeActionKey(ControlAction index, const ActionKey & value) {
 	
-	std::string v1 = Input::getKeyName(actionKey.key[0]);
+	std::string v1 = Input::getKeyName(value.key[0]);
 	writeKey(Key::actions[index] + "_k0", v1);
 	
-	std::string v2 = Input::getKeyName(actionKey.key[1]);
+	std::string v2 = Input::getKeyName(value.key[1]);
 	writeKey(Key::actions[index] + "_k1", v2);
+}
+
+void ConfigReader::getActionKey(const std::string & section, const std::string & key,
+                                InputKeyId & binding) const {
+	
+	const IniKey * setting = getKey(section, key);
+	if(setting) {
+		InputKeyId id = Input::getKeyId(setting->getValue());
+		if(id == ActionKey::UNUSED && !setting->getValue().empty() && setting->getValue() != Input::KEY_NONE) {
+			LogWarning << "Error parsing key name for " <<  key << ": \"" << setting->getValue()
+			           << "\", resetting to \"" << Input::getKeyName(binding) << "\"";
+		} else if(id == InputKeyId(Keyboard::Key_Escape)) {
+			LogWarning << "Invalid key for " <<  key << ": \"" << setting->getValue()
+			           << "\", resetting to \"" << Input::getKeyName(binding) << "\"";
+		} else {
+			binding = id;
+		}
+	}
+	
 }
 
 ActionKey ConfigReader::getActionKey(const std::string & section, ControlAction index) const {
@@ -324,25 +361,8 @@ ActionKey ConfigReader::getActionKey(const std::string & section, ControlAction 
 	const std::string & key = Key::actions[index];
 	ActionKey action_key = Default::actions[index];
 	
-	const IniKey * k0 = getKey(section, key + "_k0");
-	if(k0) {
-		InputKeyId id = Input::getKeyId(k0->getValue());
-		if(id == ActionKey::UNUSED && !k0->getValue().empty() && k0->getValue() != Input::KEY_NONE) {
-			LogWarning << "Error parsing key name for " <<  key << "_k0: \"" << k0->getValue() << "\", resetting to \"" << Input::getKeyName(action_key.key[0]) << "\"";
-		} else {
-			action_key.key[0] = id;
-		}
-	}
-	
-	const IniKey * k1 = getKey(section, key + "_k1");
-	if(k1) {
-		InputKeyId id = Input::getKeyId(k1->getValue());
-		if(id == ActionKey::UNUSED && !k1->getValue().empty() && k1->getValue() != Input::KEY_NONE) {
-			LogWarning << "Error parsing key name for " <<  key << "_k1: \"" << k1->getValue() << "\", resetting to \"" << Input::getKeyName(action_key.key[1]) << "\"";
-		} else {
-			action_key.key[1] = id;
-		}
-	}
+	getActionKey(section, key + "_k0", action_key.key[0]);
+	getActionKey(section, key + "_k1", action_key.key[1]);
 	
 	LogDebug("[" << section << "] " << key << " = \"" << Input::getKeyName(action_key.key[0]) << "\", \"" << Input::getKeyName(action_key.key[1]) << "\"");
 	
@@ -360,35 +380,48 @@ void Config::setDefaultActionKeys() {
 	}
 }
 
-void Config::setActionKey(ControlAction actionId, size_t index, InputKeyId key) {
+bool Config::setActionKey(ControlAction actionId, size_t index, InputKeyId key) {
 	
 	if(actionId >= NUM_ACTION_KEY || index > 1) {
 		arx_assert(false);
-		return;
+		return false;
 	}
+	
+	bool changed = false;
 	
 	// remove existing key assignments
 	for(size_t i = 0; i < NUM_ACTION_KEY; i++) {
-		for(int k = 0; k < 2; k++) {
-			if(actions[i].key[k] == key) {
+		for(size_t k = 0; k < 2; k++) {
+			if((ControlAction(i) != actionId || k != index) && actions[i].key[k] == key) {
 				actions[i].key[k] = ActionKey::UNUSED;
+				changed = true;
 			}
 		}
 	}
-
-	ActionKey & action = actions[actionId];
-	action.key[index] = key;
+	
+	if(index == 1 && actions[actionId].key[0] == ActionKey::UNUSED) {
+		actions[actionId].key[index] = ActionKey::UNUSED;
+		changed = true;
+		index = 0;
+	}
+	
+	if(actions[actionId].key[index] != key) {
+		actions[actionId].key[index] = key;
+		changed = true;
+	}
+	
+	return changed;
 }
 
-void Config::setOutputFile(const fs::path & _file) {
-	file = _file;
-	CrashHandler::addAttachedFile(file);
+void Config::setOutputFile(const fs::path & file) {
+	m_file = file;
+	CrashHandler::addAttachedFile(m_file);
 }
 
 bool Config::save() {
 	
 	// Finally save it all to file/stream
-	fs::ofstream out(file);
+	fs::ofstream out(m_file);
 	if(!out.is_open()) {
 		return false;
 	}
@@ -402,20 +435,22 @@ bool Config::save() {
 	// video
 	writer.beginSection(Section::Video);
 	writer.writeKey(Key::renderer, video.renderer);
-	if(video.resolution == Vec2i_ZERO) {
+	if(video.mode.resolution == Vec2i(0)) {
 		writer.writeKey(Key::resolution, Default::resolution);
 	} else {
 		std::ostringstream oss;
-		oss << video.resolution.x << 'x' << video.resolution.y;
+		oss << video.mode.resolution.x << 'x' << video.mode.resolution.y;
 		writer.writeKey(Key::resolution, oss.str());
 	}
+	writer.writeKey(Key::refreshRate, video.mode.refresh);
 	writer.writeKey(Key::fullscreen, video.fullscreen);
 	writer.writeKey(Key::levelOfDetail, video.levelOfDetail);
 	writer.writeKey(Key::fogDistance, video.fogDistance);
 	writer.writeKey(Key::gamma, video.gamma);
-	writer.writeKey(Key::antialiasing, video.antialiasing);
 	writer.writeKey(Key::vsync, video.vsync);
 	writer.writeKey(Key::fpsLimit, video.fpsLimit);
+	writer.writeKey(Key::fov, video.fov);
+	writer.writeKey(Key::antialiasing, video.antialiasing);
 	writer.writeKey(Key::maxAnisotropicFiltering, video.maxAnisotropicFiltering);
 	writer.writeKey(Key::colorkeyAntialiasing, video.colorkeyAntialiasing);
 	writer.writeKey(Key::alphaCutoutAntialiasing, video.alphaCutoutAntialiasing);
@@ -429,8 +464,13 @@ bool Config::save() {
 	writer.writeKey(Key::cinematicWidescreenMode, int(interface.cinematicWidescreenMode));
 	writer.writeKey(Key::hudScale, interface.hudScale);
 	writer.writeKey(Key::hudScaleInteger, interface.hudScaleInteger);
-	writer.writeKey(Key::scaleCursorWithHud, interface.scaleCursorWithHud);
-	writer.writeKey(Key::hudScaleFilter, interface.hudScaleFilter);
+	writer.writeKey(Key::bookScale, interface.bookScale);
+	writer.writeKey(Key::bookScaleInteger, interface.bookScaleInteger);
+	writer.writeKey(Key::cursorScale, interface.cursorScale);
+	writer.writeKey(Key::cursorScaleInteger, interface.cursorScaleInteger);
+	writer.writeKey(Key::fontSize, interface.fontSize);
+	writer.writeKey(Key::fontWeight, interface.fontWeight);
+	writer.writeKey(Key::hudScaleFilter, interface.scaleFilter);
 	std::ostringstream osst;
 	osst << interface.thumbnailSize.x << 'x' << interface.thumbnailSize.y;
 	writer.writeKey(Key::thumbnailSize, osst.str());
@@ -474,7 +514,7 @@ bool Config::save() {
 	// key
 	writer.beginSection(Section::Key);
 	for(size_t i = 0; i < NUM_ACTION_KEY; i++) {
-		writer.writeActionKey((ControlAction)i, actions[i]);
+		writer.writeActionKey(ControlAction(i), actions[i]);
 	}
 	
 	// misc
@@ -489,7 +529,7 @@ bool Config::save() {
 
 static Vec2i parseResolution(const std::string & resolution) {
 	
-	Vec2i res;
+	Vec2i res(0);
 	
 	std::istringstream iss(resolution);
 	iss >> res.x;
@@ -499,14 +539,14 @@ static Vec2i parseResolution(const std::string & resolution) {
 	if(iss.fail() || x != 'x' || res.x <= 0 || res.y <= 0) {
 		LogWarning << "Bad resolution string: " << resolution;
 		return Vec2i(ARX_DEFAULT_WIDTH, ARX_DEFAULT_HEIGHT);
-	} else {
-		return res;
 	}
+	
+	return res;
 }
 
 static Vec2i parseThumbnailSize(const std::string & thumbnailSize) {
 	
-	Vec2i res;
+	Vec2i res(0);
 	
 	std::istringstream iss(thumbnailSize);
 	iss >> res.x;
@@ -516,9 +556,9 @@ static Vec2i parseThumbnailSize(const std::string & thumbnailSize) {
 	if (iss.fail() || x != 'x' || res.x <= 0 || res.y <= 0) {
 		LogWarning << "Bad thumbnail resolution string: " << thumbnailSize;
 		return Vec2i(THUMBNAIL_DEFAULT_WIDTH, THUMBNAIL_DEFAULT_HEIGHT);
-	} else {
-		return res;
 	}
+	
+	return res;
 }
 
 bool Config::init(const fs::path & file) {
@@ -540,19 +580,22 @@ bool Config::init(const fs::path & file) {
 	video.renderer = reader.getKey(Section::Video, Key::renderer, Default::renderer);
 	std::string resolution = reader.getKey(Section::Video, Key::resolution, Default::resolution);
 	if(resolution == "auto") {
-		video.resolution = Vec2i_ZERO;
+		video.mode.resolution = Vec2i(0);
 	} else {
-		video.resolution = parseResolution(resolution);
+		video.mode.resolution = parseResolution(resolution);
 	}
+	video.mode.refresh = reader.getKey(Section::Video, Key::refreshRate, Default::refreshRate);
 	video.fullscreen = reader.getKey(Section::Video, Key::fullscreen, Default::fullscreen);
 	video.levelOfDetail = reader.getKey(Section::Video, Key::levelOfDetail, Default::levelOfDetail);
 	video.fogDistance = reader.getKey(Section::Video, Key::fogDistance, Default::fogDistance);
 	video.gamma = reader.getKey(Section::Video, Key::gamma, Default::gamma);
-	video.antialiasing = reader.getKey(Section::Video, Key::antialiasing, Default::antialiasing);
 	int vsync = reader.getKey(Section::Video, Key::vsync, Default::vsync);
 	video.vsync = glm::clamp(vsync, -1, 1);
 	int fpsLimit = reader.getKey(Section::Video, Key::fpsLimit, Default::fpsLimit);
-	video.fpsLimit = std::max(fpsLimit, 0);
+	video.fpsLimit = std::max(fpsLimit, -1);
+	float fov = reader.getKey(Section::Video, Key::fov, Default::fov);
+	video.fov = std::max(fov, 60.f);
+	video.antialiasing = reader.getKey(Section::Video, Key::antialiasing, Default::antialiasing);
 	int anisoFiltering = reader.getKey(Section::Video, Key::maxAnisotropicFiltering, Default::maxAnisotropicFiltering);
 	video.maxAnisotropicFiltering = std::max(anisoFiltering, 1);
 	video.colorkeyAntialiasing = reader.getKey(Section::Video, Key::colorkeyAntialiasing, Default::colorkeyAntialiasing);
@@ -570,9 +613,18 @@ bool Config::init(const fs::path & file) {
 	float hudScale = reader.getKey(Section::Interface, Key::hudScale, Default::hudScale);
 	interface.hudScale = glm::clamp(hudScale, 0.f, 1.f);
 	interface.hudScaleInteger = reader.getKey(Section::Interface, Key::hudScaleInteger, Default::hudScaleInteger);
-	interface.scaleCursorWithHud = reader.getKey(Section::Interface, Key::scaleCursorWithHud, Default::scaleCursorWithHud);
+	float bookScale = reader.getKey(Section::Interface, Key::bookScale, Default::bookScale);
+	interface.bookScale = glm::clamp(bookScale, 0.f, 1.f);
+	interface.bookScaleInteger = reader.getKey(Section::Interface, Key::bookScaleInteger, Default::bookScaleInteger);
+	float cursorScale = reader.getKey(Section::Interface, Key::cursorScale, Default::cursorScale);
+	interface.cursorScale = glm::clamp(cursorScale, 0.f, 1.f);
+	interface.cursorScaleInteger = reader.getKey(Section::Interface, Key::cursorScaleInteger, Default::cursorScaleInteger);
+	float fontSize = reader.getKey(Section::Interface, Key::fontSize, Default::fontSize);
+	interface.fontSize = glm::clamp(fontSize, 0.5f, 2.f);
+	int fontWeight = reader.getKey(Section::Interface, Key::fontWeight, Default::fontWeight);
+	interface.fontWeight = glm::clamp(fontWeight, 0, 5);
 	int hudScaleFilter = reader.getKey(Section::Interface, Key::hudScaleFilter, Default::hudScaleFilter);
-	interface.hudScaleFilter = UIScaleFilter(glm::clamp(hudScaleFilter, 0, 1));
+	interface.scaleFilter = UIScaleFilter(glm::clamp(hudScaleFilter, 0, 1));
 	std::string thumbnailSize = reader.getKey(Section::Interface, Key::thumbnailSize, Default::thumbnailSize);
 	interface.thumbnailSize = parseThumbnailSize(thumbnailSize);
 	
@@ -611,12 +663,12 @@ bool Config::init(const fs::path & file) {
 	
 	// Get action key settings
 	for(size_t i = 0; i < NUM_ACTION_KEY; i++) {
-		actions[i] = reader.getActionKey(Section::Key, (ControlAction)i);
+		actions[i] = reader.getActionKey(Section::Key, ControlAction(i));
 	}
 	
 	// Get miscellaneous settings
 	misc.forceToggle = reader.getKey(Section::Misc, Key::forceToggle, Default::forceToggle);
-	misc.migration = (MigrationStatus)reader.getKey(Section::Misc, Key::migration, Default::migration);
+	misc.migration = MigrationStatus(reader.getKey(Section::Misc, Key::migration, Default::migration));
 	misc.quicksaveSlots = std::max(reader.getKey(Section::Misc, Key::quicksaveSlots, Default::quicksaveSlots), 1);
 	misc.debug = reader.getKey(Section::Misc, Key::debugLevels, Default::debugLevels);
 	

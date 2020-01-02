@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-2016 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2015-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -29,6 +29,8 @@
 #include <string>
 
 #include <windows.h>
+
+#include <boost/range/size.hpp>
 
 namespace platform {
 
@@ -63,7 +65,7 @@ class WideString {
 	
 public:
 	
-	size_t capacity() const { return ARRAY_SIZE(m_static) - 1; }
+	size_t capacity() const { return size_t(boost::size(m_static)) - 1; }
 	
 	WideString(const char * utf8, size_t length) : m_size(0) { assign(utf8, length); }
 	/* implicit */ WideString(const char * utf8) : m_size(0) { assign(utf8); }
@@ -95,8 +97,14 @@ public:
 	void assign(const char * utf8) { assign(utf8, std::strlen(utf8)); }
 	void assign(const std::string & utf8) { assign(utf8.data(), utf8.length()); }
 	
-	WideString & operator=(const char * utf8) { assign(utf8); return *this; }
-	WideString & operator=(const std::string & utf8) { assign(utf8); return *this; }
+	WideString & operator=(const char * utf8) {
+		assign(utf8);
+		return *this;
+	}
+	WideString & operator=(const std::string & utf8) {
+		assign(utf8);
+		return *this;
+	}
 	
 	std::string toUTF8() const;
 	static std::string toUTF8(const WCHAR * string, size_t length);
@@ -108,6 +116,11 @@ public:
 };
 
 std::string getErrorString(WORD error = GetLastError(), HMODULE module = NULL);
+
+template <typename FunctionType>
+FunctionType getProcAddress(HMODULE module, const char * symbol) {
+	return reinterpret_cast<FunctionType>(reinterpret_cast<void(*)()>(GetProcAddress(module, symbol)));
+}
 
 } // namespace
 

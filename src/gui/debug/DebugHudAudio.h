@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2018 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -17,19 +17,9 @@
  * along with Arx Libertatis.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef ARX_ANIMATION_INTRO_H
-#define ARX_ANIMATION_INTRO_H
+#ifndef ARX_GUI_DEBUG_DEBUGHUDAUDIO_H
+#define ARX_GUI_DEBUG_DEBUGHUDAUDIO_H
 
-void LoadScreen();
+void debugHud_Audio();
 
-bool ARX_INTERFACE_InitFISHTANK();
-void ARX_INTERFACE_ShowFISHTANK();
-void ARX_INTERFACE_KillFISHTANK();
-
-bool ARX_INTERFACE_InitARKANE();
-void ARX_INTERFACE_ShowARKANE();
-void ARX_INTERFACE_KillARKANE();
-
-void ARX_INTERFACE_EndIntro();
-
-#endif // ARX_ANIMATION_INTRO_H
+#endif // ARX_GUI_DEBUG_DEBUGHUDAUDIO_H

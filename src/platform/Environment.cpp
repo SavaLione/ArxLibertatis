@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2016 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -29,15 +29,12 @@
 #include "Configure.h"
 
 #if ARX_PLATFORM == ARX_PLATFORM_WIN32
+struct IUnknown; // Workaround for error C2187 in combaseapi.h when using /permissive-
 #include <windows.h>
 #include <shlobj.h>
 #include <wchar.h>
 #include <shellapi.h>
 #include <objbase.h>
-#endif
-
-#if ARX_HAVE_WORDEXP
-#include <wordexp.h>
 #endif
 
 #if ARX_HAVE_READLINK
@@ -78,28 +75,7 @@ namespace platform {
 
 std::string expandEnvironmentVariables(const std::string & in) {
 	
-	#if ARX_HAVE_WORDEXP
-	
-	wordexp_t p;
-	
-	if(wordexp(in.c_str(), &p, 0)) {
-		return in;
-	}
-	
-	std::ostringstream oss;
-	for(size_t i = 0; i < p.we_wordc; i++) {
-		
-		oss << p.we_wordv[i];
-		
-		if(i != (p.we_wordc-1))
-			oss << " ";
-	}
-	
-	wordfree(&p);
-	
-	return oss.str();
-	
-	#elif ARX_PLATFORM == ARX_PLATFORM_WIN32
+	#if ARX_PLATFORM == ARX_PLATFORM_WIN32
 	
 	platform::WideString win(in);
 	
@@ -121,8 +97,104 @@ std::string expandEnvironmentVariables(const std::string & in) {
 	return out.toUTF8();
 	
 	#else
-	# warning "Environment variable expansion not supported on this system."
-	return in;
+	
+	std::ostringstream oss;
+	
+	size_t depth = 0;
+	size_t skip = 0;
+	
+	for(size_t i = 0; i < in.size(); ) {
+		
+		if(in[i] == '\\') {
+			i++;
+			if(i < in.size()) {
+				if(skip == 0) {
+					oss << in[i];
+				}
+				i++;
+			}
+			continue;
+		}
+		
+		if(in[i] == '$') {
+			i++;
+			
+			bool nested = false;
+			if(i < in.size() && in[i] == '{') {
+				nested = true;
+				i++;
+			}
+			
+			size_t start = i;
+			while(i < in.size() && (in[i] == '_' || (in[i] >= '0' && in[i] <= '9')
+			                                     || (in[i] >= 'a' && in[i] <= 'z')
+			                                     || (in[i] >= 'A' && in[i] <= 'Z'))) {
+				i++;
+			}
+			
+			if(skip) {
+				if(nested) {
+					depth++;
+					skip++;
+				}
+				continue;
+			}
+			
+			const char * value = std::getenv(in.substr(start, i - start).c_str());
+			if(!nested) {
+				if(value) {
+					oss << value;
+				}
+				continue;
+			}
+			
+			bool empty = (value == NULL);
+			if(i < in.size() && in[i] == ':') {
+				empty = empty || *value == '\0';
+				i++;
+			}
+			
+			depth++;
+			
+			if(i < in.size() && in[i] == '+') {
+				if(empty) {
+					skip++;
+				}
+				i++;
+			} else {
+				if(!empty) {
+					oss << value;
+				}
+				if(i < in.size() && in[i] == '-') {
+					if(!empty) {
+						skip++;
+					}
+					i++;
+				} else {
+					skip++;
+				}
+			}
+			
+			continue;
+		}
+		
+		if(depth > 0 && in[i] == '}') {
+			if(skip > 0) {
+				skip--;
+			}
+			depth--;
+			i++;
+			continue;
+		}
+		
+		if(skip == 0) {
+			oss << in[i];
+		}
+		i++;
+	}
+	
+	return oss.str();
+	
 	#endif
 }
 
@@ -150,11 +222,11 @@ static bool getRegistryValue(HKEY hkey, const std::string & name, std::string & 
 		buffer.resize(length / sizeof(WCHAR) + 1);
 		ret = RegQueryValueExW(handle, wname, NULL, &type, LPBYTE(buffer.data()), &length);
 	}
-	buffer.resize(length / sizeof(WCHAR));
 	
 	RegCloseKey(handle);
 	
 	if(ret == ERROR_SUCCESS && type == REG_SZ) {
+		buffer.resize(length / sizeof(WCHAR));
 		buffer.compact();
 		result = buffer.toUTF8();
 		return true;
@@ -213,7 +285,7 @@ std::vector<fs::path> getSystemPaths(SystemPathId id) {
 		
 		const int kfFlagCreate  = 0x00008000; // KF_FLAG_CREATE
 		const int kfFlagNoAlias = 0x00001000; // KF_FLAG_NO_ALIAS
-		const GUID FOLDERID_SavedGames = {
+		const GUID folderIdSavedGames = {
 			0x4C5C32FF, 0xBB9D, 0x43b0, { 0xB5, 0xB4, 0x2D, 0x72, 0xE5, 0x4E, 0xAA, 0xA4 }
 		};
 		
@@ -222,18 +294,15 @@ std::vector<fs::path> getSystemPaths(SystemPathId id) {
 		HMODULE dll = GetModuleHandleW(L"shell32.dll");
 		if(dll) {
 			
-			FARPROC proc = GetProcAddress(dll, "SHGetKnownFolderPath");
-			if(proc) {
-				PSHGetKnownFolderPath GetKnownFolderPath = (PSHGetKnownFolderPath)proc;
-				
+			PSHGetKnownFolderPath GetKnownFolderPath = getProcAddress<PSHGetKnownFolderPath>(dll, "SHGetKnownFolderPath");
+			if(GetKnownFolderPath) {
 				LPWSTR savedgames = NULL;
-				HRESULT hr = GetKnownFolderPath(FOLDERID_SavedGames, kfFlagCreate | kfFlagNoAlias,
+				HRESULT hr = GetKnownFolderPath(folderIdSavedGames, kfFlagCreate | kfFlagNoAlias,
 				                                NULL, &savedgames);
 				if(SUCCEEDED(hr)) {
 					result.push_back(platform::WideString::toUTF8(savedgames));
 				}
 				CoTaskMemFree(savedgames);
-				
 			}
 			
 		}
@@ -457,16 +526,15 @@ bool isFileDescriptorDisabled(int fd) {
 		return true; // Not a valid handle
 	}
 	
+	// Redirected to NUL
 	BY_HANDLE_FILE_INFORMATION fi;
-	if(!GetFileInformationByHandle(h, &fi) && GetLastError() == ERROR_INVALID_FUNCTION) {
-		return true; // Redirected to NUL
-	}
+	return (!GetFileInformationByHandle(h, &fi) && GetLastError() == ERROR_INVALID_FUNCTION);
 	
 	#else
 	
 	#if ARX_HAVE_FCNTL && defined(F_GETFD)
 	if(fcntl(fd, F_GETFD) == -1 && errno == EBADF) {
-		return 0; // Not a valid file descriptor
+		return false; // Not a valid file descriptor
 	}
 	#endif
 	
@@ -488,13 +556,11 @@ bool isFileDescriptorDisabled(int fd) {
 	}
 	#endif
 	
-	if(valid && !memcmp(path, "/dev/null", 9)) {
-		return true; // Redirected to /dev/null
-	}
+	// Redirected to /dev/null
+	return (valid && !memcmp(path, "/dev/null", 9));
 	
 	#endif
 	
-	return false;
 }
 
 static Lock g_environmentLock;

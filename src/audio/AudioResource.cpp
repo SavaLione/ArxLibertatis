@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2012 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -47,19 +47,4 @@ ZeniMax Media Inc., Suite 120, Rockville, Maryland 20850 USA.
 
 namespace audio {
 
-PakFileHandle * OpenResource(const res::path & name, const res::path & resource_path) {
-	
-	PakFileHandle * file = NULL;
-	
-	if(!resource_path.empty()) {
-		file = g_resources->open(resource_path / name); // TODO do this earlier
-	}
-	
-	if(!file) {
-		file = g_resources->open(name);
-	}
-	
-	return file;
-}
-
-} // audio
+} // namespace audio

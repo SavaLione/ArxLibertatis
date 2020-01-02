@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2017 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -20,6 +20,7 @@
 #include "game/effect/Quake.h"
 
 #include "core/GameTime.h"
+#include "game/Camera.h"
 #include "math/RandomVector.h"
 #include "scene/GameSound.h"
 
@@ -33,29 +34,23 @@ struct QUAKE_FX_STRUCT {
 
 QUAKE_FX_STRUCT QuakeFx;
 
-void AddQuakeFX(float intensity, float duration, float period, bool sound) {
+void AddQuakeFX(float intensity, GameDuration duration, float period, bool sound) {
 
 	if(QuakeFx.intensity > 0.f) {
 		QuakeFx.intensity += intensity;
 
-		QuakeFx.duration += GameDurationMsf(duration);
+		QuakeFx.duration += duration;
 		QuakeFx.frequency += period;
 		QuakeFx.frequency *= .5f;
 		QuakeFx.sound = QuakeFx.sound || sound;
-
-		if(sound)
-			ARX_SOUND_PlaySFX(SND_QUAKE, NULL, 1.0F - 0.5F * QuakeFx.intensity);
 	} else {
 		QuakeFx.intensity = intensity;
 
 		QuakeFx.start = g_gameTime.now();
 
-		QuakeFx.duration = GameDurationMsf(duration);
+		QuakeFx.duration = duration;
 		QuakeFx.frequency = period;
 		QuakeFx.sound = sound;
-
-		if(sound)
-			ARX_SOUND_PlaySFX(SND_QUAKE, NULL, 1.0F - 0.5F * QuakeFx.intensity);
 	}
 
 	if(!sound) {
@@ -68,11 +63,10 @@ void AddQuakeFX(float intensity, float duration, float period, bool sound) {
 }
 
 void RemoveQuakeFX() {
-
-	QuakeFx.intensity=0.f;
+	QuakeFx.intensity = 0.f;
 }
 
-void ManageQuakeFX(EERIE_CAMERA * cam) {
+void ManageQuakeFX(Camera * cam) {
 	if(QuakeFx.intensity > 0.f) {
 		GameDuration tim = g_gameTime.now() - QuakeFx.start;
 
@@ -87,14 +81,11 @@ void ManageQuakeFX(EERIE_CAMERA * cam) {
 		if(QuakeFx.frequency > 0.f) {
 			periodicity = timeWaveSin(g_gameTime.now(), GameDurationMsf(628.319f / QuakeFx.frequency));
 		}
-
-		if(periodicity > 0.5f && QuakeFx.sound)
-			ARX_SOUND_PlaySFX(SND_QUAKE, NULL, 1.0F - 0.5F * QuakeFx.intensity);
-
+		
 		float truepower = periodicity * QuakeFx.intensity * itmod * 0.01f;
 		float halfpower = truepower * .5f;
 		
-		cam->orgTrans.pos += arx::randomVec(-halfpower, halfpower);
+		cam->m_pos += arx::randomVec(-halfpower, halfpower);
 		cam->angle.setPitch(cam->angle.getPitch() + Random::getf() * truepower - halfpower);
 		cam->angle.setYaw(cam->angle.getYaw() + Random::getf() * truepower - halfpower);
 		cam->angle.setRoll(cam->angle.getRoll() + Random::getf() * truepower - halfpower);

@@ -1,5 +1,5 @@
 /*
- * Copyright 2013-2017 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2013-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -56,6 +56,16 @@ std::string getOSArchitecture();
  * \return the distribution name and version or an empty string if not applicable.
  */
 std::string getOSDistribution();
+
+/*!
+ * \brief Get the name and version of the system C library
+ */
+std::string getCLibraryVersion();
+
+/*!
+ * \brief Get the name and version of the system threading
+ */
+std::string getThreadLibraryVersion();
 
 /*!
  * \brief Get the branding name of the CPU in the system

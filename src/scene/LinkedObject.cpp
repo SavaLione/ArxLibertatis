@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2016 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -75,23 +75,28 @@ void EERIE_LINKEDOBJ_UnLinkObjectFromObject(EERIE_3DOBJ * obj, EERIE_3DOBJ * tou
 	}
 }
 
-bool EERIE_LINKEDOBJ_LinkObjectToObject(EERIE_3DOBJ * obj, EERIE_3DOBJ * tolink, const std::string& actiontext, const std::string& actiontext2, Entity * io)
-{
-	if(!obj || !tolink)
-		return false;
+void EERIE_LINKEDOBJ_LinkObjectToObject(EERIE_3DOBJ * obj, EERIE_3DOBJ * tolink, const std::string & actiontext,
+                                        const std::string & actiontext2, Entity * io) {
+	
+	if(!obj || !tolink) {
+		return;
+	}
 	
 	ActionPoint ni = GetActionPointIdx(obj, actiontext);
-	if(ni == ActionPoint())
-		return false;
+	if(ni == ActionPoint()) {
+		return;
+	}
 	
 	ObjVertGroup group = GetActionPointGroup(obj, ni);
-	if(group == ObjVertGroup())
-		return false;
-
+	if(group == ObjVertGroup()) {
+		return;
+	}
+	
 	ActionPoint ni2 = GetActionPointIdx(tolink, actiontext2);
-	if(ni2 == ActionPoint())
-		return false;
-
+	if(ni2 == ActionPoint()) {
+		return;
+	}
+	
 	EERIE_LINKED link;
 	link.lidx2 = ni2;
 	link.lidx = ni;
@@ -100,6 +105,4 @@ bool EERIE_LINKEDOBJ_LinkObjectToObject(EERIE_3DOBJ * obj, EERIE_3DOBJ * tolink,
 	link.io = io;
 	
 	obj->linked.push_back(link);
-	
-	return true;
 }

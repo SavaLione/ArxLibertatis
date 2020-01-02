@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2017 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -115,7 +115,7 @@ public:
 		std::memcpy(&funcptr, &m_func, sizeof(funcptr));
 		return funcptr;
 		#else
-		return (T)m_func;
+		return reinterpret_cast<T>(m_func);
 		#endif
 	}
 };
@@ -138,7 +138,9 @@ public:
 	
 	platform::EnvironmentOverride m_overrides[s_count];
 	
-	OpenALEnvironmentOverrides() {
+	OpenALEnvironmentOverrides()
+		: m_alpath(fs::findDataFile("openal/hrtf"))
+	{
 		
 		size_t i = 0;
 		
@@ -156,7 +158,6 @@ public:
 		i++;
 		#endif
 		
-		m_alpath = fs::paths.find("openal/hrtf");
 		if(!m_alpath.empty()) {
 			m_overrides[i].name = "ALSOFT_LOCAL_PATH";
 			m_overrides[i].value = m_alpath.string().c_str();
@@ -195,7 +196,7 @@ void OpenALBackend::fillDeviceAttributes(ALCint (&attrs)[3]) {
 			case HRTFDisable: attrs[i++] = ALC_FALSE; break;
 			case HRTFEnable:  attrs[i++] = ALC_TRUE; break;
 			case HRTFDefault: attrs[i++] = ALC_DONT_CARE_SOFT; break;
-			default: ARX_DEAD_CODE();
+			default: arx_unreachable();
 		}
 	}
 	#endif
@@ -205,16 +206,14 @@ void OpenALBackend::fillDeviceAttributes(ALCint (&attrs)[3]) {
 }
 
 static const char * getHRTFStatusString(HRTFStatus status) {
-	
 	switch(status) {
 		case HRTFDisabled:    return "Disabled";
 		case HRTFEnabled:     return "Enabled";
 		case HRTFForbidden:   return "Forbidden";
 		case HRTFRequired:    return "Required";
 		case HRTFUnavailable: return "Unavailable";
-		default:              return "Unknown";
 	}
-	
+	arx_unreachable();
 }
 
 aalError OpenALBackend::init(const char * requestedDeviceName, HRTFAttribute hrtf) {
@@ -227,8 +226,10 @@ aalError OpenALBackend::init(const char * requestedDeviceName, HRTFAttribute hrt
 	platform::EnvironmentLock lock(overrides.m_overrides);
 	
 	// Clear error
-	ALenum error = alGetError();
-	ARX_UNUSED(error);
+	{
+		ALenum error = alGetError();
+		ARX_UNUSED(error);
+	}
 	
 	// Create OpenAL interface
 	device = alcOpenDevice(requestedDeviceName);
@@ -356,7 +357,7 @@ aalError OpenALBackend::init(const char * requestedDeviceName, HRTFAttribute hrt
 		 * even if a valid device is given. Since the only specification I can find for
 		 * ALC_ENUMERATE_ALL_EXT [1] doesn't say anything about using a device
 		 * with ALC_ALL_DEVICES_SPECIFIER, only do that if ALC_DEVICE_SPECIFIER is useless.
-		 *  [1] http://icculus.org/alextreg/wiki/ALC_ENUMERATE_ALL_EXT
+		 *  [1] https://icculus.org/alextreg/wiki/ALC_ENUMERATE_ALL_EXT
 		 */
 		deviceName = alcGetString(device, ALC_ALL_DEVICES_SPECIFIER);
 	}
@@ -402,33 +403,28 @@ std::vector<std::string> OpenALBackend::getDevices() {
 	return result;
 }
 
-Source * OpenALBackend::createSource(SampleId sampleId, const Channel & channel) {
+Source * OpenALBackend::createSource(SampleHandle sampleId, const Channel & channel) {
 	
-	SampleId s_id = getSampleId(sampleId);
-	
-	if(!g_samples.isValid(s_id)) {
+	if(!g_samples.isValid(sampleId)) {
 		return NULL;
 	}
 	
-	Sample * sample = g_samples[s_id];
+	Sample * sample = g_samples[sampleId];
 	
 	OpenALSource * orig = NULL;
-	for(size_t i = 0; i < sources.size(); i++) {
-		if(sources[i] && sources[i]->getSample() == sample) {
-			orig = sources[i];
+	
+	for(SourceList::iterator it = sources.begin(); it != sources.end(); ++it) {
+		if((*it) && (*it)->getSample() == sample) {
+			orig = (*it);
 			break;
 		}
 	}
 	
 	OpenALSource * source = new OpenALSource(sample);
 	
-	size_t index = sources.add(source);
-	if(index == (size_t)INVALID_ID) {
-		delete source;
-		return NULL;
-	}
+	SourceHandle index = sources.add(source);
 	
-	SourceId id = (index << 16) | s_id;
+	SourcedSample id = SourcedSample(index, sampleId);
 	if(source->init(id, orig, channel)) {
 		sources.remove(index);
 		return NULL;
@@ -445,16 +441,16 @@ Source * OpenALBackend::createSource(SampleId sampleId, const Channel & channel)
 	return source;
 }
 
-Source * OpenALBackend::getSource(SourceId sourceId) {
+Source * OpenALBackend::getSource(SourcedSample sourceId) {
 	
-	size_t index = ((sourceId >> 16) & 0x0000ffff);
+	SourceHandle index = sourceId.source();
 	if(!sources.isValid(index)) {
 		return NULL;
 	}
 	
 	Source * source = sources[index];
 	
-	SampleId sample = getSampleId(sourceId);
+	SampleHandle sample = sourceId.getSampleId();
 	if(!g_samples.isValid(sample) || source->getSample() != g_samples[sample]) {
 		return NULL;
 	}
@@ -467,9 +463,10 @@ Source * OpenALBackend::getSource(SourceId sourceId) {
 aalError OpenALBackend::setRolloffFactor(float factor) {
 	
 	rolloffFactor = factor;
-	for(size_t i = 0; i < sources.size(); i++) {
-		if(sources[i]) {
-			sources[i]->setRolloffFactor(rolloffFactor);
+	
+	for(SourceList::iterator it = sources.begin(); it != sources.end(); ++it) {
+		if(*it) {
+			(*it)->setRolloffFactor(rolloffFactor);
 		}
 	}
 	
@@ -506,16 +503,17 @@ aalError OpenALBackend::setListenerOrientation(const Vec3f & front, const Vec3f 
 }
 
 Backend::source_iterator OpenALBackend::sourcesBegin() {
-	return (source_iterator)sources.begin();
+	return reinterpret_cast<source_iterator>(sources.begin());
 }
 
 Backend::source_iterator OpenALBackend::sourcesEnd() {
-	return (source_iterator)sources.end();
+	return reinterpret_cast<source_iterator>(sources.end());
 }
 
 Backend::source_iterator OpenALBackend::deleteSource(source_iterator it) {
 	arx_assert(it >= sourcesBegin() && it < sourcesEnd());
-	return (source_iterator)sources.remove((ResourceList<OpenALSource>::iterator)it);
+	ResourceList<OpenALSource>::iterator i = reinterpret_cast<ResourceList<OpenALSource>::iterator>(it);
+	return reinterpret_cast<source_iterator>(sources.remove(i));
 }
 
 aalError OpenALBackend::setUnitFactor(float factor) {
@@ -563,9 +561,9 @@ aalError OpenALBackend::setReverbEnabled(bool enable) {
 		);
 	}
 	
-	for(size_t i = 0; i < sources.size(); i++) {
-		if(sources[i]) {
-			sources[i]->setEffectSlot(enable ? effectSlot : AL_EFFECTSLOT_NULL);
+	for(SourceList::iterator it = sources.begin(); it != sources.end(); ++it) {
+		if(*it) {
+			(*it)->setEffectSlot(enable ? effectSlot : AL_EFFECTSLOT_NULL);
 		}
 	}
 	
@@ -587,7 +585,9 @@ bool OpenALBackend::isReverbSupported() {
 	
 	if(!hasEFX) {
 		return false;
-	} else if(effectEnabled) {
+	}
+	
+	if(effectEnabled) {
 		return true;
 	}
 	
@@ -711,9 +711,9 @@ HRTFStatus OpenALBackend::getHRTFStatus() {
 		case ALC_HRTF_DENIED_SOFT:              return HRTFForbidden;
 		case ALC_HRTF_REQUIRED_SOFT:            return HRTFRequired;
 		case ALC_HRTF_HEADPHONES_DETECTED_SOFT: return HRTFEnabled;
+		default:                                return HRTFUnavailable;
 	}
 	
-	return HRTFUnavailable;
 }
 
 #else // !ARX_HAVE_OPENAL_HRTF

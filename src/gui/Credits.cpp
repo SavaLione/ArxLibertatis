@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2016 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -84,11 +84,11 @@ namespace {
 
 struct CreditsLine {
 	
-	CreditsLine() {
-		sPos = Vec2i_ZERO;
-		fColors = Color::none;
-		sourceLineNumber = -1;
-	}
+	CreditsLine()
+		: fColors(Color::none)
+		, sPos(0)
+		, sourceLineNumber(-1)
+	{ }
 	
 	std::string  sText;
 	Color fColors;
@@ -107,7 +107,7 @@ public:
 		, m_lastUpdateTime(0)
 		, m_firstVisibleLine(0)
 		, m_lineHeight(-1)
-		, m_windowSize(Vec2i_ZERO)
+		, m_windowSize(0)
 	{ }
 	
 	void setLibraryCredits(const std::string & subsystem, const std::string & credits);
@@ -150,7 +150,7 @@ private:
 	
 };
 
-static Credits g_credits;
+Credits g_credits;
 
 void Credits::setLibraryCredits(const std::string & subsystem,
                                 const std::string & credits) {
@@ -163,17 +163,16 @@ bool Credits::load() {
 	
 	std::string creditsFile = "localisation/ucredits_" +  config.language + ".txt";
 	
-	size_t creditsSize;
-	char * credits = g_resources->readAlloc(creditsFile, creditsSize);
+	std::string credits = g_resources->read(creditsFile);
 	
 	std::string englishCreditsFile;
-	if(!credits) {
+	if(credits.empty()) {
 		// Fallback if there is no localised credits file
 		englishCreditsFile = "localisation/ucredits_english.txt";
-		credits = g_resources->readAlloc(englishCreditsFile, creditsSize);
+		credits = g_resources->read(englishCreditsFile);
 	}
 	
-	if(!credits) {
+	if(credits.empty()) {
 		if(!englishCreditsFile.empty() && englishCreditsFile != creditsFile) {
 			LogWarning << "Unable to read credits files " << creditsFile
 			           << " and " << englishCreditsFile;
@@ -183,7 +182,7 @@ bool Credits::load() {
 		return false;
 	}
 	
-	LogDebug("Loaded credits file: " << creditsFile << " of size " << creditsSize);
+	LogDebug("Loaded credits file: " << creditsFile << " of size " << credits.size());
 	
 	m_text = arx_credits;
 	
@@ -197,9 +196,14 @@ bool Credits::load() {
 			m_text += compiler->second;
 			m_text += '\n';
 		}
+		Libraries::const_iterator stdlib = m_libraries.find("stdlib");
+		if(stdlib != m_libraries.end()) {
+			m_text += stdlib->second;
+			m_text += '\n';
+		}
 		std::vector<std::string> libraries;
 		BOOST_FOREACH(const Libraries::value_type & library, m_libraries) {
-			if(library.first != "compiler" && !library.second.empty()) {
+			if(library.first != "compiler" && library.first != "stdlib" && !library.second.empty()) {
 				boost::char_separator<char> sep("\n");
 				boost::tokenizer< boost::char_separator<char> > tokens(library.second, sep);
 				std::copy(tokens.begin(), tokens.end(), std::back_inserter(libraries));
@@ -214,12 +218,9 @@ bool Credits::load() {
 	
 	m_text += "\n\n\n\n~ORIGINAL ARX FATALIS CREDITS:\n\n\n";
 	
-	char * creditsEnd = credits + creditsSize;
-	m_text += util::convert<util::UTF16LE, util::UTF8>(credits, creditsEnd);
+	m_text += util::convert<util::UTF16LE, util::UTF8>(credits);
 	
 	LogDebug("Final credits length: " << m_text.size());
-	
-	free(credits);
 	
 	if(!m_message.empty()) {
 		m_text = "~" + m_message + "\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n" + m_text;
@@ -327,7 +328,7 @@ void Credits::addLine(std::string & phrase, float & drawpos, int sourceLineNumbe
 		drawpos += m_lineHeight;
 		
 		// Split long lines
-		long n = ARX_UNICODE_ForceFormattingInRect(hFontCredits, phrase, linerect);
+		long n = ARX_UNICODE_ForceFormattingInRect(hFontCredits, phrase.begin(), phrase.end(), linerect);
 		arx_assert(n >= 0 && size_t(n) < phrase.length());
 		
 		// Long lines are not simple
@@ -361,7 +362,7 @@ void Credits::addLine(std::string & phrase, float & drawpos, int sourceLineNumbe
 					}
 				}
 				if(infomations.sText[p] >= '0' && infomations.sText[p] < '9') {
-					if(infomations.sText.find_first_not_of(".", p) == std::string::npos) {
+					if(infomations.sText.find_first_not_of('.', p) == std::string::npos) {
 						continue;
 					}
 					if(infomations.sText.find_first_not_of("0123456789.", p) != std::string::npos) {
@@ -392,7 +393,7 @@ void Credits::addLine(std::string & phrase, float & drawpos, int sourceLineNumbe
 				}
 			}
 			bool centered = false;
-			if(s != std::string::npos && s!= 0) {
+			if(s != std::string::npos && s != 0) {
 				int firstsize = hFontCredits->getTextSize(infomations.sText.substr(0, s)).width();
 				if(firstsize < g_size.width() / 2 && linesize - firstsize < g_size.width() / 2) {
 					infomations.sPos.x = g_size.width() / 2 - firstsize;
@@ -427,11 +428,9 @@ void Credits::layout() {
 	
 	m_lines.clear();
 	
-	// Retrieve the rows to display
 	std::istringstream iss(m_text);
 	std::string phrase;
 
-	//Use to calculate the positions
 	float drawpos = static_cast<float>(g_size.height());
 	
 	for(int sourceLineNumber = 0; std::getline(iss, phrase); sourceLineNumber++) {
@@ -462,7 +461,7 @@ void Credits::render() {
 	
 	// Draw the background
 	if(m_background) {
-		Rectf rect(Vec2f_ZERO, g_size.width(), g_size.height() + 1);
+		Rectf rect(Vec2f(0.f), g_size.width(), g_size.height() + 1);
 		UseRenderState state(render2D().noBlend());
 		EERIEDrawBitmap(rect, .999f, m_background, Color::white);
 	}
@@ -529,30 +528,31 @@ void Credits::render() {
 		}
 	}
 	
-	for (; it != m_lines.end(); ++it)
-	{
-		//Update the Y word display
+	for(; it != m_lines.end(); ++it) {
+		
+		// Update the Y word display
 		float yy = it->sPos.y + m_scrollPosition;
 		
-		//Display the text only if he is on the viewport
-		if ((yy >= -m_lineHeight) && (yy <= g_size.height()))
-		{
+		// Display the text only if it is inside the viewport
+		if(yy >= float(-m_lineHeight) && yy <= float(g_size.height())) {
 			hFontCredits->draw(it->sPos.x, static_cast<int>(yy), it->sText, it->fColors);
 		}
 		
-		if (yy <= -m_lineHeight)
-		{
+		if(yy <= float(-m_lineHeight)) {
 			++m_firstVisibleLine;
 		}
 		
-		if ( yy >= g_size.height() )
-			break; //it's useless to continue because next phrase will not be inside the viewport
+		if(yy >= float(g_size.height())) {
+			// It's useless to continue because next line will not be inside the viewport
+			break;
+		}
+		
 	}
 	
 	if(m_firstVisibleLine >= m_lines.size() && iFadeAction != Mode_MainMenu) {
 		
 		MenuFader_start(Fade_In, Mode_MainMenu);
-		ARX_MENU_LaunchAmb(AMB_MENU);
+		ARX_SOUND_PlayMenuAmbiance(AMB_MENU);
 	}
 
 	if(MenuFader_process() && iFadeAction == Mode_MainMenu) {
@@ -569,7 +569,7 @@ void Credits::reset() {
 	m_scrollPosition = 0;
 	m_firstVisibleLine = 0;
 	m_lineHeight = -1;
-	m_windowSize = Vec2i_ZERO;
+	m_windowSize = Vec2i(0);
 	m_lines.clear();
 	delete m_background, m_background = NULL;
 	m_text.clear();

@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2016 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -49,13 +49,6 @@ ZeniMax Media Inc., Suite 120, Rockville, Maryland 20850 USA.
 
 #include "graphics/GraphicsTypes.h"
 
-template <class T>
-static T * allocStructZero(size_t n = 1) {
-	T * result = (T*)malloc(n * sizeof(T));
-	memset(result, 0, n * sizeof(T));
-	return result;
-}
-
 void MakeUserFlag(TextureContainer * tc);
 ObjVertGroup EERIE_OBJECT_GetGroup(const EERIE_3DOBJ * obj, const std::string & groupname);
 ObjSelection EERIE_OBJECT_GetSelection(const EERIE_3DOBJ * obj, const std::string & selname);
@@ -72,7 +65,7 @@ ObjVertGroup GetActionPointGroup(const EERIE_3DOBJ * eobj, ActionPoint idx);
 EERIE_3DOBJ * loadObject(const res::path & file, bool pbox = true);
 
 EERIE_3DOBJ * Eerie_Copy(const EERIE_3DOBJ * obj);
-void EERIE_Object_Precompute_Fast_Access(EERIE_3DOBJ * obj);
+void EERIE_Object_Precompute_Fast_Access(EERIE_3DOBJ * object);
 void EERIE_3DOBJ_RestoreTextures(EERIE_3DOBJ * eobj);
 void EERIE_OBJECT_CenterObjectCoordinates(EERIE_3DOBJ * ret);
 void EERIE_CreateCedricData(EERIE_3DOBJ * eobj);

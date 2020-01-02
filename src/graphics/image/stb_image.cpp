@@ -1184,14 +1184,14 @@ static int process_marker(jpeg *z, int m)
          L = get16(z->s)-2;
          while (L > 0) {
             uint8 * v;
-            int sizes[16], i, m = 0;
+            int sizes[16], i, n = 0;
             int q = get8(z->s);
             int tc = q >> 4;
             int th = q & 15;
             if(tc > 1 || th > 3) return stbi_error("bad DHT header", "Corrupt JPEG");
             for (i=0; i < 16; ++i) {
                sizes[i] = get8(z->s);
-               m += sizes[i];
+               n += sizes[i];
             }
             L -= 17;
             if (tc == 0) {
@@ -1201,9 +1201,9 @@ static int process_marker(jpeg *z, int m)
                if (!build_huffman(z->huff_ac+th, sizes)) return 0;
                v = z->huff_ac[th].values;
             }
-            for (i=0; i < m; ++i)
+            for (i=0; i < n; ++i)
                v[i] = get8u(z->s);
-            L -= m;
+            L -= n;
          }
          return L==0;
    }
@@ -1734,10 +1734,10 @@ static int zbuild_huffman(zhuffman *z, uint8 *sizelist, int num)
          z->size[c] = (uint8)s;
          z->value[c] = (uint16)i;
          if (s <= STBI_ZFAST_BITS) {
-            int k = bit_reverse(next_code[s], s);
-            while (k < (1 << STBI_ZFAST_BITS)) {
-               z->fast[k] = (uint16) c;
-               k += (1 << s);
+            int l = bit_reverse(next_code[s], s);
+            while (l < (1 << STBI_ZFAST_BITS)) {
+               z->fast[l] = (uint16) c;
+               l += (1 << s);
             }
          }
          ++next_code[s];
@@ -1972,7 +1972,7 @@ static int parse_zlib_header(zbuf *a)
 
 // @TODO: should statically initialize these for optimal thread safety
 static uint8 default_length[288], default_distance[32];
-static void init_defaults(void)
+static void init_defaults()
 {
    int i;   // use <= to match clearly with spec
    for (i=0; i <= 143; ++i)     default_length[i]   = 8;
@@ -3504,7 +3504,6 @@ static stbi_uc * pic_load2(stbi * s, int width, int height, int * comp, stbi_uc 
 
                   if (count >= 128) { // Repeated
                      stbi_uc value[4];
-                     int i;
 
                      if (count==128)
                         count = get16(s);

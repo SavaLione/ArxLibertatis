@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2016 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -27,15 +27,16 @@
 class Trail;
 
 enum ProjectileFlag {
-	ATO_EXIST      = (1<<0),
-	ATO_MOVING     = (1<<1),
-	ATO_UNDERWATER = (1<<2),
-	ATO_FIERY      = (1<<3)
+	ATO_EXIST      = 1 << 0,
+	ATO_MOVING     = 1 << 1,
+	ATO_UNDERWATER = 1 << 2,
+	ATO_FIERY      = 1 << 3
 };
 DECLARE_FLAGS(ProjectileFlag, ProjectileFlags)
 DECLARE_FLAGS_OPERATORS(ProjectileFlags)
 
 struct Projectile {
+	
 	ProjectileFlags flags;
 	Vec3f vector;
 	glm::quat quat;
@@ -48,12 +49,27 @@ struct Projectile {
 	GameInstant creation_time;
 	float poisonous;
 	Trail * m_trail;
+	
+	Projectile()
+		: flags(0)
+		, vector(0.f)
+		, quat(quat_identity())
+		, initial_position(0.f)
+		, velocity(0.f)
+		, position(0.f)
+		, damages(0)
+		, obj(NULL)
+		, creation_time(0)
+		, poisonous(0.f)
+		, m_trail(NULL)
+	{ }
+	
 };
 
 void ARX_THROWN_OBJECT_Throw(EntityHandle source, const Vec3f & position, const Vec3f & vect, const glm::quat & quat, float velocity, float damages, float poisonous);
 
 void ARX_THROWN_OBJECT_KillAll();
-void ARX_THROWN_OBJECT_Manage(GameDuration time_offset);
+void ARX_THROWN_OBJECT_Manage(GameDuration timeDelta);
 void ARX_THROWN_OBJECT_Render();
 
 #endif // ARX_PHYSICS_PROJECTILE_H

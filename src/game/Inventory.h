@@ -56,6 +56,7 @@ ZeniMax Media Inc., Suite 120, Rockville, Maryland 20850 USA.
 class Entity;
 
 struct INVENTORY_SLOT {
+	
 	Entity * io;
 	bool show;
 	
@@ -63,9 +64,11 @@ struct INVENTORY_SLOT {
 		: io(NULL)
 		, show(false)
 	{}
+	
 };
 
 struct INVENTORY_DATA {
+	
 	Entity * io;
 	Vec2s m_size;
 	INVENTORY_SLOT slot[20][20];
@@ -73,8 +76,8 @@ struct INVENTORY_DATA {
 	INVENTORY_DATA()
 		: io(NULL)
 		, m_size(Vec2s(0, 0))
-		, slot()
 	{}
+	
 };
 
 const size_t INVENTORY_BAGS = 3;
@@ -103,14 +106,13 @@ struct InventoryPos {
 	index_type y;
 	
 	InventoryPos()
-		: io()
-		, bag(0)
+		: bag(0)
 		, x(0)
 		, y(0)
-	{}
+	{ }
 	
-	InventoryPos(long io, index_type bag, index_type x, index_type y)
-		: io(io), bag(bag), x(x), y(y) { }
+	InventoryPos(long io_, index_type bag_, index_type x_, index_type y_)
+		: io(io_), bag(bag_), x(x_), y(y_) { }
 	
 	//! \return true if this is a valid position
 	operator bool() const {
@@ -251,7 +253,7 @@ void ARX_INVENTORY_Declare_InventoryIn(Entity * io);
 
 void PutInFrontOfPlayer(Entity * io);
 
-Vec3f GetItemWorldPosition(const Entity *io);
+Vec3f GetItemWorldPosition(const Entity * io);
 Vec3f GetItemWorldPositionSound(const Entity * io);
 
 Entity * GetInventoryObj_INVENTORYUSE(const Vec2s & pos);

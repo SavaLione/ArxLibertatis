@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2017 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -57,8 +57,8 @@ CSpellFx::CSpellFx()
 	SetDuration(GameDurationMs(1000));
 }
 
-void CSpellFx::SetDuration(GameDuration ulaDuration) {
-	m_duration = ulaDuration;
+void CSpellFx::SetDuration(GameDuration duration) {
+	m_duration = duration;
 
 	if(m_duration <= 0)
 		m_duration = GameDurationMs(100);
@@ -79,10 +79,10 @@ void Draw3DLineTexNew(const RenderMaterial & mat, Vec3f startPos, Vec3f endPos, 
 	q1.v[0].color = q1.v[1].color = startColor.toRGBA();
 	q1.v[2].color = q1.v[3].color = endColor.toRGBA();
 	
-	q1.v[0].uv = Vec2f_ZERO;
-	q1.v[1].uv = Vec2f_X_AXIS;
-	q1.v[2].uv = Vec2f_ONE;
-	q1.v[3].uv = Vec2f_Y_AXIS;
+	q1.v[0].uv = Vec2f(0.f);
+	q1.v[1].uv = Vec2f(1.f, 0.f);
+	q1.v[2].uv = Vec2f(1.f);
+	q1.v[3].uv = Vec2f(0.f, 1.f);
 	
 	q1.v[0].p = startPos + Vec3f(0.f, zzs, 0.f);
 	q1.v[1].p = startPos + Vec3f(0.f, -zzs, 0.f);
@@ -101,10 +101,10 @@ void Draw3DLineTexNew(const RenderMaterial & mat, Vec3f startPos, Vec3f endPos, 
 	q2.v[0].color = q2.v[1].color = startColor.toRGBA();
 	q2.v[2].color = q2.v[3].color = endColor.toRGBA();
 	
-	q2.v[0].uv = Vec2f_ZERO;
-	q2.v[1].uv = Vec2f_X_AXIS;
-	q2.v[2].uv = Vec2f_ONE;
-	q2.v[3].uv = Vec2f_Y_AXIS;
+	q2.v[0].uv = Vec2f(0.f);
+	q2.v[1].uv = Vec2f(1.f, 0.f);
+	q2.v[2].uv = Vec2f(1.f);
+	q2.v[3].uv = Vec2f(0.f, 1.f);
 	
 	q2.v[0].p = startPos + Vec3f(xxs, 0.f, zzs);
 	q2.v[1].p = startPos + Vec3f(-xxs, 0.f, -zzs);
@@ -116,14 +116,11 @@ void Draw3DLineTexNew(const RenderMaterial & mat, Vec3f startPos, Vec3f endPos, 
 }
 
 
-void Split(Vec3f * v, int a, int b, Vec3f f)
-{
-	if (a != b)
-	{
-		int i = (int)((a + b) * 0.5f);
-
-		if ((i != a) && (i != b))
-		{
+void Split(Vec3f * v, int a, int b, Vec3f f) {
+	
+	if(a != b) {
+		int i = (a + b) / 2;
+		if(i != a && i != b) {
 			v[i].x = (v[a].x + v[b].x) * 0.5f + f.x * Random::getf(-1.f, 1.f);
 			v[i].y = (v[a].y + v[b].y) * 0.5f + f.y * Random::getf(-1.f, 1.f);
 			v[i].z = (v[a].z + v[b].z) * 0.5f + f.z * Random::getf(-1.f, 1.f);
@@ -131,21 +128,20 @@ void Split(Vec3f * v, int a, int b, Vec3f f)
 			Split(v, i, b, f);
 		}
 	}
+	
 }
 
-void Split(Vec3f * v, int a, int b, float yo, float fMul)
-{
-	if (a != b)
-	{
-		int i = (int)((a + b) * 0.5f);
-
-		if ((i != a) && (i != b))
-		{
+void Split(Vec3f * v, int a, int b, float yo, float fMul) {
+	
+	if(a != b) {
+		int i = (a + b) / 2;
+		if(i != a && i != b) {
 			v[i] = (v[a] + v[b]) * 0.5f + arx::randomVec(-yo, yo);
 			Split(v, a, i, yo * fMul);
 			Split(v, i, b, yo * fMul);
 		}
 	}
+	
 }
 
 EERIE_3DOBJ * cabal = NULL;

@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2017 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -72,7 +72,7 @@ public:
 		CSpellFx();
 		virtual ~CSpellFx() { }
 		
-		virtual void SetDuration(GameDuration ulaDuration);
+		virtual void SetDuration(GameDuration duration);
 		
 		virtual void Update(GameDuration timeDelta) = 0;
 		virtual void Render() = 0;

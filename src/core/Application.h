@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2016 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -50,8 +50,6 @@ ZeniMax Media Inc., Suite 120, Rockville, Maryland 20850 USA.
 
 class RenderWindow;
 
-extern float FPS;
-
 class Application {
 	
 public:
@@ -78,7 +76,5 @@ protected:
 };
 
 extern Application * mainApp;
-
-void CalcFPS(bool reset = false);
 
 #endif // ARX_CORE_APPLICATION_H

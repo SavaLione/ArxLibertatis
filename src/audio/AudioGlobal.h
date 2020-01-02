@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2015 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -62,27 +62,29 @@ class Environment;
 class Sample;
 class Mixer;
 
-const ChannelFlags FLAG_ANY_3D_FX = FLAG_POSITION | FLAG_VELOCITY | FLAG_DIRECTION |
-                                    FLAG_CONE | FLAG_FALLOFF | FLAG_REVERBERATION;
+const ChannelFlags FLAG_ANY_3D_FX = FLAG_POSITION | FLAG_VELOCITY |
+                                    FLAG_FALLOFF | FLAG_REVERBERATION;
 
 // Audio device interface
 extern Backend * backend;
 
 // Global settings
-extern res::path sample_path;
 extern res::path ambiance_path;
 extern res::path environment_path;
-extern size_t stream_limit_bytes;
 extern PlatformInstant session_time;
 
 // Resources
-extern ResourceList<Mixer> g_mixers;
-extern ResourceList<Sample> g_samples;
-extern ResourceList<Ambiance> g_ambiances;
-extern ResourceList<Environment> g_environments;
+typedef ResourceList<Mixer, MixerId> MixerList;
+extern MixerList g_mixers;
+typedef ResourceList<Sample, SampleHandle> SampleList;
+extern SampleList g_samples;
+typedef ResourceList<Ambiance, AmbianceId> AmbianceList;
+extern AmbianceList g_ambiances;
+typedef ResourceList<Environment, EnvId> EnvironmentList;
+extern EnvironmentList g_environments;
 
 inline float LinearToLogVolume(float volume) {
-	return 0.2F * std::log10(volume) + 1.0F;
+	return 0.2f * std::log10(volume) + 1.f;
 }
 
 } // namespace audio

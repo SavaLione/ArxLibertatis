@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2016 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -63,8 +63,6 @@ void EERIEDRAWPRIM(Renderer::Primitive primitive, const TexturedVertex * vertice
 	pDynamicVertexBuffer_TLVERTEX->draw(primitive, vertices, count);
 }
 
-static const float BASICFOCAL = 350.f;
-
 static void SetTextureDrawPrim(TextureContainer * tex, const TexturedVertex * v,
                                Renderer::Primitive prim) {
 	GRenderer->SetTexture(0, tex);
@@ -76,62 +74,53 @@ static bool EERIECreateSprite(TexturedQuad & sprite, const Vec3f & in, float siz
 	
 	Vec4f out = worldToClipSpace(in);
 	if(out.w <= 0.f) {
+		// Sprite is behind the camera
 		return false;
 	}
-	Vec3f p = Vec3f(out) / out.w;
 	
-	if(   p.z > 0.f
-	   && p.z < 1000.f
-	   && p.x > -1000.f
-	   && p.x < 2500.f
-	   && p.y > -500.f
-	   && p.y < 1800.f
-	) {
-		float t;
-
-		if(siz < 0) {
-			t = -siz * g_sizeRatio.y;
-		} else {
-			t = siz * (1.f / out.w * 3000.f - 1.f) * BASICFOCAL * g_sizeRatio.y * 0.001f;
-
-			if(t <= 0.f)
-				t = 0.00000001f;
+	float t = float(std::min(g_size.width(), g_size.height())) / 480.f;
+	if(siz < 0) {
+		t *= -siz;
+	} else {
+		t *= siz * (1.f / out.w * 3000.f - 1.f) * g_camera->focal * (350.f / 310 * 0.001f);
+		if(t <= 0.f) {
+			t = 0.00000001f;
 		}
-		
-		if(Zpos <= 1.f) {
-			p.z = Zpos;
-			out.w = 1.f / (1.f - Zpos);
-		}
-		
-		ColorRGBA col = color.toRGBA();
-		
-		sprite.v[0] = TexturedVertex(Vec3f(), out.w, col, Vec2f_ZERO);
-		sprite.v[1] = TexturedVertex(Vec3f(), out.w, col, Vec2f_X_AXIS);
-		sprite.v[2] = TexturedVertex(Vec3f(), out.w, col, Vec2f(1.f, 1.f));
-		sprite.v[3] = TexturedVertex(Vec3f(), out.w, col, Vec2f_Y_AXIS);
-		
-		if(rot == 0) {
-			Vec3f maxs = p + t;
-			Vec3f mins = p - t;
-
-			sprite.v[0].p = Vec3f(mins.x, mins.y, p.z) * out.w;
-			sprite.v[1].p = Vec3f(maxs.x, mins.y, p.z) * out.w;
-			sprite.v[2].p = Vec3f(maxs.x, maxs.y, p.z) * out.w;
-			sprite.v[3].p = Vec3f(mins.x, maxs.y, p.z) * out.w;
-		} else {
-			for(long i = 0; i < 4; i++) {
-				float tt = glm::radians(MAKEANGLE(rot+90.f*i+45+90));
-				sprite.v[i].p.x = std::sin(tt) * t + p.x;
-				sprite.v[i].p.y = std::cos(tt) * t + p.y;
-				sprite.v[i].p.z = p.z;
-				sprite.v[i].p *= out.w;
-			}
-		}
-
-		return true;
 	}
-
-	return false;
+	
+	Vec3f p = Vec3f(out) / out.w;
+	if(p.x + t < g_size.left || p.x - t > g_size.right || p.y + t < g_size.top || p.y - t > g_size.bottom) {
+		// Sprite is entirely outside the viewport
+		return false;
+	}
+	
+	if(Zpos <= 1.f) {
+		p.z = Zpos;
+		out.w = 1.f / (1.f - Zpos);
+	}
+	
+	ColorRGBA col = color.toRGBA();
+	
+	sprite.v[0] = TexturedVertex(Vec3f(0.f), out.w, col, Vec2f(0.f));
+	sprite.v[1] = TexturedVertex(Vec3f(0.f), out.w, col, Vec2f(1.f, 0.f));
+	sprite.v[2] = TexturedVertex(Vec3f(0.f), out.w, col, Vec2f(1.f, 1.f));
+	sprite.v[3] = TexturedVertex(Vec3f(0.f), out.w, col, Vec2f(0.f, 1.f));
+	
+	if(rot == 0) {
+		Vec3f maxs = p + t;
+		Vec3f mins = p - t;
+		sprite.v[0].p = Vec3f(mins.x, mins.y, p.z) * out.w;
+		sprite.v[1].p = Vec3f(maxs.x, mins.y, p.z) * out.w;
+		sprite.v[2].p = Vec3f(maxs.x, maxs.y, p.z) * out.w;
+		sprite.v[3].p = Vec3f(mins.x, maxs.y, p.z) * out.w;
+	} else {
+		for(long i = 0; i < 4; i++) {
+			float tt = glm::radians(MAKEANGLE(rot + 90.f * i + 135.f));
+			sprite.v[i].p = (p + Vec3f(std::sin(tt) * t, std::cos(tt) * t, 0.f)) * out.w;
+		}
+	}
+	
+	return true;
 }
 
 void EERIEAddSprite(const RenderMaterial & mat, const Vec3f & in, float siz, Color color, float Zpos, float rot) {
@@ -156,7 +145,7 @@ static void CreateBitmap(TexturedQuad & s, Rectf rect, float z, TextureContainer
 	
 	rect.move(-.5f, -.5f);
 	
-	Vec2f uv = (tex) ? tex->uv : Vec2f_ZERO;
+	Vec2f uv = (tex) ? tex->uv : Vec2f(0.f);
 	ColorRGBA col = color.toRGBA();
 	
 	s.v[0] = TexturedVertex(Vec3f(rect.topLeft(), z), 1.f, col, Vec2f(0.f, 0.f));
@@ -183,7 +172,7 @@ void EERIEDrawBitmap_uv(Rectf rect, float z, TextureContainer * tex,
 	
 	rect.move(-.5f, -.5f);
 	
-	Vec2f uv = (tex) ? tex->uv : Vec2f_ONE;
+	Vec2f uv = (tex) ? tex->uv : Vec2f(1.f);
 	u0 *= uv.x, u1 *= uv.x, v0 *= uv.y, v1 *= uv.y;
 
 	ColorRGBA col = color.toRGBA();
@@ -215,7 +204,7 @@ void EERIEDrawBitmap2DecalY(Rectf rect, float z, TextureContainer * tex, Color c
 	
 	rect.top = rect.top + _fDeltaY * rect.height();
 	
-	Vec2f uv = (tex) ? tex->uv : Vec2f_ZERO;
+	Vec2f uv = (tex) ? tex->uv : Vec2f(0.f);
 	float sv = uv.y * _fDeltaY;
 	ColorRGBA col = color.toRGBA();
 	

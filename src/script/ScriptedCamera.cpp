@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2016 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -75,18 +75,16 @@ public:
 		DebugScript(' ' << target);
 		
 		if(target == "none") {
-			MasterCamera.exist = 0;
+			g_cameraEntity = NULL;
 			return Success;
 		}
 		
 		Entity * t = entities.getById(target, context.getEntity());
-		
 		if(!t || !(t->ioflags & IO_CAMERA)) {
 			return Failed;
 		}
 		
-		MasterCamera.exist |= 2;
-		MasterCamera.want_io = t;
+		g_cameraEntity = t;
 		
 		return Success;
 	}
@@ -105,7 +103,7 @@ public:
 		
 		DebugScript(' ' << smoothing);
 		
-		context.getEntity()->_camdata->cam.smoothing = smoothing;
+		context.getEntity()->_camdata->smoothing = smoothing;
 		
 		return Success;
 	}
@@ -171,7 +169,7 @@ public:
 		
 		DebugScript(' ' << x << ' ' << y << ' ' << z);
 		
-		context.getEntity()->_camdata->cam.translatetarget = Vec3f(x, y, z);
+		context.getEntity()->_camdata->translatetarget = Vec3f(x, y, z);
 		
 		return Success;
 	}
@@ -229,14 +227,14 @@ public:
 		
 		DebugScript(' ' << intensity << ' ' << duration << ' ' << period);
 		
-		AddQuakeFX(intensity, duration, period, true);
+		AddQuakeFX(intensity, GameDurationMsf(duration), period, true);
 		
 		return Success;
 	}
 	
 };
 
-}
+} // anonymous namespace
 
 void setupScriptedCamera() {
 	

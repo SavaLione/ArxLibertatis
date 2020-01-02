@@ -1,5 +1,5 @@
 /*
- * Copyright 2013-2017 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2013-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -31,6 +31,7 @@
 #include <boost/lexical_cast.hpp>
 #include <boost/algorithm/string/trim.hpp>
 #include <boost/algorithm/string/predicate.hpp>
+#include <boost/range/size.hpp>
 
 #if ARX_PLATFORM == ARX_PLATFORM_WIN32
 #include <windows.h>
@@ -48,7 +49,7 @@
 #include ARX_INCLUDED_CPUID_H
 #endif
 
-#if ARX_HAVE_SYSCONF
+#if ARX_HAVE_SYSCONF || ARX_HAVE_CONFSTR
 #include <unistd.h>
 #endif
 
@@ -66,96 +67,124 @@ namespace platform {
 // Windows-specific functions
 #if ARX_PLATFORM == ARX_PLATFORM_WIN32
 
-typedef void (WINAPI *PGNSI)(LPSYSTEM_INFO);
-
 //! Get a string describing the Windows version
 static std::string getWindowsVersionName() {
 	
+	bool osviValid = false;
 	OSVERSIONINFOEXW osvi;
 	SYSTEM_INFO si;
 	
-	ZeroMemory(&si, sizeof(SYSTEM_INFO));
-	ZeroMemory(&osvi, sizeof(OSVERSIONINFOEX));
-	osvi.dwOSVersionInfoSize = sizeof(OSVERSIONINFOEX);
+	ZeroMemory(&si, sizeof(si));
+	ZeroMemory(&osvi, sizeof(osvi));
+	osvi.dwOSVersionInfoSize = sizeof(osvi);
+	
+	HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
+	HMODULE kernel32 = GetModuleHandleW(L"kernel32.dll");
+	
+	typedef LONG (WINAPI * RtlGetVersionPtr)(POSVERSIONINFOW);
+	RtlGetVersionPtr RtlGetVersion = NULL;
+	if(ntdll) {
+		RtlGetVersion = getProcAddress<RtlGetVersionPtr>(ntdll, "RtlGetVersion");
+	}
+	if(RtlGetVersion && RtlGetVersion(reinterpret_cast<POSVERSIONINFOW>(&osvi)) == 0) {
+		osviValid = true;
+	}
+	
 	#if ARX_COMPILER_MSVC
 	#pragma warning(push)
 	#pragma warning(disable:4996) // VC12+ deprecates GetVersionEx
 	#endif
-	if(GetVersionExW((OSVERSIONINFO *)&osvi) == 0) {
-		return "Windows";
+	if(!osviValid && GetVersionExW(reinterpret_cast<POSVERSIONINFOW>(&osvi))) {
+		osviValid = true;
 	}
 	#if ARX_COMPILER_MSVC
 	#pragma warning(pop)
 	#endif
 	
 	// Call GetNativeSystemInfo if supported or GetSystemInfo otherwise.
-	HMODULE kernel32 = GetModuleHandleW(L"kernel32.dll");
-	PGNSI pGNSI = (PGNSI) GetProcAddress(kernel32, "GetNativeSystemInfo");
-	if(NULL != pGNSI) {
-		pGNSI(&si);
-	} else {
-		GetSystemInfo(&si); // Check for unsupported OS
+	typedef void (WINAPI * GetNativeSystemInfoPtr)(LPSYSTEM_INFO);
+	GetNativeSystemInfoPtr GetNativeSystemInfo = NULL;
+	if(kernel32) {
+		GetNativeSystemInfo = getProcAddress<GetNativeSystemInfoPtr>(kernel32, "GetNativeSystemInfo");
 	}
-	
-	if(VER_PLATFORM_WIN32_NT != osvi.dwPlatformId || osvi.dwMajorVersion <= 4) {
-		return "Windows";
+	if(GetNativeSystemInfo) {
+		GetNativeSystemInfo(&si);
+	} else {
+		GetSystemInfo(&si);
 	}
 	
 	std::stringstream os;
-	os << "Microsoft "; // Test for the specific product
+	os << "Microsoft Windows"; // Test for the specific product
+	
+	if(VER_PLATFORM_WIN32_NT != osvi.dwPlatformId || osvi.dwMajorVersion <= 4) {
+		osviValid = false;
+	}
 	
 	bool isServer = (osvi.wProductType != VER_NT_WORKSTATION);
 	
 	#define ARX_WINVER(x, y) ((u64(x) << 32) | u64(y))
-	switch(ARX_WINVER(osvi.dwMajorVersion, osvi.dwMinorVersion)) {
-		case ARX_WINVER(6, 2): {
-			os << (isServer ? "Windows Server 2012" : "Windows 8");
-			break;
-		}
-		case ARX_WINVER(6, 1): {
-			os << (isServer ? "Windows Server 2008 R2" : "Windows 7");
-			break;
-		}
-		case ARX_WINVER(6, 0): {
-			os << (isServer ? "Windows Server 2008" : "Windows Vista");
-			break;
-		}
-		case ARX_WINVER(5, 2): {
-			if(GetSystemMetrics(SM_SERVERR2)) {
-				os << "Windows Server 2003 R2";
-			} else if(!isServer && si.wProcessorArchitecture == PROCESSOR_ARCHITECTURE_AMD64) {
-				os << "Windows XP Professional x64 Edition";
-			} else {
-				os << "Windows Server 2003";
+	if(osviValid) {
+		switch(ARX_WINVER(osvi.dwMajorVersion, osvi.dwMinorVersion)) {
+			case ARX_WINVER(6, 2): {
+				os << (isServer ? " Server 2012" : " 8");
+				break;
 			}
-			break;
-		}
-		case ARX_WINVER(5, 1): {
-			os << "Windows XP";
-			break;
-		}
-		case ARX_WINVER(5, 0): {
-			os << (isServer ? "Windows 2000 Server" : "Windows 2000");
-			break;
-		}
-		default: {
-			os << " Windows Version " << osvi.dwMajorVersion << "." << osvi.dwMinorVersion;
+			case ARX_WINVER(6, 1): {
+				os << (isServer ? " Server 2008 R2" : " 7");
+				break;
+			}
+			case ARX_WINVER(6, 0): {
+				os << (isServer ? " Server 2008" : "Windows Vista");
+				break;
+			}
+			case ARX_WINVER(5, 2): {
+				if(GetSystemMetrics(SM_SERVERR2)) {
+					os << " Server 2003 R2";
+				} else if(!isServer && si.wProcessorArchitecture == PROCESSOR_ARCHITECTURE_AMD64) {
+					os << " XP Professional x64 Edition";
+				} else {
+					os << " Server 2003";
+				}
+				break;
+			}
+			case ARX_WINVER(5, 1): {
+				os << " XP";
+				break;
+			}
+			case ARX_WINVER(5, 0): {
+				os << (isServer ? " 2000 Server" : " 2000");
+				break;
+			}
+			default: {
+				os << "  version " << osvi.dwMajorVersion << "." << osvi.dwMinorVersion;
+			}
 		}
 	}
 	#undef ARX_WINVER
 	
 	// Include service pack (if any) and build number
-	if(osvi.szCSDVersion[0] != L'\0') {
+	if(osviValid && osvi.szCSDVersion[0] != L'\0') {
 		os << " " << platform::WideString::toUTF8(osvi.szCSDVersion);
 	}
 	
-	os << " (build " << osvi.dwBuildNumber << ")";
-	if(osvi.dwMajorVersion >= 6) {
+	if(osviValid) {
+		os << " (build " << osvi.dwBuildNumber << ")";
+	}
+	if(osviValid && osvi.dwMajorVersion >= 6) {
 		if(si.wProcessorArchitecture == PROCESSOR_ARCHITECTURE_AMD64) {
 			os << ", 64-bit";
 		} else if(si.wProcessorArchitecture == PROCESSOR_ARCHITECTURE_INTEL) {
 			os << ", 32-bit";
 		}
+	}
+	
+	typedef const char * (CDECL * wine_get_version_ptr)();
+	wine_get_version_ptr wine_get_version = NULL;
+	if(ntdll) {
+		wine_get_version = getProcAddress<wine_get_version_ptr>(ntdll, "wine_get_version");
+	}
+	if(wine_get_version) {
+		os << " (Wine " << wine_get_version() << ")";
 	}
 	
 	return os.str();
@@ -166,11 +195,6 @@ static std::string getWindowsVersionName() {
 
 std::string getOSName() {
 	
-	#if ARX_PLATFORM == ARX_PLATFORM_WIN32
-	// Get operating system friendly name from registry.
-	return getWindowsVersionName();
-	#endif
-	
 	#if ARX_HAVE_UNAME
 	struct utsname uname_buf;
 	if(uname(&uname_buf) == 0) {
@@ -178,10 +202,11 @@ std::string getOSName() {
 	}
 	#endif
 	
-	#if ARX_PLATFORM == ARX_PLATFORM_LINUX
+	#if ARX_PLATFORM == ARX_PLATFORM_WIN32
+	// Get operating system friendly name from registry.
+	return getWindowsVersionName();
+	#elif ARX_PLATFORM == ARX_PLATFORM_LINUX
 	return "Linux";
-	#elif ARX_PLATFORM == ARX_PLATFORM_WIN32
-	return "Windows";
 	#elif ARX_PLATFORM == ARX_PLATFORM_MACOS
 	return "macOS";
 	#elif ARX_PLATFORM == ARX_PLATFORM_BSD
@@ -196,6 +221,13 @@ std::string getOSName() {
 
 std::string getOSArchitecture() {
 	
+	#if ARX_HAVE_UNAME
+	struct utsname uname_buf;
+	if(uname(&uname_buf) == 0) {
+		return uname_buf.machine;
+	}
+	#endif
+	
 	// Determine if Windows is 64-bit.
 	#if defined(_WIN64)
 	return ARX_ARCH_NAME_X86_64; // 64-bit programs run only on Win64
@@ -206,16 +238,9 @@ std::string getOSArchitecture() {
 	} else {
 		return ARX_ARCH_NAME_X86;
 	}
-	#endif
-	
-	#if ARX_HAVE_UNAME
-	struct utsname uname_buf;
-	if(uname(&uname_buf) == 0) {
-		return uname_buf.machine;
-	}
-	#endif
-	
+	#else
 	return std::string();
+	#endif
 }
 
 
@@ -321,12 +346,12 @@ std::string getOSDistribution() {
 	#if ARX_PLATFORM == ARX_PLATFORM_LINUX
 	
 	// Get distribution information from SystemD's /etc/os-release
-	// Spec: http://www.freedesktop.org/software/systemd/man/os-release.html
+	// Spec: https://freedesktop.org/software/systemd/man/os-release.html
 	{
 		fs::ifstream ifs("/etc/os-release");
 		if(ifs.is_open()) {
 			const char * keys[] = { "PRETTY_NAME", "NAME", "VERSION", "VERSION_ID" };
-			std::string distro = parseDistributionName(ifs, '=', keys, ARRAY_SIZE(keys));
+			std::string distro = parseDistributionName(ifs, '=', keys, boost::size(keys));
 			if(!distro.empty()) {
 				return distro;
 			}
@@ -340,7 +365,7 @@ std::string getOSDistribution() {
 		const char * args[] = { "lsb_release", "-a", NULL };
 		std::istringstream iss(getOutputOf(args));
 		const char * keys[] = { "Description", "Distributor ID", "Release", "(Codename" };
-		std::string distro = parseDistributionName(iss, ':', keys, ARRAY_SIZE(keys));
+		std::string distro = parseDistributionName(iss, ':', keys, boost::size(keys));
 		if(!distro.empty()) {
 			return distro;
 		}
@@ -389,7 +414,7 @@ std::string getOSDistribution() {
 		"/etc/mageia-release",
 		"/etc/system-release",
 	};
-	for(size_t i = 0; i < ARRAY_SIZE(release_files); i++) {
+	for(size_t i = 0; i < size_t(boost::size(release_files)); i++) {
 		std::string distro = fs::read(release_files[i]);
 		boost::trim(distro);
 		if(!distro.empty()) {
@@ -404,7 +429,7 @@ std::string getOSDistribution() {
 		{ "/etc/slackware-version", "Slackware " },
 		{ "/etc/angstrom-version", "Ångström " },
 	};
-	for(size_t i = 0; i < ARRAY_SIZE(version_files); i++) {
+	for(size_t i = 0; i < size_t(boost::size(version_files)); i++) {
 		if(fs::exists(version_files[i][0])) {
 			std::string distro = version_files[i][1] + fs::read(release_files[i]);
 			boost::trim(distro);
@@ -419,7 +444,7 @@ std::string getOSDistribution() {
 			const char * keys[] = {
 				"DISTRIB_DESCRIPTION", "DISTRIB_ID", "DISTRIB_RELEASE", "(DISTRIB_CODENAME"
 			};
-			std::string distro = parseDistributionName(ifs, '=', keys, ARRAY_SIZE(keys));
+			std::string distro = parseDistributionName(ifs, '=', keys, boost::size(keys));
 			if(!distro.empty()) {
 				return distro;
 			}
@@ -429,6 +454,52 @@ std::string getOSDistribution() {
 	#endif // ARX_PLATFORM == ARX_PLATFORM_LINUX
 	
 	return std::string();
+}
+
+#if ARX_HAVE_CONFSTR && (defined(_CS_GNU_LIBC_VERSION) || defined(_CS_GNU_LIBPTHREAD_VERSION))
+static std::string getCLibraryConfigString(int name) {
+	
+	size_t len = confstr(name, NULL, 0);
+	if(len == 0) {
+		return std::string();
+	}
+	
+	std::vector<char> buffer;
+	buffer.resize(len);
+	len = confstr(name, &buffer.front(), buffer.size());
+	if(len == 0) {
+		return std::string();
+	}
+	
+	return std::string(&*buffer.begin(), &*--buffer.end());
+	
+}
+#endif
+
+std::string getCLibraryVersion() {
+	
+	#if ARX_HAVE_CONFSTR && defined(_CS_GNU_LIBC_VERSION)
+	return getCLibraryConfigString(_CS_GNU_LIBC_VERSION);
+	#elif defined(__GNU_LIBRARY__) || defined(__GLIBC__)
+	return "glibc";
+	#elif defined(__BIONIC__)
+	return "Bionic";
+	#elif defined(__UCLIBC__)
+	return "uClibc";
+	#else
+	return std::string();
+	#endif
+	
+}
+
+std::string getThreadLibraryVersion() {
+	
+	#if ARX_HAVE_CONFSTR && defined(_CS_GNU_LIBPTHREAD_VERSION)
+	return getCLibraryConfigString(_CS_GNU_LIBPTHREAD_VERSION);
+	#else
+	return std::string();
+	#endif
+	
 }
 
 std::string getCPUName() {
@@ -497,9 +568,11 @@ std::string getCPUName() {
 		
 	}
 	
-	#endif
-	
 	return std::string();
+	
+	#else
+	return std::string();
+	#endif
 }
 
 MemoryInfo getMemoryInfo() {

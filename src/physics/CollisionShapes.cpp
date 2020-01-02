@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2016 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -87,7 +87,7 @@ void EERIE_COLLISION_Cylinder_Create(Entity * io)
 	io->physics.cyl.origin = io->pos;
 	
 	if(io->original_height > -40) {
-		float v = (-io->original_height) * ( 1.0f / 40 );
+		float v = (-io->original_height) * (1.0f / 40);
 		io->original_radius *= (0.5f + v * 0.5f);
 	}
 	

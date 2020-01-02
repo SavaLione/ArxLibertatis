@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2016 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -53,8 +53,6 @@ ZeniMax Media Inc., Suite 120, Rockville, Maryland 20850 USA.
 #include "window/RenderWindow.h"
 
 Application * mainApp = 0;
-float FPS;
-
 
 Application::Application() : m_MainWindow(NULL) {
 	m_bReady = true;
@@ -71,29 +69,4 @@ void Application::shutdown() {
 
 void Application::quit() {
 	m_RunLoop = false;
-}
-
-void CalcFPS(bool reset) {
-	
-	static PlatformInstant fLastTime = 0;
-	static u32 dwFrames  = 0L;
-
-	if(reset) {
-		dwFrames = 0;
-		fLastTime = 0;
-		FPS = 7.f * FPS;
-	} else {
-		// Keep track of the time lapse and frame count
-		PlatformInstant fTime = g_platformTime.frameStart();
-		++dwFrames;
-
-		float tmp = toS(fTime - fLastTime);
-
-		// Update the frame rate once per second
-		if(tmp > 1.f) {
-			FPS = float(dwFrames) / tmp;
-			fLastTime = fTime;
-			dwFrames  = 0L;
-		}
-	}
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2016 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -36,6 +36,10 @@
 #include <shellapi.h>
 #endif
 
+#if ARX_HAVE_DLSYM
+#include <dlfcn.h>
+#endif
+
 #if ARX_PLATFORM != ARX_PLATFORM_WIN32
 #define SDL_PROTOTYPES_ONLY 1
 #endif
@@ -52,6 +56,7 @@
 #include "platform/CrashHandler.h"
 #include "platform/Environment.h"
 #include "platform/WindowsUtils.h"
+#include "platform/profiler/Profiler.h"
 #include "window/SDL2X11Util.h"
 
 // Avoid including SDL_syswm.h without SDL_PROTOTYPES_ONLY on non-Windows systems
@@ -66,7 +71,9 @@ typedef enum {
 	ARX_SDL_SYSWM_WAYLAND,
 	ARX_SDL_SYSWM_MIR,
 	ARX_SDL_SYSWM_WINRT,
-	ARX_SDL_SYSWM_ANDROID
+	ARX_SDL_SYSWM_ANDROID,
+	ARX_SDL_SYSWM_VIVANTE,
+	ARX_SDL_SYSWM_OS2,
 } ARX_SDL_SYSWM_TYPE;
 struct ARX_SDL_SysWMinfo {
 	SDL_version version;
@@ -81,6 +88,7 @@ SDL2Window::SDL2Window()
 	, m_glcontext(NULL)
 	, m_input(NULL)
 	, m_minimizeOnFocusLost(AlwaysEnabled)
+	, m_allowScreensaver(AlwaysDisabled)
 	, m_gamma(1.f)
 	, m_gammaOverridden(false)
 {
@@ -89,9 +97,7 @@ SDL2Window::SDL2Window()
 
 SDL2Window::~SDL2Window() {
 	
-	if(m_input) {
-		delete m_input;
-	}
+	delete m_input;
 	
 	if(m_renderer) {
 		delete m_renderer, m_renderer = NULL;
@@ -112,12 +118,23 @@ SDL2Window::~SDL2Window() {
 	
 }
 
+#ifndef SDL_HINT_VIDEO_ALLOW_SCREENSAVER // SDL 2.0.2+
+#define SDL_HINT_VIDEO_ALLOW_SCREENSAVER "SDL_VIDEO_ALLOW_SCREENSAVER"
+#endif
 #ifndef SDL_HINT_NO_SIGNAL_HANDLERS // SDL 2.0.4+
 #define SDL_HINT_NO_SIGNAL_HANDLERS "SDL_NO_SIGNAL_HANDLERS"
 #endif
 #ifndef SDL_HINT_MOUSE_FOCUS_CLICKTHROUGH // SDL 2.0.5+
 #define SDL_HINT_MOUSE_FOCUS_CLICKTHROUGH "SDL_MOUSE_FOCUS_CLICKTHROUGH"
 #endif
+
+static Window::MinimizeSetting getInitialSDLSetting(const char * hint, Window::MinimizeSetting def) {
+	const char * setting = SDL_GetHint(hint);
+	if(!setting) {
+		return def;
+	}
+	return (*setting == '0') ? Window::AlwaysDisabled : Window::AlwaysEnabled;
+}
 
 bool SDL2Window::initializeFramework() {
 	
@@ -127,16 +144,8 @@ bool SDL2Window::initializeFramework() {
 	
 	SDL_SetHint(SDL_HINT_MOUSE_FOCUS_CLICKTHROUGH, "1");
 	
-	const char * minimize = SDL_GetHint(SDL_HINT_VIDEO_MINIMIZE_ON_FOCUS_LOSS);
-	if(minimize) {
-		if(*minimize == '0') {
-			m_minimizeOnFocusLost = AlwaysDisabled;
-		} else {
-			m_minimizeOnFocusLost = AlwaysEnabled;
-		}
-	} else {
-		m_minimizeOnFocusLost = Enabled;
-	}
+	m_minimizeOnFocusLost = getInitialSDLSetting(SDL_HINT_VIDEO_MINIMIZE_ON_FOCUS_LOSS, Enabled);
+	m_allowScreensaver = getInitialSDLSetting(SDL_HINT_VIDEO_ALLOW_SCREENSAVER, Disabled);
 	
 	arx_assert_msg(s_mainWindow == NULL, "SDL only supports one window"); // TODO it supports multiple windows now!
 	arx_assert(m_displayModes.empty());
@@ -189,7 +198,7 @@ bool SDL2Window::initializeFramework() {
 		for(int i = 0; i < modes; i++) {
 			SDL_DisplayMode mode;
 			if(SDL_GetDisplayMode(display, i, &mode) >= 0) {
-				m_displayModes.push_back(Vec2i(mode.w, mode.h));
+				m_displayModes.push_back(DisplayMode(Vec2i(mode.w, mode.h), mode.refresh_rate));
 			}
 		}
 	}
@@ -204,6 +213,7 @@ bool SDL2Window::initializeFramework() {
 	
 	SDL_EventState(SDL_WINDOWEVENT, SDL_ENABLE);
 	SDL_EventState(SDL_QUIT,        SDL_ENABLE);
+	SDL_EventState(SDL_DROPFILE,    SDL_ENABLE);
 	SDL_EventState(SDL_SYSWMEVENT,  SDL_IGNORE);
 	SDL_EventState(SDL_USEREVENT,   SDL_IGNORE);
 	
@@ -215,7 +225,7 @@ static Uint32 getSDLFlagsForMode(const Vec2i & size, bool fullscreen) {
 	Uint32 flags = 0;
 	
 	if(fullscreen) {
-		if(size == Vec2i_ZERO) {
+		if(size == Vec2i(0)) {
 			flags |= SDL_WINDOW_FULLSCREEN_DESKTOP;
 		} else {
 			flags |= SDL_WINDOW_FULLSCREEN;
@@ -228,11 +238,11 @@ static Uint32 getSDLFlagsForMode(const Vec2i & size, bool fullscreen) {
 int SDL2Window::createWindowAndGLContext(const char * profile) {
 	
 	int x = SDL_WINDOWPOS_UNDEFINED, y = SDL_WINDOWPOS_UNDEFINED;
-	Uint32 windowFlags = getSDLFlagsForMode(m_size, m_fullscreen);
+	Uint32 windowFlags = getSDLFlagsForMode(m_mode.resolution, m_fullscreen);
 	windowFlags |= SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIDDEN;
 	
 	for(int msaa = m_maxMSAALevel; true; msaa--) {
-		bool lastTry = (msaa == 1);
+		bool lastTry = (msaa == 0);
 		
 		// Cleanup context and window from previous tries
 		if(m_glcontext) {
@@ -248,11 +258,15 @@ int SDL2Window::createWindowAndGLContext(const char * profile) {
 		
 		SDL_GL_SetAttribute(SDL_GL_MULTISAMPLEBUFFERS, msaa > 1 ? 1 : 0);
 		SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, msaa > 1 ? msaa : 0);
+		SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, msaa > 0 ? 24 : 16);
+		SDL_GL_SetAttribute(SDL_GL_RED_SIZE,   msaa > 0 ? 8 : 3);
+		SDL_GL_SetAttribute(SDL_GL_GREEN_SIZE, msaa > 0 ? 8 : 3);
+		SDL_GL_SetAttribute(SDL_GL_BLUE_SIZE,  msaa > 0 ? 8 : 2);
 		
-		m_window = SDL_CreateWindow(m_title.c_str(), x, y, m_size.x, m_size.y, windowFlags);
+		m_window = SDL_CreateWindow(m_title.c_str(), x, y, m_mode.resolution.x, m_mode.resolution.y, windowFlags);
 		if(!m_window) {
 			if(lastTry) {
-				LogError << "Could not create window: " << SDL_GetError();
+				LogError << "Could not create " << profile << " window: " << SDL_GetError();
 				return 0;
 			}
 			continue;
@@ -268,10 +282,10 @@ int SDL2Window::createWindowAndGLContext(const char * profile) {
 		}
 		
 		// Verify that the MSAA setting matches what was requested
-		int msaaEnabled, msaaValue;
-		SDL_GL_GetAttribute(SDL_GL_MULTISAMPLEBUFFERS, &msaaEnabled);
-		SDL_GL_GetAttribute(SDL_GL_MULTISAMPLESAMPLES, &msaaValue);
-		if(!lastTry) {
+		if(msaa > 1) {
+			int msaaEnabled, msaaValue;
+			SDL_GL_GetAttribute(SDL_GL_MULTISAMPLEBUFFERS, &msaaEnabled);
+			SDL_GL_GetAttribute(SDL_GL_MULTISAMPLESAMPLES, &msaaValue);
 			if(!msaaEnabled || msaaValue < msaa) {
 				continue;
 			}
@@ -291,7 +305,7 @@ int SDL2Window::createWindowAndGLContext(const char * profile) {
 			continue;
 		}
 		
-		return msaa;
+		return std::max(msaa, 1);
 	}
 	
 }
@@ -301,7 +315,6 @@ bool SDL2Window::initialize() {
 	arx_assert(!m_displayModes.empty());
 	
 	SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
-	SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
 	
 	#if ARX_PLATFORM == ARX_PLATFORM_WIN32
 	// Used on Windows to prevent software opengl fallback.
@@ -313,37 +326,60 @@ bool SDL2Window::initialize() {
 	SDL_GL_SetAttribute(SDL_GL_ACCELERATED_VISUAL, 1);
 	#endif
 	
-	if(gldebug::isEnabled()) {
-		SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, SDL_GL_CONTEXT_DEBUG_FLAG);
-	}
-	
 	bool autoRenderer = (config.video.renderer == "auto");
 	
 	int samples = 0;
-	for(int i = 0; i < 2 && samples == 0; i++) {
-		bool first = (i == 0);
+	for(int api = 0; api < 2 && samples == 0; api++) {
+		bool first = (api == 0);
 		
 		bool matched = false;
 		
-		if(samples == 0 && first == (autoRenderer || config.video.renderer == "OpenGL")) {
-			matched = true;
-			// TODO core profile are not supported yet
-			SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_COMPATIBILITY);
-			SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 1);
-			SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 5);
-			samples = createWindowAndGLContext("Desktop OpenGL");
+		for(int type = 0; type < (gldebug::isEnabled() ? 1 : 2) && samples == 0; type++) {
+			
+			int flags = 0;
+			if(gldebug::isEnabled() && type == 0) {
+				flags |= SDL_GL_CONTEXT_DEBUG_FLAG;
+			}
+			SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, flags);
+			
+			if(samples == 0 && first == (autoRenderer || config.video.renderer == "OpenGL")) {
+				matched = true;
+				// TODO core profile are not supported yet
+				#if SDL_VERSION_ATLEAST(2, 0, 6)
+				if(!gldebug::isEnabled()) {
+					// Set SDL_GL_CONTEXT_PROFILE_MASK to != 0 so SDL won't ignore SDL_GL_CONTEXT_NO_ERROR
+					SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_COMPATIBILITY);
+					SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 2);
+					SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
+					SDL_GL_SetAttribute(SDL_GL_CONTEXT_NO_ERROR, 1); // Requires OpenGL 2.0
+					samples = createWindowAndGLContext("Desktop OpenGL");
+				}
+				#endif
+				if(samples == 0) {
+					// Set SDL_GL_CONTEXT_PROFILE_MASK to 0 so SDL will try the legacy glXCreateContext() path
+					SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, 0);
+					SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 1);
+					SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 5);
+					#if SDL_VERSION_ATLEAST(2, 0, 6)
+					SDL_GL_SetAttribute(SDL_GL_CONTEXT_NO_ERROR, 0);
+					#endif
+					samples = createWindowAndGLContext("Desktop OpenGL");
+				}
+			}
+			
+			#if ARX_HAVE_EPOXY
+			if(samples == 0 && first == (autoRenderer || config.video.renderer == "OpenGL ES")) {
+				matched = true;
+				// TODO OpenGL ES 2.0+ is not supported yet
+				SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES);
+				SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 1);
+				SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
+				// SDL_GL_CONTEXT_NO_ERROR requires OpenGL ES 2.0
+				samples = createWindowAndGLContext("OpenGL ES");
+			}
+			#endif
+			
 		}
-		
-		#if ARX_HAVE_EPOXY
-		if(samples == 0 && first == (autoRenderer || config.video.renderer == "OpenGL ES")) {
-			matched = true;
-			// TODO OpenGL ES 2.0+ is not supported yet
-			SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES);
-			SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 1);
-			SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
-			samples = createWindowAndGLContext("OpenGL ES");
-		}
-		#endif
 		
 		if(first && !matched) {
 			LogError << "Unknown renderer: " << config.video.renderer;
@@ -356,31 +392,79 @@ bool SDL2Window::initialize() {
 	
 	// All good
 	{
-		const char * system = "(unknown)";
+		const char * windowSystem = "(unknown)";
 		{
 		  ARX_SDL_SysWMinfo info;
 			info.version.major = 2;
 			info.version.minor = 0;
-			info.version.patch = 4;
+			info.version.patch = 6;
 			if(SDL_GetWindowWMInfo(m_window, reinterpret_cast<SDL_SysWMinfo *>(&info))) {
 				switch(info.subsystem) {
 					case ARX_SDL_SYSWM_UNKNOWN:   break;
-					case ARX_SDL_SYSWM_WINDOWS:   system = "Windows"; break;
-					case ARX_SDL_SYSWM_X11:       system = "X11"; break;
-					#if SDL_VERSION_ATLEAST(2, 0, 3)
-					case ARX_SDL_SYSWM_WINRT:     system = "WinRT"; break;
-					#endif
-					case ARX_SDL_SYSWM_DIRECTFB:  system = "DirectFB"; break;
-					case ARX_SDL_SYSWM_COCOA:     system = "Cocoa"; break;
-					case ARX_SDL_SYSWM_UIKIT:     system = "UIKit"; break;
-					#if SDL_VERSION_ATLEAST(2, 0, 2)
-					case ARX_SDL_SYSWM_WAYLAND:   system = "Wayland"; break;
-					case ARX_SDL_SYSWM_MIR:       system = "Mir"; break;
-					#endif
-					#if SDL_VERSION_ATLEAST(2, 0, 4)
-					case ARX_SDL_SYSWM_ANDROID:   system = "Android"; break;
-					#endif
+					case ARX_SDL_SYSWM_WINDOWS:   windowSystem = "Windows"; break;
+					case ARX_SDL_SYSWM_X11:       windowSystem = "X11"; break;
+					case ARX_SDL_SYSWM_DIRECTFB:  windowSystem = "DirectFB"; break;
+					case ARX_SDL_SYSWM_COCOA:     windowSystem = "Cocoa"; break;
+					case ARX_SDL_SYSWM_UIKIT:     windowSystem = "UIKit"; break;
+					case ARX_SDL_SYSWM_WAYLAND:   windowSystem = "Wayland"; break;
+					case ARX_SDL_SYSWM_MIR:       windowSystem = "Mir"; break;
+					case ARX_SDL_SYSWM_WINRT:     windowSystem = "WinRT"; break;
+					case ARX_SDL_SYSWM_ANDROID:   windowSystem = "Android"; break;
+					case ARX_SDL_SYSWM_VIVANTE:   windowSystem = "Vivante"; break;
+					case ARX_SDL_SYSWM_OS2:       windowSystem = "OS2"; break;
+					default: LogWarning << "Unknown SDL video backend: " << int(info.subsystem);
 				}
+				#if ARX_PLATFORM != ARX_PLATFORM_WIN32 && ARX_PLATFORM != ARX_PLATFORM_MACOS
+				#if ARX_HAVE_EPOXY
+				const char * wrangler = "libepoxy";
+				#else
+				const char * wrangler = "GLEW";
+				#endif
+				switch(info.subsystem) {
+					case ARX_SDL_SYSWM_X11: {
+						SDL_version ver;
+						SDL_GetVersion(&ver);
+						if(ver.major == 2 && ver.minor == 0 && ver.patch < 9) {
+							// Work around a bug causing dbus-daemon memory usage to continually rise while AL is running
+							// if the org.gnome.ScreenSaver service does not exist.
+							if(m_allowScreensaver != AlwaysDisabled && m_allowScreensaver != AlwaysEnabled) {
+								SDL_EnableScreenSaver();
+								m_allowScreensaver = AlwaysEnabled;
+							}
+						}
+						#if ARX_HAVE_GL_STATIC || !ARX_HAVE_DLSYM || !defined(RTLD_DEFAULT)
+						const bool haveGLX = ARX_HAVE_GLX;
+						#elif ARX_HAVE_EPOXY
+						const bool haveGLX = (dlsym(RTLD_DEFAULT, "epoxy_has_glx") != NULL);
+						#else
+						const bool haveGLX = (dlsym(RTLD_DEFAULT, "glxewInit") != NULL);
+						#endif
+						if(!haveGLX) {
+							LogWarning << "SDL is using the X11 video backend but " << wrangler
+							           << " was built without GLX support";
+							LogWarning << "Try setting the SDL_VIDEODRIVER=wayland environment variable";
+						}
+						break;
+					}
+					case ARX_SDL_SYSWM_WAYLAND:
+					case ARX_SDL_SYSWM_MIR: {
+						#if ARX_HAVE_GL_STATIC || !ARX_HAVE_DLSYM || !defined(RTLD_DEFAULT)
+						const bool haveEGL = ARX_HAVE_EGL;
+						#elif ARX_HAVE_EPOXY
+						const bool haveEGL = (dlsym(RTLD_DEFAULT, "epoxy_has_egl") != NULL);
+						#else
+						const bool haveEGL = (dlsym(RTLD_DEFAULT, "eglewInit") != NULL);
+						#endif
+						if(!haveEGL) {
+							LogWarning << "SDL is using the " << windowSystem << " video backend but " << wrangler
+							           << " was built without EGL support";
+							LogWarning << "Try setting the SDL_VIDEODRIVER=x11 environment variable";
+						}
+						break;
+					}
+					default: break;
+				}
+				#endif
 			}
 		}
 		
@@ -391,7 +475,7 @@ bool SDL2Window::initialize() {
 		SDL_GL_GetAttribute(SDL_GL_ALPHA_SIZE, &alpha);
 		SDL_GL_GetAttribute(SDL_GL_DEPTH_SIZE, &depth);
 		SDL_GL_GetAttribute(SDL_GL_DOUBLEBUFFER, &doublebuffer);
-		LogInfo << "Window: " << system << " r:" << red << " g:" << green << " b:" << blue
+		LogInfo << "Window: " << windowSystem << " r:" << red << " g:" << green << " b:" << blue
 		        << " a:" << alpha << " depth:" << depth << " aa:" << samples << "x"
 		        << " doublebuffer:" << doublebuffer;
 	}
@@ -489,15 +573,15 @@ bool SDL2Window::setGamma(float gamma) {
 	return true;
 }
 
-void SDL2Window::changeMode(DisplayMode mode, bool makeFullscreen) {
+void SDL2Window::changeMode(DisplayMode mode, bool fullscreen) {
 	
 	if(!m_window) {
-		m_size = mode.resolution;
-		m_fullscreen = makeFullscreen;
+		m_mode = mode;
+		m_fullscreen = fullscreen;
 		return;
 	}
 	
-	if(m_fullscreen == makeFullscreen && m_size == mode.resolution) {
+	if(m_fullscreen == fullscreen && m_mode == mode) {
 		return;
 	}
 	
@@ -505,17 +589,17 @@ void SDL2Window::changeMode(DisplayMode mode, bool makeFullscreen) {
 	
 	m_renderer->beforeResize(false);
 	
-	if(makeFullscreen) {
+	if(fullscreen) {
 		if(wasFullscreen) {
 			// SDL will not update the window size with the new mode if already fullscreen
 			SDL_SetWindowFullscreen(m_window, 0);
 		}
-		if(mode.resolution != Vec2i_ZERO) {
+		if(mode.resolution != Vec2i(0)) {
 			SDL_DisplayMode sdlmode;
 			SDL_DisplayMode requested;
 			requested.driverdata = NULL;
 			requested.format = 0;
-			requested.refresh_rate = 0;
+			requested.refresh_rate = mode.refresh;
 			requested.w = mode.resolution.x;
 			requested.h = mode.resolution.y;
 			int display = SDL_GetWindowDisplayIndex(m_window);
@@ -530,12 +614,12 @@ void SDL2Window::changeMode(DisplayMode mode, bool makeFullscreen) {
 		}
 	}
 	
-	Uint32 flags = getSDLFlagsForMode(mode.resolution, makeFullscreen);
+	Uint32 flags = getSDLFlagsForMode(mode.resolution, fullscreen);
 	if(SDL_SetWindowFullscreen(m_window, flags) < 0) {
 		return;
 	}
 	
-	if(!makeFullscreen) {
+	if(!fullscreen) {
 		if(wasFullscreen) {
 			restoreGamma();
 			SDL_RestoreWindow(m_window);
@@ -543,11 +627,11 @@ void SDL2Window::changeMode(DisplayMode mode, bool makeFullscreen) {
 		SDL_SetWindowSize(m_window, mode.resolution.x, mode.resolution.y);
 	}
 	
-	if(wasFullscreen != makeFullscreen) {
-		onToggleFullscreen(makeFullscreen);
+	if(wasFullscreen != fullscreen) {
+		onToggleFullscreen(fullscreen);
 	}
 	
-	if(makeFullscreen) {
+	if(fullscreen) {
 		setGamma(m_gamma);
 		// SDL regrettably sends resize events when a fullscreen window is minimized.
 		// Because of that we ignore all size change events when fullscreen.
@@ -560,17 +644,30 @@ void SDL2Window::changeMode(DisplayMode mode, bool makeFullscreen) {
 
 void SDL2Window::updateSize(bool force) {
 	
-	Vec2i oldSize = m_size;
+	DisplayMode oldMode = m_mode;
 	
 	int w, h;
 	SDL_GetWindowSize(m_window, &w, &h);
-	m_size = Vec2i(w, h);
+	m_mode.resolution = Vec2i(w, h);
 	
-	if(force || m_size != oldSize) {
-		m_renderer->afterResize();
-		m_renderer->SetViewport(Rect(m_size.x, m_size.y));
-		onResize(m_size);
+	int display = SDL_GetWindowDisplayIndex(m_window);
+	
+	SDL_DisplayMode mode;
+	if(SDL_GetCurrentDisplayMode(display, &mode) == 0) {
+		m_mode.refresh = mode.refresh_rate;
+	} else {
+		m_mode.refresh = 0;
 	}
+	
+	if(force || m_mode.resolution != oldMode.resolution) {
+		m_renderer->afterResize();
+		m_renderer->SetViewport(Rect(m_mode.resolution.x, m_mode.resolution.y));
+	}
+	
+	if(force || m_mode != oldMode) {
+		onResize(m_mode.resolution);
+	}
+	
 }
 
 void SDL2Window::setFullscreenMode(const DisplayMode & mode) {
@@ -613,13 +710,16 @@ void SDL2Window::tick() {
 					case SDL_WINDOWEVENT_FOCUS_LOST:   onFocus(false); break;
 					
 					case SDL_WINDOWEVENT_MOVED: {
+						if(!m_fullscreen) {
+							updateSize();
+						}
 						onMove(event.window.data1, event.window.data2);
 						break;
 					}
 					
 					case SDL_WINDOWEVENT_SIZE_CHANGED: {
 						Vec2i newSize(event.window.data1, event.window.data2);
-						if(newSize != m_size && !m_fullscreen) {
+						if(newSize != m_mode.resolution && !m_fullscreen) {
 							m_renderer->beforeResize(false);
 							updateSize();
 						} else {
@@ -648,6 +748,12 @@ void SDL2Window::tick() {
 				return; // abort event loop!
 			}
 			
+			case SDL_DROPFILE: {
+				onDroppedFile(event.drop.file);
+				SDL_free(event.drop.file);
+				return;
+			}
+			
 		}
 		
 		if(m_input) {
@@ -659,11 +765,12 @@ void SDL2Window::tick() {
 	if(!m_renderer->isInitialized()) {
 		updateSize();
 		m_renderer->afterResize();
-		m_renderer->SetViewport(Rect(m_size.x, m_size.y));
+		m_renderer->SetViewport(Rect(m_mode.resolution.x, m_mode.resolution.y));
 	}
 }
 
 void SDL2Window::showFrame() {
+	ARX_PROFILE_FUNC();
 	SDL_GL_SwapWindow(m_window);
 }
 
@@ -691,6 +798,27 @@ std::string SDL2Window::getClipboardText() {
 		SDL_free(text);
 	}
 	return result;
+}
+
+void SDL2Window::setClipboardText(const std::string & text) {
+	SDL_SetClipboardText(text.c_str());
+}
+
+void SDL2Window::allowScreensaver(bool allowed) {
+	
+	if(m_allowScreensaver == AlwaysDisabled || m_allowScreensaver == AlwaysEnabled) {
+		return;
+	}
+	
+	MinimizeSetting setting = allowed ? Enabled : Disabled;
+	if(m_allowScreensaver != setting) {
+		if(allowed) {
+			SDL_EnableScreenSaver();
+		} else {
+			SDL_DisableScreenSaver();
+		}
+		m_allowScreensaver = setting;
+	}
 }
 
 InputBackend * SDL2Window::getInputBackend() {

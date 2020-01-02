@@ -1,5 +1,5 @@
 /*
- * Copyright 2013-2016 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2013-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -19,6 +19,7 @@
 
 #include "platform/Process.h"
 
+#include <algorithm>
 #include <sstream>
 #include <vector>
 
@@ -29,6 +30,7 @@
 #include "platform/Platform.h"
 
 #if ARX_PLATFORM == ARX_PLATFORM_WIN32
+struct IUnknown; // Workaround for error C2187 in combaseapi.h when using /permissive-
 #include <windows.h>
 #include <shellapi.h>
 #include <objbase.h>
@@ -39,8 +41,8 @@
 #endif
 
 #if (ARX_HAVE_FORK && ARX_HAVE_EXECVP) \
- || (ARX_HAVE_PIPE && ARX_HAVE_READ && ARX_HAVE_CLOSE) \
- || ARX_HAVE_GETPID
+ || ((ARX_HAVE_PIPE2 || ARX_HAVE_PIPE) && ARX_HAVE_READ && ARX_HAVE_CLOSE) \
+ || ARX_HAVE_GETPID || ARX_HAVE_UNISTD_ENVIRON
 #include <unistd.h>
 #endif
 
@@ -50,14 +52,18 @@
 
 #if ARX_HAVE_POSIX_SPAWNP
 #include <spawn.h>
+#if !ARX_HAVE_UNISTD_ENVIRON
+extern "C" {
 #if defined(__FreeBSD__) && defined(__GNUC__) && __GNUC__ >= 4
 /*
  * When combining -flto and -fvisibility=hidden we and up with a hidden
  * 'environ' symbol in crt1.o on FreeBSD 9, which causes the link to fail.
  */
-extern char ** environ __attribute__((visibility("default")));
+extern char ** environ __attribute__((visibility("default"))); // NOLINT
 #else
-extern char ** environ;
+extern char ** environ; // NOLINT
+#endif
+}
 #endif
 #endif
 
@@ -67,6 +73,8 @@ extern char ** environ;
 
 #endif // ARX_PLATFORM != ARX_PLATFORM_WIN32
 
+#include <boost/range/size.hpp>
+
 #include "io/fs/FilePath.h"
 
 #include "platform/Environment.h"
@@ -74,25 +82,32 @@ extern char ** environ;
 
 #include "util/String.h"
 
+#if ARX_PLATFORM != ARX_PLATFORM_WIN32 && (ARX_HAVE_OPEN || ARX_HAVE_PIPE2) && !ARX_HAVE_O_CLOEXEC
+#define O_CLOEXEC 0
+#endif
+
 namespace platform {
 
 #if ARX_PLATFORM != ARX_PLATFORM_WIN32
-static process_handle run(const char * exe, const char * const args[], int stdout,
+static process_handle run(const char * exe, const char * const args[], int outfd,
                           bool unlocalized, bool detach) {
 	
 	char ** argv = const_cast<char **>(args);
 	
 	#if ARX_HAVE_OPEN
-	static int dev_null = open("/dev/null", O_RDWR);
+	static int dev_null = open("/dev/null", O_RDWR | O_CLOEXEC);
+	#if !ARX_HAVE_O_CLOEXEC && ARX_HAVE_FCNTL
+	fcntl(dev_null, F_SETFD, FD_CLOEXEC);
+	#endif
 	#endif
 	
 	pid_t pid = 0;
 	
-#if ARX_HAVE_POSIX_SPAWNP
+	#if ARX_HAVE_POSIX_SPAWNP
 	
 	// Fast POSIX implementation: posix_spawnp avoids unnecessary vm copies
 	
-	if(stdout <= 0 && unlocalized == false) {
+	if(outfd <= 0 && !unlocalized) {
 		
 		// Redirect standard input, output and error to /dev/null
 		static posix_spawn_file_actions_t * file_actionsp = NULL;
@@ -124,10 +139,10 @@ static process_handle run(const char * exe, const char * const args[], int stdou
 	
 	else
 	
-#endif
+	#endif // ARX_HAVE_POSIX_SPAWNP
 	
 	{
-#if ARX_HAVE_FORK && ARX_HAVE_EXECVP
+		#if ARX_HAVE_FORK && ARX_HAVE_EXECVP
 		
 		// Compatibility POSIX implementation
 		
@@ -140,14 +155,14 @@ static process_handle run(const char * exe, const char * const args[], int stdou
 			#if ARX_HAVE_OPEN
 			if(detach && dev_null > 0) {
 				(void)dup2(dev_null, 0);
-				if(stdout <= 0) {
+				if(outfd <= 0) {
 					dup2(dev_null, 1);
 				}
 				(void)dup2(dev_null, 2);
 			}
 			#endif
-			if(stdout > 0) {
-				(void)dup2(stdout, 1);
+			if(outfd > 0) {
+				(void)dup2(outfd, 1);
 			}
 			#endif
 			
@@ -172,15 +187,15 @@ static process_handle run(const char * exe, const char * const args[], int stdou
 			exit(-1);
 		}
 		
-#endif
+		#endif // ARX_HAVE_FORK && ARX_HAVE_EXECVP
 	}
 	
-#if !ARX_HAVE_POSIX_SPAWNP && !(ARX_HAVE_FORK && ARX_HAVE_EXECVP)
-	ARX_UNUSED(argv), ARX_UNUSED(stdout), ARX_UNUSED(unlocalized), ARX_UNUSED(detach);
+	#if !ARX_HAVE_POSIX_SPAWNP && !(ARX_HAVE_FORK && ARX_HAVE_EXECVP)
+	ARX_UNUSED(argv), ARX_UNUSED(outfd), ARX_UNUSED(unlocalized), ARX_UNUSED(detach);
 	#warning "Executing helper processes not supported on this system."
-#endif
+	#endif
 	
-	return (pid <= 0) ? 0 : pid;
+	return std::max(pid_t(0), pid);
 }
 #endif // ARX_PLATFORM != ARX_PLATFORM_WIN32
 
@@ -222,7 +237,7 @@ process_handle runAsync(const char * exe, const char * const args[], bool detach
 	
 #else
 	
-	return run(exe, args, /*stdout=*/ 0, /*unlocalized=*/ false, detach);
+	return run(exe, args, /*outfd=*/ 0, /*unlocalized=*/ false, detach);
 	
 #endif
 	
@@ -392,32 +407,32 @@ int runHelper(const char * const args[], bool wait, bool detach) {
 
 bool isWoW64Process(process_handle process) {
 	
-	typedef BOOL (WINAPI * IsWow64Process_t)(HANDLE, PBOOL);
-	IsWow64Process_t IsWow64Process_p;
-	
 	// IsWow64Process is not available on all versions of Windows - load it dynamically.
-	HMODULE handle = GetModuleHandleW(L"kernel32");
-	IsWow64Process_p = (IsWow64Process_t)GetProcAddress(handle, "IsWow64Process");
-	if(!IsWow64Process_p) {
-		return false;
+	if(HMODULE handle = GetModuleHandleW(L"kernel32")) {
+		typedef BOOL (WINAPI * IsWow64Process_t)(HANDLE, PBOOL);
+		IsWow64Process_t IsWow64Process_p = getProcAddress<IsWow64Process_t>(handle, "IsWow64Process");
+		BOOL result;
+		if(IsWow64Process_p && IsWow64Process_p(process, &result) && result == TRUE) {
+			return true;
+		}
 	}
 	
-	BOOL result;
-	if(!IsWow64Process_p(process, &result)) {
-		return false;
-	}
-	
-	return result == TRUE;
+	return false;
 }
 
 #else
 
 std::string getOutputOf(const char * exe, const char * const args[], bool unlocalized) {
 	
-	#if ARX_HAVE_PIPE && ARX_HAVE_READ && ARX_HAVE_CLOSE
+	#if (ARX_HAVE_PIPE2 || ARX_HAVE_PIPE) && ARX_HAVE_READ && ARX_HAVE_CLOSE
 	
 	int pipefd[2];
-	if(pipe(pipefd)) {
+	#if ARX_HAVE_PIPE2
+	int ret = pipe2(pipefd, O_CLOEXEC);
+	#else
+	int ret = pipe(pipefd);
+	#endif
+	if(ret) {
 		return std::string();
 	}
 	
@@ -432,7 +447,7 @@ std::string getOutputOf(const char * exe, const char * const args[], bool unloca
 	std::string result;
 	while(true) {
 		char buffer[1024];
-		ssize_t count = read(pipefd[0], buffer, ARRAY_SIZE(buffer));
+		ssize_t count = read(pipefd[0], buffer, boost::size(buffer));
 		if(count < 0) {
 			return std::string();
 		} else if(count == 0) {

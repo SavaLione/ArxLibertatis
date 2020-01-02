@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2016 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -53,6 +53,7 @@ ZeniMax Media Inc., Suite 120, Rockville, Maryland 20850 USA.
 #include "core/TimeTypes.h"
 #include "graphics/Color.h"
 #include "graphics/data/Mesh.h"
+#include "gui/debug/DebugKeys.h"
 #include "io/resource/ResourcePath.h"
 #include "math/Types.h"
 
@@ -68,14 +69,10 @@ extern TextureContainer * TC_smoke;
 
 extern EERIE_3DOBJ * cameraobj;
 extern EERIE_3DOBJ * markerobj;
-extern Vec3f lastteleport;
-extern EERIE_CAMERA bookcam;
 extern Vec2s DANAEMouse;
-extern EERIE_CAMERA subj;
 extern Vec3f g_moveto;
-extern Vec2s STARTDRAG;
+extern Vec2s g_dragStartPos;
 extern EERIE_3DOBJ * GoldCoinsObj[MAX_GOLD_COINS_VISUALS];
-extern Vec3f Mscenepos;
 extern Entity * COMBINE;
 extern res::path LastLoadedScene;
 
@@ -110,14 +107,6 @@ inline Vec2f RATIO_2(const Vec2f & in) {
 class Image;
 extern Image savegame_thumbnail;
 
-extern bool LOADEDD;
-
-extern bool g_debugToggles[10];
-extern bool g_debugTriggers[10];
-extern PlatformInstant g_debugTriggersTime[10];
-static const PlatformDuration g_debugTriggersDecayDuration = PlatformDurationMs(200);
-extern float g_debugValues[10];
-
 enum ChangeLevelIcon {
 	NoChangeLevel,
 	ConfirmChangeLevel,
@@ -126,12 +115,9 @@ enum ChangeLevelIcon {
 extern ChangeLevelIcon CHANGE_LEVEL_ICON;
 
 extern Vec3f LastValidPlayerPos;
-extern Vec3f WILL_RESTORE_PLAYER_POSITION;
-extern bool WILL_RESTORE_PLAYER_POSITION_FLAG;
 
 void SetEditMode();
 
-void SendGameReadyMsg();
 void DANAE_StartNewQuest();
 bool AdjustUI();
 
@@ -143,6 +129,10 @@ void ManageCombatModeAnimations();
 void ManageCombatModeAnimationsEND();
 void ManageNONCombatModeAnimations();
 
+/*!
+ * Returns IO under cursor, be it in inventories or in scene
+ * Returns NULL if no IO under cursor
+ */
 Entity * FlyingOverObject(const Vec2s & pos);
 
 void runGame();

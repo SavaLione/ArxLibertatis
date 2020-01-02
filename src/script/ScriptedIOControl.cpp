@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2017 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -198,22 +198,16 @@ public:
 			for(size_t k = 0; k < entities.size(); k++) {
 				const EntityHandle handle = EntityHandle(k);
 				Entity * ioo = entities[handle];
-				
 				if(ioo && IsCollidingIO(io, ioo)) {
-					Entity * oes = EVENT_SENDER;
-					EVENT_SENDER = ioo;
-					Stack_SendIOScriptEvent(io, SM_COLLISION_ERROR_DETAIL);
-					EVENT_SENDER = oes;
+					Stack_SendIOScriptEvent(ioo, io, SM_COLLISION_ERROR_DETAIL);
 					colliding = true;
 				}
 			}
 			
 			if(colliding) {
-				Entity * oes = EVENT_SENDER;
-				EVENT_SENDER = NULL;
-				Stack_SendIOScriptEvent(io, SM_COLLISION_ERROR);
-				EVENT_SENDER = oes;
+				Stack_SendIOScriptEvent(NULL, io, SM_COLLISION_ERROR);
 			}
+			
 		}
 		
 		io->ioflags &= ~IO_NO_COLLISIONS;
@@ -429,12 +423,7 @@ class IfVisibleCommand : public Command {
 		float aa = getAngle(io->pos.x, io->pos.z, ioo->pos.x, ioo->pos.z);
 		aa = MAKEANGLE(glm::degrees(aa));
 		
-		if((aa < ab + 90.f) && (aa > ab - 90.f)) {
-			//font
-			return true;
-		}
-		
-		return false;
+		return (aa < ab + 90.f && aa > ab - 90.f);
 	}
 	
 public:
@@ -542,7 +531,7 @@ public:
 				TELEPORT_TO_POSITION = target;
 				
 				if(angle == -1) {
-					TELEPORT_TO_ANGLE	=	static_cast<long>(player.angle.getYaw());
+					TELEPORT_TO_ANGLE = static_cast<long>(player.angle.getYaw());
 				} else {
 					TELEPORT_TO_ANGLE = angle;
 				}
@@ -757,7 +746,7 @@ public:
 	
 };
 
-}
+} // anonymous namespace
 
 void setupScriptedIOControl() {
 	

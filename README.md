@@ -8,39 +8,39 @@
 
 Cross-platform port of Arx Fatalis
 
-Arx Libertatis is based on the publicly released [Arx Fatalis source code](http://www.arkane-studios.com/uk/arx_downloads.php).
+Arx Libertatis is based on the publicly released [Arx Fatalis source code](https://web.archive.org/web/20180105233341/https://www.arkane-studios.com/uk/arx_downloads.php).
 The source code is available under the GPLv3+ license with some additional terms - see the COPYING and LICENSE files for details.
 
 ## Contact
 
-Website: [http://arx-libertatis.org/](http://arx-libertatis.org/)
+Website: [arx-libertatis.org](https://arx-libertatis.org/)
 
-Bug Tracker: [https://bugs.arx-libertatis.org/](https://bugs.arx-libertatis.org/)
+Bug Tracker: [bugs.arx-libertatis.org](https://bugs.arx-libertatis.org/)
 
 IRC: \#arxfatalis on irc.freenode.net
 
-Wiki: [http://wiki.arx-libertatis.org/](http://wiki.arx-libertatis.org/)
+Wiki: [wiki.arx-libertatis.org](https://wiki.arx-libertatis.org/)
 
-Reddit: [http://www.reddit.com/r/ArxFatalis/](http://www.reddit.com/r/ArxFatalis/)
+Reddit: [/r/ArxFatalis/](https://old.reddit.com/r/ArxFatalis/)
 
 ## Dependencies
 
-* **[CMake](http://www.cmake.org/) 2.8.3**+ (compile-time only, 2.8.5+ under Windows)
-* **[zlib](http://zlib.net/)**
-* **[Boost](http://www.boost.org/) 1.48**+ (headers only^1)
-* **[GLM](http://glm.g-truc.net/) 0.9.5.0**+
-* **[FreeType](http://www.freetype.org/) 2.3.0**+
-* **OpenAL 1.1**+ ([OpenAL Soft](http://kcat.strangesoft.net/openal.html) strongly recommended!)
+* **[CMake](https://cmake.org/) 2.8.3**+ (compile-time only)
+* **[zlib](https://zlib.net/)**
+* **[Boost](https://www.boost.org/) 1.48**+ (headers only¹)
+* **[GLM](https://glm.g-truc.net/) 0.9.5.0**+
+* **[FreeType](https://freetype.org/) 2.3.0**+
+* **OpenAL 1.1**+ ([OpenAL Soft](https://openal-soft.org/) strongly recommended!)
 * **iconutil** (from Xcode) or **[icnsutil](https://github.com/pornel/libicns)** (macOS only)
 
-1. Systems without Win32 or POSIX filesystem support will also the `filesystem` and `system` libraries from Boost.
+1. Systems without Win32 or POSIX filesystem support will also need the `filesystem` and `system` libraries from Boost.
 
 ### Renderer
 
 There is currently a single rendering backend for OpenGL:
 
-* **[SDL](http://www.libsdl.org/)** **1.2.10**+ *or* **2.0.0**+
-* **OpenGL 1.5**+ (OpenGL 2.1 or newer is recommended) *or* **OpenGL ES-CM 1.x**^1
+* **[SDL](https://libsdl.org/)** **1.2.10**+ *or* **2.0.0**+
+* **OpenGL 1.5**+ (OpenGL 2.1 or newer is recommended) *or* **OpenGL ES-CM 1.x**¹
 * **[libepoxy](https://github.com/anholt/libepoxy) 1.2**+ (recommended) *or* **[GLEW](http://glew.sourceforge.net/) 1.5.2**+
 
 1. OpenGL ES support requires libepoxy
@@ -49,8 +49,8 @@ There is currently a single rendering backend for OpenGL:
 
 Arx Libertatis comes with an optional gui crash reporter which has additional dependencies:
 
-* **[Qt](http://www.qt.io/) 4.7**+ or **5** (`QtCore`, `QtConcurrent`^1, `QtGui` and `QtWidgets`^1 libraries)
-* **[libcurl](http://curl.haxx.se/libcurl/) 7.20.0**+ (not required on Windows)
+* **[Qt](https://www.qt.io/) 4.7**+ or **5** (`QtCore`, `QtConcurrent`¹, `QtGui` and `QtWidgets`¹ libraries)
+* **[libcurl](https://curl.haxx.se/libcurl/) 7.20.0**+ (not required on Windows)
 * **GDB** (Linux-only, optional, run-time only)
 * **DbgHelp** (Windows-only)
 
@@ -68,14 +68,14 @@ Building and running tests has additional dependencies:
 
 Building checkouts from git on their own requires additional dependencies:
 * **[Inkscape](https://inkscape.org/)**
-* **[ImageMagick](http://www.imagemagick.org/script/index.php)**
+* **[ImageMagick](https://imagemagick.org/)**
 * **[OptiPNG](http://optipng.sourceforge.net/)**
 
-These are needed to render and scale the svg icons, which currently only render correctly in in Inkscape. Release and development snapshot source tarballs include the pre-built icon files and do not need these dependencies to build.
+These are needed to render and scale the SVG icons, which currently only render correctly in Inkscape. Release and development snapshot source tarballs include pre-built icon files and do not need these dependencies to build.
 
-To avoid the Inkscape (and ImageMagick) dependency for git builds, pre-built icons can be downloaded from http://arx-libertatis.org/files/data/ or the [ArxLibertatisData](https://github.com/arx/ArxLibertatisData/) repository. The required data version is listed in the VERSION file. Place `arx-libertatis-data-$version` directory into the build directory or tell the build system about it's location using the `DATA_FILES` cmake variable (`-DDATA_FILES=…` on the command-line).
+To avoid the Inkscape (as well as ImageMagick and OptiPNG) dependency for git builds, pre-built icons can be downloaded from https://arx-libertatis.org/files/data/ or the [ArxLibertatisData](https://github.com/arx/ArxLibertatisData/) repository. The required data version is listed in the VERSION file. Place `arx-libertatis-data-$version` directory into the build directory or tell the build system about it's location using the `DATA_FILES` CMake variable (`-DDATA_FILES=…` on the command-line).
 
-Alternatively, icons can be disabled by setting the `ICON_TYPE` cmake variable to `none`. See **OPTIONS.md** for other supported icon type values.
+Alternatively, icons can be disabled by setting the `ICON_TYPE` CMake variable to `none`. See **OPTIONS.md** for other supported icon type values.
 
 ## Compile and install
 
@@ -85,42 +85,49 @@ For Linux run:
     $ cmake ..
     $ make
 
+The default build settings are tuned for users - if you plan to make changes to Arx Libertatis you should append the `-DDEVELOPER=1` option to the `cmake` command to enable tests, debug checks and fast incremental builds.
+
 To install the binaries system-wide, run as root:
 
     # make install
 
 Alternatively you can run the game by specifying the full path to the `arx` binary in the `build` directory.
 
-The wiki has more detailed instructions on [compiling under Linux](http://wiki.arx-libertatis.org/Downloading_and_Compiling_under_Linux).
+The wiki has more detailed instructions on [compiling under Linux](https://wiki.arx-libertatis.org/Downloading_and_Compiling_under_Linux).
 
-Getting all the dependencies set up for Windows is more tricky. Pre-built dependencies are available in the [ArxWindows repository](https://github.com/arx/ArxWindows) and [instructions on how to use them](http://wiki.arx-libertatis.org/Downloading_and_Compiling_under_Windows) are available on the wiki.
+Getting all the dependencies set up for Windows is more tricky. Pre-built dependencies are available in the [ArxWindows repository](https://github.com/arx/ArxWindows) and [instructions on how to use them](https://wiki.arx-libertatis.org/Downloading_and_Compiling_under_Windows) are available on the wiki.
 
 ### Build options:
 
-* `BUILD_TOOLS` (default=ON): Build tools
-* `BUILD_IO_LIBRARY` (default=ON): Build helper library for the Blender plugin
-* `BUILD_CRASHHANDLER` (default=ON): Enable the built-in crash handler (default OFF for macOS)
-* `BUILD_CRASHREPORTER` (default=ON): Build the Qt crash reporter gui - requires `BUILD_CRASHHANDLER` (default OFF for macOS)
-* `BUILD_PROFILER` (default=OFF unless BUILD_PROFILER_INSTRUMENT is enabled): Build the profiler GUI
-* `BUILD_TESTS` (default=OFF): Build tests that can be run using `make check`
-* `BUILD_ALL` (default=OFF): Enable all the BUILD_* options above by default - they can still be disabled individually
-* `UNITY_BUILD` (default=ON): Unity build (faster build, better optimizations but no incremental build)
-* `CMAKE_BUILD_TYPE` (default=Release): Set to `Debug` for debug binaries
-* `DEBUG` (default=OFF^1): Enable debug output and runtime checks
-* `DEBUG_GL` (default=OFF^2): Enable OpenGL debug output by default
-* `DEBUG_EXTRA` (default=OFF): Expensive debug options
-* `DEVELOPER` (default=OFF): Enable build options suitable for developers^3
-* `BUILD_PROFILER_INSTRUMENT` (default=OFF): Add profiling instructions to the main arx binary
+* `BUILD_TOOLS` (default: `ON`): Build tools
+* `BUILD_IO_LIBRARY` (default: `ON`): Build helper library for the Blender plugin
+* `BUILD_CRASHHANDLER` (default: `ON`): Enable the built-in crash handler (default OFF for macOS)
+* `BUILD_CRASHREPORTER` (default: `ON`): Build the Qt crash reporter gui - requires `BUILD_CRASHHANDLER` (default OFF for macOS)
+* `BUILD_PROFILER` (default: `OFF`¹): Build the profiler GUI
+* `BUILD_TESTS` (default: `OFF`²): Build tests that can be run using `make check`
+* `BUILD_ALL` (default: `OFF`): Enable all the BUILD_* options above by default - they can still be disabled individually
+* `UNITY_BUILD` (default: `ON`): Unity build (faster build, better optimizations but no incremental build)
+* `CMAKE_BUILD_TYPE` (default: `Release`): Set to `Debug` for debug binaries
+* `DEBUG` (default: `OFF`³): Enable debug output and runtime checks
+* `DEBUG_GL` (default: `OFF`⁴): Enable OpenGL debug output by default
+* `DEBUG_EXTRA` (default: `OFF`): Expensive debug options
+* `RUN_TESTS` (default: `OFF`⁵): Automatically run tests
+* `RUN_TARGET` (default: (none): Wrapper to run binaries produced in the build process
+* `DEVELOPER` (default: `OFF`): Enable build options suitable for developers⁶
+* `BUILD_PROFILER_INSTRUMENT` (default: `OFF`): Add profiling instructions to the main arx binary
 
-1. Enabled automatically if `CMAKE_BUILD_TYPE` is set to `Debug` or if `DEVELOPER` is enabled.
-1. Enabled automatically if `DEBUG` is enabled. If disabled, OpenGL debug output can be enabled at run-time using the `--debug-gl` command-line option.
-3. Currently this disables `UNITY_BUILD` for faster incremental builds and enables `DEBUG`, unless those options have been explicitly specified by the user.
+1. Enabled automatically if `BUILD_ALL` or `BUILD_PROFILER_INSTRUMENT` is enabled
+2. Enabled automatically if `BUILD_ALL` or `DEVELOPER` is enabled
+3. Enabled automatically if `CMAKE_BUILD_TYPE` is set to `Debug` or if `DEVELOPER` is enabled.
+4. Enabled automatically if `DEBUG` is enabled. If disabled, OpenGL debug output can be enabled at run-time using the `--debug-gl` command-line option.
+5. Enabled automatically if `DEVELOPER` is enabled unless cross-compiling without `RUN_TARGET` set
+6. Currently this disables `UNITY_BUILD` and enables `DEBUG`, `BUILD_TESTS`, `RUN_TESTS` and `FASTLINK` for faster incremental builds and improved debug checks, unless those options have been explicitly specified by the user.
 
 Install options:
 
 * `CMAKE_INSTALL_PREFIX` (default: `/usr/local` on UNIX and `C:/Program Files` on Windows): Where to install Arx Libertatis
 
-Set options by passing `-D<option>=<value>` to cmake.
+Set options by passing `-D<option>=<value>` to `cmake`.
 
 Backends that are not available are disabled by default. The `cmake` run should display a summary of the enabled backends at the end.
 
@@ -128,9 +135,9 @@ Advanced options not listed here are documented in **OPTIONS.md**.
 
 ## Data file, config and savegame locations
 
-You will need to [get either the full game or demo data of Arx Fatalis](http://arx.vg/data).
+You will need to [get either the full game or demo data of Arx Fatalis](https://arx.vg/data).
 
-Where arx will look for data files and write config and save files depends on the operating system and environment - the wiki has a page detailing the [full data directory detection algorithm](http://arx.vg/paths).
+Where arx will look for data files and write config and save files depends on the operating system and environment - the wiki has a page detailing the [full data directory detection algorithm](https://arx.vg/paths).
 
 **For Unix-like systems**:
 The game will try to rename all used files in the user directory (but not the data directory) to lowercase on the first run. System-wide installations with case-sensitive filesystems always need to manually rename the files to lowercase. The `arx-install-data` script can be used to install the data files, convert them to lowercase and verify that all required files are present.
@@ -192,7 +199,7 @@ See the `arx --help` and `man arx` output for more details.
 
 ## Scripts
 
-The `arx-install-data` script can extract and install the game data under Linux and FreeBSD from the CD, demo, [GOG.com](http://www.gog.com/) installer or any Arx Fatalis install (such as on Steam) - simply run it and follow the GUI dialogs. Also see the [wiki page on installing the game data under non-Windows systems](http://arx.vg/install-data).
+The `arx-install-data` script can extract and install the game data under Linux and FreeBSD from the CD, demo, [GOG.com](https://www.gog.com/) installer or any Arx Fatalis install (such as on Steam) - simply run it and follow the GUI dialogs. Also see the [wiki page on installing the game data under non-Windows systems](https://arx.vg/install-data).
 
 Or, if you prefer a command-line interface, run it as
 
@@ -203,6 +210,8 @@ More options and required tools (depending on the source file) are documented in
     $ arx-install-data --help
 
 ## Developer information
+
+New contributors should first read the CONTRIBUTING.md file.
 
 To build developer documentation (doxygen), run this from the build directory:
 

@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2016 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -35,7 +35,7 @@ void logger::Backend::format(std::ostream & os, const Source & file,
 		case Logger::Warning:  os << "[W]"; break;
 		case Logger::Error:    os << "[E]"; break;
 		case Logger::Critical: os << "[CRITICAL]", length = 10; break;
-		case Logger::None: ARX_DEAD_CODE();
+		case Logger::None: arx_unreachable();
 	}
 	os << ' ' << file.name << ':';
 	

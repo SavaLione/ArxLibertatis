@@ -1,5 +1,5 @@
 /*
- * Copyright 2017 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2017-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -28,10 +28,14 @@
 // Taken from Crypto++ and modified to fit the project.
 
 #include <cstring>
+#include <string>
+#include <ostream>
+#include <iomanip>
 
 #include <boost/range/size.hpp>
 
 #include "platform/Alignment.h"
+#include "platform/Platform.h"
 
 namespace util {
 
@@ -41,7 +45,7 @@ template <bool overflow>
 struct safe_shifter {
 	
 	template <class T>
-	static T right_shift(T, unsigned int) {
+	static T right_shift(T /* value */, unsigned int /* bits */) {
 		return 0;
 	}
 	
@@ -65,6 +69,11 @@ T safe_right_shift(T value) {
 	return detail::safe_shifter<(bits >= (8 * sizeof(T)))>::right_shift(value, bits);
 }
 
+template <size_t N>
+struct checksum {
+	char data[N];
+};
+
 template <class T>
 class iterated_hash {
 	
@@ -76,12 +85,30 @@ public:
 	static const size_t block_size = transform::block_size;
 	static const size_t hash_size = transform::hash_size / sizeof(hash_word);
 	static const size_t size = transform::hash_size;
+	typedef util::checksum<size> checksum;
 	
 	void init() { count_lo = count_hi = 0; transform::init(state); }
 	
-	void update(const char * data, size_t length);
+	void update(const char * input, size_t length);
 	
 	void finalize(char * result);
+	
+	checksum finalize() {
+		checksum result;
+		finalize(result.data);
+		return result;
+	}
+	
+	static checksum compute(const char * input, size_t length) {
+		iterated_hash<T> hasher;
+		hasher.init();
+		hasher.update(input, length);
+		return hasher.finalize();
+	}
+	
+	static checksum compute(const std::string & input) {
+		return compute(input.data(), input.length());
+	}
 	
 private:
 
@@ -101,40 +128,40 @@ private:
 };
 
 template <class T>
-void iterated_hash<T>::update(const char * input, size_t len) {
+void iterated_hash<T>::update(const char * input, size_t length) {
 	
 	hash_word old_count_lo = count_lo;
 	
-	if((count_lo = old_count_lo + hash_word(len)) < old_count_lo) {
+	if((count_lo = old_count_lo + hash_word(length)) < old_count_lo) {
 		count_hi++; // carry from low to high
 	}
 	
-	count_hi += hash_word(util::safe_right_shift<8 * sizeof(hash_word)>(len));
+	count_hi += hash_word(util::safe_right_shift<8 * sizeof(hash_word)>(length));
 	
 	size_t num = old_count_lo % size_t(block_size);
 	
 	if(num != 0) { // process left over data
-		if(num + len >= block_size) {
-			std::memcpy(data + num, input, block_size-num);
+		if(num + length >= block_size) {
+			std::memcpy(data + num, input, block_size - num);
 			hash(data, block_size);
 			input += (block_size - num);
-			len -= (block_size - num);
+			length -= (block_size - num);
 			// drop through and do the rest
 		} else {
-			std::memcpy(data + num, input, len);
+			std::memcpy(data + num, input, length);
 			return;
 		}
 	}
 	
 	// now process the input data in blocks of BlockSize bytes and save the leftovers to m_data
-	if(len >= block_size) {
-		size_t leftOver = hash(input, len);
-		input += (len - leftOver);
-		len = leftOver;
+	if(length >= block_size) {
+		size_t leftOver = hash(input, length);
+		input += (length - leftOver);
+		length = leftOver;
 	}
 	
-	if(len) {
-		memcpy(data, input, len);
+	if(length) {
+		memcpy(data, input, length);
 	}
 }
 
@@ -188,19 +215,35 @@ void iterated_hash<T>::pad(size_t last_block_size, char pad_first) {
 }
 
 template <class T>
-void iterated_hash<T>::finalize(char * digest) {
+void iterated_hash<T>::finalize(char * result) {
 	
 	size_t order = transform::offset * sizeof(hash_word);
 	
-	size_t size = block_size - 2 * sizeof(hash_word);
-	pad(size);
-	byte_order::store(bit_count_lo(), data + size + order);
-	byte_order::store(bit_count_hi(), data + size + sizeof(hash_word) - order);
+	size_t padSize = block_size - 2 * sizeof(hash_word);
+	pad(padSize);
+	byte_order::store(bit_count_lo(), data + padSize + order);
+	byte_order::store(bit_count_hi(), data + padSize + sizeof(hash_word) - order);
 	
 	hash(data, block_size);
 	
-	byte_order::store(state, hash_size, digest);
+	byte_order::store(state, hash_size, result);
 	
+}
+
+template <size_t N>
+inline std::ostream & operator<<(std::ostream & os, const checksum<N> & c) {
+	
+	std::ios_base::fmtflags old = os.flags();
+	char oldfill = os.fill('0');
+	
+	os << std::hex;
+	for(size_t i = 0; i < sizeof(c.data); i++) {
+		os << std::setw(2) << int(u8(c.data[i]));
+	}
+	
+	os.fill(oldfill);
+	os.setf(old, std::ios_base::basefield);
+	return os;
 }
 
 } // namespace util

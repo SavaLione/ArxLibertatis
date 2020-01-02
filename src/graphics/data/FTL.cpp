@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2016 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -70,64 +70,6 @@ ZeniMax Media Inc., Suite 120, Rockville, Maryland 20850 USA.
 
 #include "util/String.h"
 
-// MESH cache structure definition & Globals
-struct MCACHE_DATA {
-	res::path name;
-	char * data;
-	size_t size;
-};
-static std::vector<MCACHE_DATA> meshCache;
-
-// Checks for Mesh file existence in cache
-static size_t MCache_Get(const res::path & file) {
-	
-	for(size_t i = 0; i < meshCache.size(); i++) {
-		if(meshCache[i].name == file) {
-			return i;
-		}
-	}
-	
-	return size_t(-1);
-}
-
-// Pushes a Mesh In Mesh Cache
-static bool MCache_Push(const res::path & file, char * data, size_t size) {
-	
-	if(MCache_Get(file) != size_t(-1)) {
-		return false; // already cached
-	}
-	
-	LogDebug(file << " #" << meshCache.size());
-	
-	MCACHE_DATA newMesh;
-	newMesh.size = size;
-	newMesh.data = data;
-	newMesh.name = file;
-	meshCache.push_back(newMesh);
-	
-	return true;
-}
-
-void MCache_ClearAll(){
-	for(std::vector<MCACHE_DATA>::iterator it = meshCache.begin(); it != meshCache.end(); ++it) {
-		free(it->data);
-	}
-
-	meshCache.clear();
-}
-
-// Retreives a Mesh File pointer from cache...
-static char * MCache_Pop(const res::path & file, size_t & size) {
-	
-	size_t num = MCache_Get(file);
-	if(num == size_t(-1)) {
-		return NULL;
-	}
-	
-	size = meshCache[num].size;
-	return meshCache[num].data;
-}
-
 EERIE_3DOBJ * ARX_FTL_Load(const res::path & file) {
 	
 	// Creates FTL file name
@@ -139,60 +81,38 @@ EERIE_3DOBJ * ARX_FTL_Load(const res::path & file) {
 		return NULL;
 	}
 	
-	size_t compressedSize = 0;
-	char * compressedData = MCache_Pop(filename, compressedSize);
-	LogDebug("File name check " << filename);
-	
-	bool NOrelease = true;
-	if(!compressedData) {
-		compressedData = pf->readAlloc();
-		compressedSize = pf->size();
-		NOrelease = MCache_Push(filename, compressedData, compressedSize) ? 1 : 0;
-	}
-	
-	if(!compressedData) {
-		LogError << "ARX_FTL_Load: error loading from PAK/cache " << filename;
+	std::string buffer = pf->read();
+	if(buffer.size() < 3) {
+		LogError << "Error loading FTL file: " << filename;
 		return NULL;
 	}
 	
-	char * dat;
-	
 	// Check if we have an uncompressed FTL file
-	if(compressedData[0] == 'F' && compressedData[1] == 'T' && compressedData[2] == 'L') {
-		LogInfo << "Uncompressed FTL found: " << filename;
-		dat = (char *) malloc(compressedSize);
-		memcpy(dat, compressedData, compressedSize);
-	} else {
-		size_t allocsize; // The size of the data TODO size ignored
-		dat = blastMemAlloc(compressedData, compressedSize, allocsize);
-		if(!dat) {
-			LogError << "ARX_FTL_Load: error decompressing " << filename;
+	if(buffer[0] != 'F' || buffer[1] != 'T' || buffer[2] != 'L') {
+		buffer = blast(buffer);
+		if(buffer.size() < 3) {
+			LogError << "Error decompressing FTL file: " << filename;
 			return NULL;
 		}
 	}
 	
-	if(!NOrelease) {
-		free(compressedData);
-	}
-	
+	const char * dat = buffer.data();
 	size_t pos = 0; // The position within the data
 	
 	// Pointer to Primary Header
 	const ARX_FTL_PRIMARY_HEADER * afph = reinterpret_cast<const ARX_FTL_PRIMARY_HEADER *>(dat + pos);
 	pos += sizeof(ARX_FTL_PRIMARY_HEADER);
 	
-	// Verify FTL file Signature
+	// Verify FTL file signature
 	if(afph->ident[0] != 'F' || afph->ident[1] != 'T' || afph->ident[2] != 'L') {
-		LogError << "ARX_FTL_Load: wrong magic number in " << filename;
-		free(dat);
+		LogError << "Invalid FTL file: " << filename;
 		return NULL;
 	}
 	
 	// Verify FTL file version
 	if(afph->version != CURRENT_FTL_VERSION) {
-		LogError << "ARX_FTL_Load: wring version " << afph->version << ", expected "
+		LogError << "Unexpected ftl version " << afph->version << ", expected "
 		         << CURRENT_FTL_VERSION << " in " << filename;
-		free(dat);
 		return NULL;
 	}
 	
@@ -204,7 +124,6 @@ EERIE_3DOBJ * ARX_FTL_Load(const res::path & file) {
 	afsh = reinterpret_cast<const ARX_FTL_SECONDARY_HEADER *>(dat + pos);
 	if(afsh->offset_3Ddata == -1) {
 		LogError << "ARX_FTL_Load: error loading data from " << filename;
-		free(dat);
 		return NULL;
 	}
 	pos = afsh->offset_3Ddata;
@@ -253,7 +172,7 @@ EERIE_3DOBJ * ARX_FTL_Load(const res::path & file) {
 		for(long ii = 0; ii < af3Ddh->nb_faces; ii++) {
 			EERIE_FACE & face = obj->facelist[ii];
 			
-			const EERIE_FACE_FTL * eff = reinterpret_cast<const EERIE_FACE_FTL*>(dat + pos);
+			const EERIE_FACE_FTL * eff = reinterpret_cast<const EERIE_FACE_FTL *>(dat + pos);
 			pos += sizeof(EERIE_FACE_FTL);
 			
 			face.facetype = PolyType::load(eff->facetype);
@@ -298,15 +217,12 @@ EERIE_3DOBJ * ARX_FTL_Load(const res::path & file) {
 	}
 	
 	// Alloc'n'Copy groups
-	if(obj->grouplist.size() > 0) {
-		
-		// Alloc the grouplists
-		obj->grouplist.resize(obj->grouplist.size());
+	if(!obj->grouplist.empty()) {
 		
 		// Copy in the grouplist data
 		for(size_t i = 0 ; i < obj->grouplist.size() ; i++) {
 			
-			const EERIE_GROUPLIST_FTL* group = reinterpret_cast<const EERIE_GROUPLIST_FTL *>(dat + pos);
+			const EERIE_GROUPLIST_FTL * group = reinterpret_cast<const EERIE_GROUPLIST_FTL *>(dat + pos);
 			pos += sizeof(EERIE_GROUPLIST_FTL);
 			
 			obj->grouplist[i].name = boost::to_lower_copy(util::loadString(group->name));
@@ -319,9 +235,10 @@ EERIE_3DOBJ * ARX_FTL_Load(const res::path & file) {
 		// Copy in the group index data
 		for(size_t i = 0; i < obj->grouplist.size(); i++) {
 			if(!obj->grouplist[i].indexes.empty()) {
-				size_t oldpos = pos;
-				pos += sizeof(s32) * obj->grouplist[i].indexes.size(); // Advance to the next index block
-				std::copy((const s32 *)(dat+oldpos), (const s32 *)(dat + pos), obj->grouplist[i].indexes.begin());
+				const s32 * begin = reinterpret_cast<const s32 *>(dat + pos);
+				pos += sizeof(s32) * obj->grouplist[i].indexes.size();
+				const s32 * end = reinterpret_cast<const s32 *>(dat + pos);
+				std::copy(begin, end, obj->grouplist[i].indexes.begin());
 			}
 		}
 	}
@@ -344,18 +261,20 @@ EERIE_3DOBJ * ARX_FTL_Load(const res::path & file) {
 	
 	// Copy in the selections selected data
 	for(long i = 0; i < af3Ddh->nb_selections; i++) {
-		std::copy((const s32 *)(dat + pos), (const s32 *)(dat + pos) + obj->selections[i].selected.size(), obj->selections[i].selected.begin() );
-		pos += sizeof(s32) * obj->selections[i].selected.size(); // Advance to the next selection data block
+		const s32 * begin = reinterpret_cast<const s32 *>(dat + pos);
+		pos += sizeof(s32) * obj->selections[i].selected.size();
+		const s32 * end = reinterpret_cast<const s32 *>(dat + pos);
+		std::copy(begin, end, obj->selections[i].selected.begin());
 	}
+	
+	ARX_UNUSED(pos);
+	arx_assert(pos <= buffer.size());
 	
 	obj->pbox = NULL; // Reset physics
 	
 	if(afsh->offset_collision_spheres != -1) {
 		obj->sdata = true;
 	}
-	
-	// Free the loaded file memory
-	free(dat);
 	
 	EERIE_OBJECT_CenterObjectCoordinates(obj);
 	EERIE_CreateCedricData(obj);
@@ -364,10 +283,10 @@ EERIE_3DOBJ * ARX_FTL_Load(const res::path & file) {
 	
 	LogDebug("ARX_FTL_Load: loaded object " << filename);
 	
-	arx_assert(obj->pos == Vec3f_ZERO);
-	arx_assert(obj->point0 == Vec3f_ZERO);
-	arx_assert(obj->angle == Anglef::ZERO);
-	arx_assert(obj->quat == glm::quat());
+	arx_assert(obj->pos == Vec3f(0.f));
+	arx_assert(obj->point0 == Vec3f(0.f));
+	arx_assert(obj->angle == Anglef());
+	arx_assert(obj->quat == quat_identity());
 	
 	return obj;
 }

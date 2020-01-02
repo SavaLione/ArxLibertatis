@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2016 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -30,9 +30,6 @@ enum ParticleParam {
 	ParticleParam_CurePoison,
 	ParticleParam_FireFieldBase,
 	ParticleParam_FireFieldFlame,
-	ParticleParam_Poison1,
-	ParticleParam_Poison2,
-	ParticleParam_Poison3,
 	ParticleParam_MAX
 };
 

@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2015 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -97,8 +97,8 @@ public:
 	
 	~RenderBatcher();
 
-	void add(const RenderMaterial& mat, const TexturedVertex(&vertices)[3]);
-	void add(const RenderMaterial& mat, const TexturedQuad& sprite);
+	void add(const RenderMaterial & mat, const TexturedVertex (&vertices)[3]);
+	void add(const RenderMaterial & mat, const TexturedQuad & sprite);
 
 	//! Render all batches
 	void render();

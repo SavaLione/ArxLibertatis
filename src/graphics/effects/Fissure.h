@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-2017 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2015-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -50,74 +50,80 @@ public:
 class CRiseDead : public FissureFx {
 	
 public:
+	
 	CRiseDead();
 	~CRiseDead();
 	
 	GameDuration GetDuration();
 	
-	void Create(Vec3f, float afBeta = 0);
+	void Create(Vec3f aeSrc, float afBeta = 0);
 	void Update(GameDuration timeDelta);
 	void Render();
 	
 	Vec3f m_eSrc;
 	
 private:
-	float	fBetaRadCos;
-	float	fBetaRadSin;
+	
+	float fBetaRadCos;
+	float fBetaRadSin;
 	
 	void Split(Vec3f * v, int a, int b, float yo);
 	void RenderFissure();
 	
 	TextureContainer * tex_light;
-	int		end;
-	int		iSize;
-	bool	bIntro;
-	float	sizeF;
-	float	fSizeIntro;
-	float	tfRaysa[40];
-	float	tfRaysb[40];
-	Vec3f va[40];
-	Vec3f vb[40];
-	Vec3f v1a[40];
-	Vec3f v1b[40];
-	
-	FloatingStones m_stones;
-};
-
-
-// Done By : Didier Pedreno
-class CSummonCreature : public FissureFx {
-public:
-	Vec3f m_eSrc;
-	
-	CSummonCreature();
-	
-	void Create(Vec3f, float afBeta = 0);
-	void Kill();
-	void Update(GameDuration timeDelta);
-	void Render();
-	
-private:
-	float	fBetaRadCos;
-	float	fBetaRadSin;
-	
-	void Split(Vec3f * v, int a, int b, float yo);
-	void RenderFissure();
-	
-	TextureContainer * tex_light;
-	int		end;
-	int		iSize;
-	bool	bIntro;
-	float	fOneOniSize;
-
-	float	sizeF;
-	float	fSizeIntro;
+	int end;
+	int iSize;
+	bool bIntro;
+	float sizeF;
+	int m_visibleNotches;
 	float tfRaysa[40];
 	float tfRaysb[40];
 	Vec3f va[40];
 	Vec3f vb[40];
 	Vec3f v1a[40];
 	Vec3f v1b[40];
+	
+	FloatingStones m_stones;
+	
+};
+
+
+// Done By : Didier Pedreno
+class CSummonCreature : public FissureFx {
+	
+public:
+	
+	Vec3f m_eSrc;
+	
+	CSummonCreature();
+	
+	void Create(Vec3f aeSrc, float afBeta = 0);
+	void Kill();
+	void Update(GameDuration timeDelta);
+	void Render();
+	
+private:
+	
+	float fBetaRadCos;
+	float fBetaRadSin;
+	
+	void Split(Vec3f * v, int a, int b, float yo);
+	void RenderFissure();
+	
+	TextureContainer * tex_light;
+	int end;
+	int iSize;
+	bool bIntro;
+	
+	float sizeF;
+	int m_visibleNotches;
+	float tfRaysa[40];
+	float tfRaysb[40];
+	Vec3f va[40];
+	Vec3f vb[40];
+	Vec3f v1a[40];
+	Vec3f v1b[40];
+	
 };
 
 #endif // ARX_GRAPHICS_EFFECTS_FISSURE_H

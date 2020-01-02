@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2017 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -51,7 +51,7 @@ static bool CINE_PRELOAD = false;
 static std::string WILL_LAUNCH_CINE;
 static std::string LAST_LAUNCHED_CINE;
 
-Cinematic			*ControlCinematique=NULL;	// 2D Cinematic Controller
+Cinematic * ControlCinematique = NULL; // 2D Cinematic Controller
 
 void cinematicInit() {
 	const Vec2i & size = mainApp->getWindow()->getSize();
@@ -93,11 +93,11 @@ void cinematicLaunchWaiting() {
 	}
 
 	LogDebug("LaunchWaitingCine " << CINE_PRELOAD);
-
-	if(ACTIVECAM) {
-		g_originalCameraPosition = ACTIVECAM->orgTrans.pos;
+	
+	if(g_camera) {
+		g_originalCameraPosition = g_camera->m_pos;
 	}
-
+	
 	cinematicKill();
 
 	res::path cinematic = res::path("graph/interface/illustrations") / WILL_LAUNCH_CINE;
@@ -132,11 +132,23 @@ bool cinematicIsStopped() {
 	return PLAY_LOADED_CINEMATIC == Cinematic_Stopped;
 }
 
-
 bool isInCinematic() {
-	return PLAY_LOADED_CINEMATIC != Cinematic_Stopped
-			&& ControlCinematique
-			&& ControlCinematique->projectload;
+	return PLAY_LOADED_CINEMATIC != Cinematic_Stopped && ControlCinematique && ControlCinematique->projectload;
+}
+
+void cinematicEnd() {
+	
+	StopSoundKeyFramer();
+	cinematicKill();
+	
+	if(g_camera) {
+		arx_assert(isallfinite(g_originalCameraPosition));
+		g_camera->m_pos = g_originalCameraPosition;
+	}
+	
+	ARX_SPEECH_Reset();
+	SendMsgToAllIO(NULL, SM_CINE_END, LAST_LAUNCHED_CINE);
+	
 }
 
 // Manages Currently playing 2D cinematic
@@ -155,28 +167,8 @@ void cinematicRender() {
 	ControlCinematique->Render(diff);
 
 	// end the animation
-	if(   !ControlCinematique->key
-	   || GInput->isKeyPressedNowUnPressed(Keyboard::Key_Escape)
-	) {
-		StopSoundKeyFramer();
-		cinematicKill();
-
-		bool bWasBlocked = false;
-		if(BLOCK_PLAYER_CONTROLS) {
-			bWasBlocked = true;
-		}
-
-		// !! avant le cine end
-		if(ACTIVECAM) {
-			arx_assert(isallfinite(g_originalCameraPosition));
-			ACTIVECAM->orgTrans.pos = g_originalCameraPosition;
-		}
-
-		if(bWasBlocked) {
-			BLOCK_PLAYER_CONTROLS = true;
-		}
-
-		ARX_SPEECH_Reset();
-		SendMsgToAllIO(SM_CINE_END, LAST_LAUNCHED_CINE);
+	if(!ControlCinematique->m_key) {
+		cinematicEnd();
 	}
+	
 }

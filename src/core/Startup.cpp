@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2017 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -102,6 +102,10 @@ int utf8_main(int argc, char ** argv) {
 		oss << ARX_COMPILER_VERNAME;
 		CrashHandler::setVariable("Compiler", oss.str());
 		credits::setLibraryCredits("compiler", oss.str());
+		oss.str(std::string());
+		oss << ARX_STDLIB_VERNAME;
+		CrashHandler::setVariable("stdlib", oss.str());
+		credits::setLibraryCredits("stdlib", oss.str());
 		CrashHandler::setVariable("CMake", cmake_version);
 		credits::setLibraryCredits("build", "CMake " + cmake_version);
 		oss.str(std::string());
@@ -135,18 +139,18 @@ int utf8_main(int argc, char ** argv) {
 	
 	// Setup user, config and data directories
 	if(status == RunProgram) {
-		status = fs::paths.init();
+		status = fs::initSystemPaths();
 	}
 	
 	if(status == RunProgram) {
 		
 		// Configure the crash report location
-		CrashHandler::setReportLocation(fs::paths.user / "crashes");
+		CrashHandler::setReportLocation(fs::getUserDir() / "crashes");
 		CrashHandler::deleteOldReports(/* nb to keep = */1);
 		
 		// Now that data directories are initialized, create a log file
 		{
-			fs::path logFile = fs::paths.user / "arx.log";
+			fs::path logFile = fs::getUserDir() / "arx.log";
 			Logger::add(new logger::File(logFile));
 			CrashHandler::addAttachedFile(logFile);
 		}

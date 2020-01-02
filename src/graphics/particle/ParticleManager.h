@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2017 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -69,5 +69,7 @@ public:
 	void Render();
 	
 };
+
+extern ParticleManager g_particleManager;
 
 #endif // ARX_GRAPHICS_PARTICLE_PARTICLEMANAGER_H

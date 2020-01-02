@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2016 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -45,14 +45,15 @@ ZeniMax Media Inc., Suite 120, Rockville, Maryland 20850 USA.
 #define ARX_GRAPHICS_EFFECTS_FIELD_H
 
 #include "graphics/effects/SpellEffects.h"
+#include "platform/Platform.h"
 
 // Done By : Didier Pedreno
-class CCreateField : public CSpellFx {
+class CCreateField arx_final : public CSpellFx {
 	
 public:
 	CCreateField();
 	
-	void Create(Vec3f);
+	void Create(Vec3f aeSrc);
 	void Update(GameDuration timeDelta);
 	void Render();
 	
@@ -63,12 +64,9 @@ private:
 	TextureContainer * tex_jelly;
 	bool youp;
 	float fwrap;
-	float ysize;
 	float size;
 	float ft;
 	float fglow;
-	Vec3f b[4];
-	Vec3f t[4];
 	
 	float falpha;
 	

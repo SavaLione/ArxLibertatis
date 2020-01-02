@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2016 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -32,9 +32,9 @@ class Texture {
 public:
 	
 	enum TextureFlag {
-		HasMipmaps  = (1<<0),
-		ApplyColorKey = (1<<1),
-		Intensity   = (1<<2),
+		HasMipmaps    = 1 << 0,
+		ApplyColorKey = 1 << 1,
+		Intensity     = 1 << 2,
 	};
 	DECLARE_FLAGS(TextureFlag, TextureFlags)
 	
@@ -55,8 +55,8 @@ public:
 	Image::Format getFormat() const { return m_format; }
 	bool hasAlpha() const { return Image::hasAlpha(getFormat()); }
 	
-	bool hasMipmaps() const { return (m_flags & HasMipmaps); }
-	bool isIntensity() const { return (m_flags & Intensity); }
+	bool hasMipmaps() const { return (m_flags & HasMipmaps) != 0; }
+	bool isIntensity() const { return (m_flags & Intensity) != 0; }
 	
 	Image & getImage() { return m_image; }
 	const res::path & getFileName() const { return m_filename; }
@@ -68,8 +68,8 @@ protected:
 	Texture()
 		: m_format(Image::Format_Unknown)
 		, m_flags(0)
-		, m_size(Vec2i_ZERO)
-		, m_storedSize(Vec2i_ZERO)
+		, m_size(0)
+		, m_storedSize(0)
 	{ }
 	
 	virtual bool create() = 0;

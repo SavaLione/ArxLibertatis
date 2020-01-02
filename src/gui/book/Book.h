@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2015-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -21,6 +21,7 @@
 #define ARX_GUI_BOOK_BOOK_H
 
 #include "graphics/Color.h"
+#include "gui/Menu.h"
 #include "gui/Note.h"
 
 enum ARX_INTERFACE_BOOK_MODE
@@ -41,25 +42,31 @@ public:
 	
 private:
 	
-	static const Vec2f m_activeTabPositions[10];
-	static const Vec2f m_tabPositions[10];
+	static const Vec2f m_activeTabOffsets[10];
+	static const Vec2f m_tabOffsets[10];
 	
 	void drawTab(long tabNum);
 	void drawActiveTab(long tabNum);
-	void checkTabClick(long tabNum, long &activeTab);
+	void checkTabClick(long tabNum, long & activeTab);
 	
 };
 
+static const size_t MAX_FLYOVER = 32;
+
 class StatsPage : public PlayerBookPage {
 public:
+	void loadStrings();
+	
 	void manage();
 	void manageNewQuest();
 private:
 	void manageStats();
 	void RenderBookPlayerCharacter();
 	bool CheckAttributeClick(Vec2f pos, float * val, TextureContainer * tc);
-	bool CheckSkillClick(Vec2f pos, float * val, TextureContainer * tc, float * oldval);
+	bool CheckSkillClick(Vec2f pos, float * val, TextureContainer * tc, float oldval);
 	Color attributeModToColor(float modValue, float baseValue = 0.f);
+	
+	std::string flyover[MAX_FLYOVER];
 };
 
 class SpellsPage : public PlayerBookPage {
@@ -94,7 +101,9 @@ private:
 };
 
 class PlayerBook {
+	
 public:
+	
 	StatsPage stats;
 	SpellsPage spells;
 	MapPage map;
@@ -103,6 +112,7 @@ public:
 	ARX_INTERFACE_BOOK_MODE m_currentPage;
 
 	PlayerBook();
+	void update();
 	void manage();
 	void openPage(ARX_INTERFACE_BOOK_MODE newPage, bool toggle = false);
 	void openNextPage();
@@ -112,14 +122,29 @@ public:
 	void open();
 	void close();
 	void toggle();
-
+	
 	void clearJournal();
+	
+	float getScale();
+	const Rectf & getArea();
+	
 private:
+	
+	Vec2f lastRatio;
+	float lastHudScale;
+	float lastScaleSetting;
+	MenuMode lastMenuMode;
+	
 	bool canOpenPage(ARX_INTERFACE_BOOK_MODE page);
 	ARX_INTERFACE_BOOK_MODE nextPage();
 	ARX_INTERFACE_BOOK_MODE prevPage();
 	void onClosePage();
-	void drawTopTabs();
+	void manageTopTabs();
+	
+	bool needsUpdate();
+	void updateRect();
+	void updateScale();
+	
 };
 
 extern PlayerBook g_playerBook;

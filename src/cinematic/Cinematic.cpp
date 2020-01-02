@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2017 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -56,6 +56,7 @@ ZeniMax Media Inc., Suite 120, Rockville, Maryland 20850 USA.
 #include "core/ArxGame.h"
 #include "core/Config.h"
 #include "core/Core.h"
+#include "core/FpsCounter.h"
 #include "graphics/Color.h"
 #include "graphics/Math.h"
 #include "graphics/Renderer.h"
@@ -77,35 +78,30 @@ static bool FlashBlancEnCours;
 static float OldSpeedFlashBlanc;
 static Color OldColorFlashBlanc;
 
-extern float	FlashAlpha;
+extern float FlashAlpha;
 
 Cinematic::Cinematic(Vec2i size)
-	: pos()
-	, angz()
-	, m_nextPos()
-	, m_nextAngz()
+	: m_pos(0.f)
+	, angz(0.f)
+	, m_nextPos(0.f)
+	, m_nextAngz(0.f)
 	, numbitmap(-1)
 	, m_nextNumbitmap(-1)
-	, a()
+	, a(0.f)
 	, fx(-1)
-	, m_nextFx()
+	, m_nextFx(0)
 	, changekey(true)
-	, key(NULL)
+	, m_key(NULL)
 	, projectload(false)
 	, ti(INTERP_BEZIER)
-	, force()
-	, color()
-	, colord()
-	, colorflash()
-	, speed()
+	, force(0)
+	, speed(0.f)
 	, idsound(-1)
-	, m_light()
-	, m_lightd()
-	, posgrille()
-	, angzgrille()
-	, m_nextPosgrille()
-	, m_nextAngzgrille()
-	, speedtrack()
+	, posgrille(0.f)
+	, angzgrille(0.f)
+	, m_nextPosgrille(0.f)
+	, m_nextAngzgrille(0.f)
+	, speedtrack(0.f)
 	, flTime(0)
 	, cinRenderSize(size)
 { }
@@ -117,10 +113,8 @@ Cinematic::~Cinematic() {
 /* Reinit */
 void Cinematic::OneTimeSceneReInit() {
 	
-	m_camera.orgTrans.pos = Vec3f(900.f, -160.f, 4340.f);
+	m_camera.m_pos = Vec3f(900.f, -160.f, 4340.f);
 	m_camera.angle = Anglef(3.f, 268.f, 0.f);
-	m_camera.clip = Rect(cinRenderSize.x, cinRenderSize.y);
-	m_camera.center = m_camera.clip.center();
 	m_camera.focal = 350.f;
 	m_camera.cdepth = 2500.f;
 	
@@ -129,7 +123,7 @@ void Cinematic::OneTimeSceneReInit() {
 	fx = -1;
 	changekey = true;
 	idsound = -1;
-	key = NULL;
+	m_key = NULL;
 	
 	projectload = false;
 	
@@ -145,80 +139,12 @@ void Cinematic::OneTimeSceneReInit() {
 	
 }
 
-void Cinematic::New() {
+void Cinematic::DeleteAllBitmap() {
 	
-	projectload = false;
-	
-	numbitmap = -1;
-	m_nextNumbitmap = -1;
-	fx = -1;
-	key = NULL;
-	
-	DeleteTrack();
-	DeleteAllBitmap();
-	DeleteAllSound();
-	
-	AllocTrack(0, 100, 30.f);
-	
-	{
-	CinematicKeyframe key;
-	key.frame = 0;
-	key.numbitmap = -1;
-	key.fx = -1;
-	key.typeinterp = INTERP_BEZIER;
-	key.force = 1;
-	key.pos = pos;
-	key.angz = angz;
-	key.color = Color(255, 255, 255, 0);
-	key.colord = Color(255, 255, 255, 0);
-	key.colorf = Color(255, 255, 255, 0);
-	key.idsound = -1;
-	key.speed = 1.f;
-	key.posgrille = posgrille;
-	key.angzgrille = angzgrille;
-	key.speedtrack = 1.f;
-	
-	AddKey(key);
-	}
-	
-	{
-	CinematicKeyframe key;
-	key.frame = 100;
-	key.numbitmap = -1;
-	key.fx = -1;
-	key.typeinterp = INTERP_BEZIER;
-	key.force = 1;
-	key.pos = pos;
-	key.angz = angz;
-	key.color = Color(255, 255, 255, 0);
-	key.colord = Color(255, 255, 255, 0);
-	key.colorf = Color(255, 255, 255, 0);
-	key.idsound = -1;
-	key.speed = 1.f;
-	key.posgrille = posgrille;
-	key.angzgrille = angzgrille;
-	key.speedtrack = 1.f;
-	key.light.intensity = -2.f;
-	
-	AddKey(key);
-	}
-	m_lightd = m_light;
-	
-	SetCurrFrame(GetStartFrame());
-	
-	projectload = true;
-	
-	FlashBlancEnCours = false;
-	
-}
-
-void Cinematic::DeleteAllBitmap()
-{
-	for(std::vector<CinematicBitmap*>::iterator it = m_bitmaps.begin(); it != m_bitmaps.end(); ++it)
-	{
+	for(std::vector<CinematicBitmap *>::iterator it = m_bitmaps.begin(); it != m_bitmaps.end(); ++it) {
 		delete *it;
 	}
-
+	
 	m_bitmaps.clear();
 }
 
@@ -226,26 +152,18 @@ static float LightRND;
 
 static Color CalculLight(CinematicLight * light, Vec2f pos, Color col) {
 	
-	float	ra = std::sqrt((light->pos.x - pos.x) * (light->pos.x - pos.x) + (light->pos.y - pos.y) * (light->pos.y - pos.y));
-
-	if(ra > light->fallout) {
-		return (col * LightRND);
-	} else {
-		Color3f color;
-
-		if(ra < light->fallin) {
-			color = light->color * LightRND;
-		} else {
-			ra = (light->fallout - ra) / (light->fallout - light->fallin);
-			color = light->color * (LightRND * ra);
-		}
-		
-		Color in = col;
-		in.r = std::min(in.r + (int)color.r, 255);
-		in.g = std::min(in.g + (int)color.g, 255);
-		in.b = std::min(in.b + (int)color.b, 255);
-		return in;
+	float distance = glm::distance(Vec2f(light->pos), pos);
+	
+	if(distance > light->fallout) {
+		return col * LightRND;
 	}
+	
+	float attenuation = LightRND / 255.f;
+	if(distance >= light->fallin) {
+		attenuation *= (light->fallout - distance) / (light->fallout - light->fallin);
+	}
+	
+	return Color(Color3f(col) + light->color * attenuation, col.a);
 }
 
 static Vec3f TransformLocalVertex(const Vec2f & vbase, const Vec3f & LocalPos, float LocalSin, float LocalCos) {
@@ -264,7 +182,6 @@ void DrawGrille(CinematicBitmap * bitmap, Color col, int fx, CinematicLight * li
 	Vec2f * v = grille->m_vertexs.data();
 	TexturedVertex * d3dv = AllTLVertex;
 
-	Vec3f LocalPos = pos;
 	float LocalSin = glm::sin(glm::radians(angle));
 	float LocalCos = glm::cos(glm::radians(angle));
 
@@ -275,7 +192,7 @@ void DrawGrille(CinematicBitmap * bitmap, Color col, int fx, CinematicLight * li
 			Vec2f t;
 			t.x = v->x + *dream++;
 			t.y = v->y + *dream++;
-			Vec3f vtemp = TransformLocalVertex(t, LocalPos, LocalSin, LocalCos);
+			Vec3f vtemp = TransformLocalVertex(t, pos, LocalSin, LocalCos);
 			worldToClipSpace(vtemp, *d3dv);
 			if(light) {
 				d3dv->color = CalculLight(light, Vec2f(d3dv->p.x, d3dv->p.y) / d3dv->w, col).toRGBA();
@@ -287,7 +204,7 @@ void DrawGrille(CinematicBitmap * bitmap, Color col, int fx, CinematicLight * li
 		}
 	} else {
 		while(nb--) {
-			Vec3f vtemp = TransformLocalVertex(*v, LocalPos, LocalSin, LocalCos);
+			Vec3f vtemp = TransformLocalVertex(*v, pos, LocalSin, LocalCos);
 			worldToClipSpace(vtemp, *d3dv);
 			if(light) {
 				d3dv->color = CalculLight(light, Vec2f(d3dv->p.x, d3dv->p.y) / d3dv->w, col).toRGBA();
@@ -314,41 +231,40 @@ void DrawGrille(CinematicBitmap * bitmap, Color col, int fx, CinematicLight * li
 	C_UV * uvs = grille->m_uvs.data();
 	for(std::vector<C_INDEXED>::iterator it = grille->m_mats.begin(); it != grille->m_mats.end(); ++it)
 	{
-		C_INDEXED* mat = &(*it);
+		C_INDEXED * mat = &*it;
 
 		arx_assert(mat->tex);
 		GRenderer->SetTexture(0, mat->tex);
 		
-		int	nb2 = mat->nbvertexs;
+		int nb2 = mat->nbvertexs;
 		while(nb2--) {
 			AllTLVertex[uvs->indvertex].uv = uvs->uv;
 			
 			if(fadeEdges) {
 				
 				// Reconstruct position in the bitmap
-				Vec2f pos = Vec2f(mat->bitmapdep) + uvs->uv * Vec2f(mat->tex->getStoredSize());
+				Vec2f p = Vec2f(mat->bitmapdep) + uvs->uv * Vec2f(mat->tex->getStoredSize());
 				
 				// Roughen up the lines
-				Vec2f f = 0.75f + glm::sin(pos) * 0.25f;
+				Vec2f f = 0.75f + glm::sin(p) * 0.25f;
 				
 				float interp = 1.f;
-				if(pos.x < fo.left * f.y) {
-					interp *= glm::clamp(pos.x / (fo.left * f.y), 0.f, 1.f);
+				if(p.x < fo.left * f.y) {
+					interp *= glm::clamp(p.x / (fo.left * f.y), 0.f, 1.f);
 				}
-				if(float(bitmap->m_size.x) - pos.x < fo.right * f.y) {
-					interp *= glm::clamp((float(bitmap->m_size.x) - pos.x) / (fo.right * f.y), 0.f, 1.f);
+				if(float(bitmap->m_size.x) - p.x < fo.right * f.y) {
+					interp *= glm::clamp((float(bitmap->m_size.x) - p.x) / (fo.right * f.y), 0.f, 1.f);
 				}
-				if(pos.y < fo.top * f.x) {
-					interp *= glm::clamp(pos.y / (fo.top * f.x), 0.f, 1.f);
+				if(p.y < fo.top * f.x) {
+					interp *= glm::clamp(p.y / (fo.top * f.x), 0.f, 1.f);
 				}
-				if(float(bitmap->m_size.y) - pos.y < fo.bottom * f.x) {
-					interp *= glm::clamp((float(bitmap->m_size.y) - pos.y) / (fo.bottom * f.x), 0.f, 1.f);
+				if(float(bitmap->m_size.y) - p.y < fo.bottom * f.x) {
+					interp *= glm::clamp((float(bitmap->m_size.y) - p.y) / (fo.bottom * f.x), 0.f, 1.f);
 				}
 				
 				if(interp != 1.f) {
-					u8 iinterp = u8(interp * (Color::Limits::max() / ColorLimits<float>::max()));
 					Color color = Color::fromRGBA(AllTLVertex[uvs->indvertex].color);
-					color.a = std::min(color.a, iinterp);
+					color.a = std::min(color.a, Color::Traits::convert(interp));
 					AllTLVertex[uvs->indvertex].color = color.toRGBA();
 				}
 				
@@ -377,9 +293,9 @@ void Cinematic::Render(PlatformDuration frameDuration) {
 	
 	GereTrack(this, frameDuration, resized, true);
 	
-	//sound
-	if(changekey && idsound >= 0)
+	if(changekey && idsound >= 0) {
 		PlaySoundKeyFramer(size_t(idsound));
+	}
 	
 	if(config.interface.cinematicWidescreenMode == CinematicLetterbox) {
 		s32 w = s32(640 * g_sizeRatio.y);
@@ -387,21 +303,20 @@ void Cinematic::Render(PlatformDuration frameDuration) {
 	}
 	
 	UseRenderState state(render2D());
-	GRenderer->GetTextureStage(0)->setWrapMode(TextureStage::WrapClamp);
+	UseTextureState textureState(TextureStage::FilterLinear, TextureStage::WrapClamp);
 	GRenderer->GetTextureStage(0)->setAlphaOp(TextureStage::OpModulate);
 	
-	//image key
 	CinematicBitmap * tb = m_bitmaps[numbitmap];
 	
-	//fx
-	Color col = Color(255, 255, 255, 0);
+	// Effect color
+	Color col = Color::white;
 	
 	switch(fx & CinematicFxMask) {
 		case FX_FADEIN:
-			col = FX_FadeIN(a, color, colord);
+			col = Color(Color4f(color) * a + Color4f(colord) * (1.f - a));
 			break;
 		case FX_FADEOUT:
-			col = FX_FadeOUT(a, color, colord);
+			col = Color(Color4f(color) * (1.f - a) + Color4f(colord) * a);
 			break;
 		case FX_BLUR:
 			FX_Blur(this, tb, m_camera);
@@ -410,31 +325,28 @@ void Cinematic::Render(PlatformDuration frameDuration) {
 			break;
 	}
 	
-	//fx precalculation
+	// Effect precalculation
 	switch(fx & CinematicFxPreMask) {
 		case FX_DREAM:
 			
 			if ((m_nextFx & CinematicFxPreMask) == FX_DREAM)
-				FX_DreamPrecalc(tb, 15.f, (FPS > 1.f) ? GetTrackFPS() / FPS : 0.f);
+				FX_DreamPrecalc(tb, 15.f, (g_fpsCounter.FPS > 1.f) ? GetTrackFPS() / g_fpsCounter.FPS : 0.f);
 			else
-				FX_DreamPrecalc(tb, 15.f * a, (FPS > 1.f) ? GetTrackFPS() / FPS : 0.f);
+				FX_DreamPrecalc(tb, 15.f * a, (g_fpsCounter.FPS > 1.f) ? GetTrackFPS() / g_fpsCounter.FPS : 0.f);
 			
 			break;
 		default:
 			break;
 	}
 	
-	arx_assert(isallfinite(pos));
-	m_camera.orgTrans.pos = pos;
+	arx_assert(isallfinite(m_pos));
+	m_camera.m_pos = m_pos;
 	m_camera.angle.setPitch(0);
 	m_camera.angle.setYaw(0);
 	m_camera.angle.setRoll(angz);
-	m_camera.clip = g_size;
-	m_camera.center = g_size.center();
 	PrepareCamera(&m_camera, g_size);
-	SetActiveCamera(&m_camera);
 	
-	int alpha = (int)(a * 255.f);
+	int alpha = int(a * 255.f);
 	
 	if(force ^ 1)
 		alpha = 255;
@@ -447,34 +359,35 @@ void Cinematic::Render(PlatformDuration frameDuration) {
 	float FDIFF = toMs(frameDuration);
 	
 	{
-	CinematicLight *l = NULL;
-	CinematicLight lightt;
-	
-	if(m_light.intensity >= 0.f && m_lightd.intensity >= 0.f) {
-		lightt = m_light;
 		
-		lightt.pos = lightt.pos * g_sizeRatio.y + Vec3f(g_size.center(), 0.f);
-		lightt.fallin *= g_sizeRatio.y;
-		lightt.fallout *= g_sizeRatio.y;
+		CinematicLight * l = NULL;
+		CinematicLight lightt;
+		if(m_light.intensity >= 0.f && m_lightd.intensity >= 0.f) {
+			lightt = m_light;
+			
+			lightt.pos = lightt.pos * g_sizeRatio.y + Vec3f(g_size.center(), 0.f);
+			lightt.fallin *= g_sizeRatio.y;
+			lightt.fallout *= g_sizeRatio.y;
+			
+			flicker.update(FDIFF * SPEEDINTENSITYRND);
+			LightRND =  std::min(lightt.intensity + lightt.intensiternd * flicker.get(), 1.f);
+			
+			l = &lightt;
+		}
 		
-		flicker.update(FDIFF * SPEEDINTENSITYRND);
-		LightRND =  std::min(lightt.intensity + lightt.intensiternd * flicker.get(), 1.f);
+		if(tb->grid.m_nbvertexs) {
+			DrawGrille(tb, col, fx, l, posgrille, angzgrille, fadegrille);
+		}
 		
-		l = &lightt;
 	}
 	
-	if(tb->grid.m_nbvertexs)
-		DrawGrille(tb, col, fx, l, posgrille, angzgrille, fadegrille);
-	
-	}
-	
-	//PASS #2
+	// Second pass
 	if(force & 1) {
 		switch(ti) {
 			case INTERP_NO:
 				arx_assert(isallfinite(m_nextPos));
 				
-				m_camera.orgTrans.pos = m_nextPos;
+				m_camera.m_pos = m_nextPos;
 				m_camera.angle.setPitch(0);
 				m_camera.angle.setYaw(0);
 				m_camera.angle.setRoll(m_nextAngz);
@@ -491,8 +404,7 @@ void Cinematic::Render(PlatformDuration frameDuration) {
 		alpha = 255 - alpha;
 		col.a = alpha;
 		
-		{
-		CinematicLight *l = NULL;
+		CinematicLight * l = NULL;
 		CinematicLight lightt;
 		
 		if(m_light.intensity >= 0.f && m_lightd.intensity >= 0.f) {
@@ -511,13 +423,11 @@ void Cinematic::Render(PlatformDuration frameDuration) {
 		if(tb->grid.m_nbvertexs)
 			DrawGrille(tb, col, fx, l, m_nextPosgrille, m_nextAngzgrille, m_nextFadegrille);
 		
-		}
 	}
 	
-	GRenderer->GetTextureStage(0)->setWrapMode(TextureStage::WrapRepeat);
 	GRenderer->GetTextureStage(0)->setAlphaOp(TextureStage::OpSelectArg1);
 	
-	//effets qui continuent avec le temps
+	// Effects that continue over time
 	if(FlashBlancEnCours && (fx & CinematicFxPostMask) != FX_FLASH) {
 		speed = OldSpeedFlashBlanc;
 		colorflash = OldColorFlashBlanc;
@@ -538,22 +448,20 @@ void Cinematic::Render(PlatformDuration frameDuration) {
 		changekey = false;
 	}
 	
-	//post fx
+	// Post-effect
 	switch(fx & CinematicFxPostMask) {
 		case FX_FLASH:
-			FlashBlancEnCours = FX_FlashBlanc(Vec2f(cinRenderSize), speed, colorflash, GetTrackFPS(), FPS);
+			FlashBlancEnCours = FX_FlashBlanc(Vec2f(cinRenderSize), speed, colorflash, GetTrackFPS(), g_fpsCounter.FPS);
 			break;
 		case FX_APPEAR:
-			
 			break;
 		case FX_APPEAR2:
-			
 			break;
 		default:
 			break;
 	}
 	
-	CalcFPS();
+	g_fpsCounter.CalcFPS();
 	
 	if(config.interface.cinematicWidescreenMode == CinematicLetterbox) {
 		GRenderer->SetScissor(Rect::ZERO);

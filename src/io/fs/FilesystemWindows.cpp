@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2016 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -29,42 +29,56 @@
 #include "io/fs/FilePath.h"
 #include "io/log/Logger.h"
 
+#include "platform/Thread.h"
 #include "platform/WindowsUtils.h"
 
 namespace fs {
 
-bool exists(const path & p) {
+FileType get_type(const path & p) {
 	
 	if(p.empty()) {
-		return true;
-	}
-	
-	DWORD result = GetFileAttributesW(platform::WideString(p.string()));
-	return result != INVALID_FILE_ATTRIBUTES;
-}
-
-bool is_directory(const path & p) {
-	
-	if(p.empty()) {
-		return true;
+		return Directory;
 	}
 	
 	DWORD attributes = GetFileAttributesW(platform::WideString(p.string()));
 	if(attributes == INVALID_FILE_ATTRIBUTES) {
-		return false;
+		return DoesNotExist;
+	} else if(attributes & FILE_ATTRIBUTE_DIRECTORY) {
+		return Directory;
+	} else {
+		return RegularFile;
 	}
 	
-	return (attributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
 }
 
-bool is_regular_file(const path & p) {
+FileType get_link_type(const path & p) {
+	
+	if(p.empty()) {
+		return Directory;
+	}
 	
 	DWORD attributes = GetFileAttributesW(platform::WideString(p.string()));
 	if(attributes == INVALID_FILE_ATTRIBUTES) {
-		return false;
+		return DoesNotExist;
+	} else if(attributes & FILE_ATTRIBUTE_REPARSE_POINT) {
+		return SymbolicLink;
+	} else if(attributes & FILE_ATTRIBUTE_DIRECTORY) {
+		return Directory;
+	} else {
+		return RegularFile;
 	}
 	
-	return (attributes & FILE_ATTRIBUTE_DIRECTORY) == 0;
+}
+
+static std::time_t filetime_to_time_t(const FILETIME & time) {
+	
+	// Convert FILETIME to time_t: http://support.microsoft.com/default.aspx?scid=KB;en-us;q167296
+	LONGLONG value = time.dwHighDateTime;
+	value <<= 32;
+	value |= time.dwLowDateTime;
+	value -= 116444736000000000;
+	
+	return std::time_t(value / 10000000);
 }
 
 std::time_t last_write_time(const path & p) {
@@ -82,13 +96,8 @@ std::time_t last_write_time(const path & p) {
 	
 	std::time_t writeTime = 0;
 	BOOL res = GetFileTime(hFile, &creationTime, &accessTime, &modificationTime);
-	if(res)	{
-		// Convert FILETIME to time_t: http://support.microsoft.com/default.aspx?scid=KB;en-us;q167296
-		LONGLONG value = modificationTime.dwHighDateTime;
-		value <<= 32;
-		value |= modificationTime.dwLowDateTime;
-		value -= 116444736000000000;
-		writeTime = (std::time_t)(value / 10000000);
+	if(res) {
+		writeTime = filetime_to_time_t(modificationTime);
 	}
 	
 	::CloseHandle(hFile);
@@ -102,10 +111,10 @@ u64 file_size(const path & p) {
 	                           FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
 	                           NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
 	if(hFile == INVALID_HANDLE_VALUE) {
-		return (u64)-1;
+		return u64(-1);
 	}
 	
-	u64 fileSize = (u64)-1;
+	u64 fileSize = u64(-1);
 	LARGE_INTEGER retSize;
 	BOOL res = GetFileSizeEx(hFile, &retSize);
 	if(res) {
@@ -119,44 +128,59 @@ u64 file_size(const path & p) {
 
 bool remove(const path & p) {
 	
-	bool succeeded = true;
-	
-	if(is_directory(p)) {
-		succeeded &= RemoveDirectoryW(platform::WideString(p.string())) == TRUE;
-		if(!succeeded) {
-			LogWarning << "RemoveDirectory(" << p << ") failed: " << platform::getErrorString();
+	for(int tries = 1;; tries++) {
+		
+		if(DeleteFileW(platform::WideString(p.string()))) {
+			return true;
 		}
-	} else {
-		succeeded &= DeleteFileW(platform::WideString(p.string())) == TRUE;
-		if(!succeeded) {
-			LogWarning << "DeleteFile(" << p << ") failed: " << platform::getErrorString();
+		
+		DWORD error = GetLastError();
+		if(error == ERROR_FILE_NOT_FOUND || error == ERROR_PATH_NOT_FOUND) {
+			return true;
 		}
+		
+		LogWarning << "Failed to remove file " << p << ": " << error << " = "
+		           << platform::getErrorString(error) << " (try " << tries << ")";
+		
+		if(tries < 10 && (error == ERROR_ACCESS_DENIED || error == ERROR_SHARING_VIOLATION ||
+		                  error == ERROR_LOCK_VIOLATION)) {
+			Sleep(100);
+			continue;
+		}
+		
+		return false;
 	}
 	
-	return succeeded;
 }
 
-bool remove_all(const path & p) {
+bool remove_directory(const path & p) {
 	
-	if(!exists(p)) {
-		return true;
-	}
-	
-	bool succeeded = true;
-	
-	if(is_directory(p)) {
-		for(directory_iterator it(p); !it.end(); ++it) {
-			if(it.is_regular_file()) {
-				succeeded &= remove(p / it.name());
-			} else {
-				succeeded &= remove_all(p / it.name());
-			}
+	for(int tries = 1;; tries++) {
+		
+		if(RemoveDirectoryW(platform::WideString(p.string()))) {
+			return true;
 		}
+		
+		DWORD error = GetLastError();
+		if(error == ERROR_FILE_NOT_FOUND || error == ERROR_PATH_NOT_FOUND) {
+			return true;
+		}
+		if(error == ERROR_DIR_NOT_EMPTY) {
+			return false;
+		}
+		
+		LogWarning << "Failed to remove directory " << p << ": " << error << " = "
+		           << platform::getErrorString(error) << " (try " << tries << ")";
+		
+		if(tries < 10 && (error == ERROR_ACCESS_DENIED || error == ERROR_SHARING_VIOLATION ||
+		                  error == ERROR_LOCK_VIOLATION)) {
+			Sleep(100);
+			continue;
+		}
+		
+		return false;
 	}
 	
-	succeeded &= remove(p);
-	
-	return succeeded;
 }
 
 bool create_directory(const path & p) {
@@ -178,21 +202,6 @@ bool create_directory(const path & p) {
 	return ret;
 }
 
-bool create_directories(const path & p) {
-	
-	if(p.empty()) {
-		return true;
-	}
-	
-	path parent = p.parent();
-	if(!exists(parent)) {
-		if(!create_directories(parent)) {
-			return false;
-		}
-	}
-	
-	return create_directory(p);
-}
 
 static void update_last_write_time(const path & p) {
 	
@@ -211,29 +220,58 @@ static void update_last_write_time(const path & p) {
 
 bool copy_file(const path & from_p, const path & to_p, bool overwrite) {
 	
-	bool ret = CopyFileW(platform::WideString(from_p.string()),
-	                     platform::WideString(to_p.string()), !overwrite) == TRUE;
-	if(!ret) {
-		LogWarning << "CopyFile(" << from_p << ", " << to_p << ", " << !overwrite
-		           << ") failed: " << platform::getErrorString();
-	} else {
-		update_last_write_time(to_p);
+	for(int tries = 1;; tries++) {
+		
+		if(CopyFileW(platform::WideString(from_p.string()), platform::WideString(to_p.string()), !overwrite)) {
+			update_last_write_time(to_p);
+			return true;
+		}
+		
+		DWORD error = GetLastError();
+		if(error == ERROR_FILE_NOT_FOUND || error == ERROR_PATH_NOT_FOUND || error == ERROR_FILE_EXISTS) {
+			return false;
+		}
+		
+		LogWarning << "Failed to copy file from " << from_p << " to " << to_p << ": " << error << " = "
+		           << platform::getErrorString(error) << " (try " << tries << ")";
+		
+		if(tries < 10 && (error == ERROR_ACCESS_DENIED || error == ERROR_SHARING_VIOLATION ||
+		                  error == ERROR_LOCK_VIOLATION)) {
+			Sleep(100);
+			continue;
+		}
+		
+		return false;
 	}
 	
-	return ret;
 }
 
 bool rename(const path & old_p, const path & new_p, bool overwrite) {
 	
-	DWORD flags = overwrite ? MOVEFILE_REPLACE_EXISTING : 0;
-	bool ret = MoveFileExW(platform::WideString(old_p.string()),
-	                       platform::WideString(new_p.string()), flags) == TRUE;
-	if(!ret) {
-		LogWarning << "MoveFileEx(" << old_p << ", " << new_p << ", " << flags << ") failed: "
-		           << platform::getErrorString();
+	DWORD flags = MOVEFILE_COPY_ALLOWED | (overwrite ? MOVEFILE_REPLACE_EXISTING : 0);
+	for(int tries = 1;; tries++) {
+		
+		if(MoveFileExW(platform::WideString(old_p.string()), platform::WideString(new_p.string()), flags)) {
+			return true;
+		}
+		
+		DWORD error = GetLastError();
+		if(error == ERROR_FILE_NOT_FOUND || error == ERROR_PATH_NOT_FOUND || error == ERROR_FILE_EXISTS) {
+			return false;
+		}
+		
+		LogWarning << "Failed to move file from " << old_p << " to " << new_p << ": " << error << " = "
+		           << platform::getErrorString(error) << " (try " << tries << ")";
+		
+		if(tries < 10 && (error == ERROR_ACCESS_DENIED || error == ERROR_SHARING_VIOLATION ||
+		                  error == ERROR_LOCK_VIOLATION)) {
+			Sleep(100);
+			continue;
+		}
+		
+		return false;
 	}
 	
-	return ret;
 }
 
 path current_path() {
@@ -256,19 +294,15 @@ path current_path() {
 	return path(buffer.toUTF8());
 }
 
-directory_iterator::directory_iterator(const path & p) : m_handle(INVALID_HANDLE_VALUE), m_buffer(NULL) {
+directory_iterator::directory_iterator(const path & p) : m_handle(INVALID_HANDLE_VALUE) {
 	
 	std::string searchPath = (p.empty() ? "." : p.string()) + "\\*";
 	
-	WIN32_FIND_DATAW * data = new WIN32_FIND_DATAW;
-	m_handle = FindFirstFileW(platform::WideString(searchPath), data);
+	m_handle = FindFirstFileW(platform::WideString(searchPath), &m_data);
 	if(m_handle != INVALID_HANDLE_VALUE) {
-		m_buffer = data;
-		if(!wcscmp(data->cFileName, L".") || !wcscmp(data->cFileName, L"..")) {
+		if(!wcscmp(m_data.cFileName, L".") || !wcscmp(m_data.cFileName, L"..")) {
 			operator++();
 		}
-	} else {
-		delete data;
 	}
 	
 }
@@ -279,58 +313,74 @@ directory_iterator::~directory_iterator() {
 		FindClose(m_handle);
 	}
 	
-	delete reinterpret_cast<WIN32_FIND_DATAW *>(m_buffer);
 }
 
 directory_iterator & directory_iterator::operator++() {
 	
-	arx_assert(m_buffer != NULL);
 	arx_assert(m_handle != INVALID_HANDLE_VALUE);
-	
-	WIN32_FIND_DATAW * data = reinterpret_cast<WIN32_FIND_DATAW *>(m_buffer);
 	
 	do {
 		
-		if(!FindNextFileW(m_handle, data)) {
-			delete data;
-			m_buffer = NULL;
+		if(!FindNextFileW(m_handle, &m_data)) {
+			CloseHandle(m_handle);
+			m_handle = INVALID_HANDLE_VALUE;
 			break;
 		}
 		
-	} while(!wcscmp(data->cFileName, L".") || !wcscmp(data->cFileName, L".."));
+	} while(!wcscmp(m_data.cFileName, L".") || !wcscmp(m_data.cFileName, L".."));
 	
 	return *this;
 }
 
 bool directory_iterator::end() {
-	return !m_buffer;
+	return m_handle != INVALID_HANDLE_VALUE;
 }
 
 std::string directory_iterator::name() {
 	
-	arx_assert(m_buffer != NULL);
+	arx_assert(m_handle != INVALID_HANDLE_VALUE);
 	
-	const WIN32_FIND_DATAW * data = reinterpret_cast<const WIN32_FIND_DATAW *>(m_buffer);
-	
-	return platform::WideString::toUTF8(data->cFileName);
+	return platform::WideString::toUTF8(m_data.cFileName);
 }
 
-bool directory_iterator::is_directory() {
+FileType directory_iterator::type() {
 	
-	arx_assert(m_buffer != NULL);
+	arx_assert(m_handle != INVALID_HANDLE_VALUE);
 	
-	const WIN32_FIND_DATAW * data = reinterpret_cast<const WIN32_FIND_DATAW *>(m_buffer);
+	if(m_data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
+		return Directory;
+	} else {
+		return RegularFile;
+	}
 	
-	return (data->dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
 }
 
-bool directory_iterator::is_regular_file() {
+FileType directory_iterator::link_type() {
 	
-	arx_assert(m_buffer != NULL);
+	arx_assert(m_handle != INVALID_HANDLE_VALUE);
 	
-	const WIN32_FIND_DATAW * data = reinterpret_cast<const WIN32_FIND_DATAW *>(m_buffer);
+	if(m_data.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) {
+		return SymbolicLink;
+	} else if(m_data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
+		return Directory;
+	} else {
+		return RegularFile;
+	}
 	
-	return (data->dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) == 0;
+}
+
+std::time_t directory_iterator::last_write_time() {
+	
+	arx_assert(m_handle != INVALID_HANDLE_VALUE);
+	
+	return filetime_to_time_t(m_data.ftLastWriteTime);
+}
+
+u64 directory_iterator::file_size() {
+	
+	arx_assert(m_handle != INVALID_HANDLE_VALUE);
+	
+	return (u64(m_data.nFileSizeHigh) << 32) + u64(m_data.nFileSizeLow);
 }
 
 } // namespace fs

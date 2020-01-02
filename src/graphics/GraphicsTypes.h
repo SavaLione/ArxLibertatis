@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2017 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -70,73 +70,89 @@ class Entity;
 struct EERIE_LIGHT;
 struct PHYSICS_BOX_DATA;
 
-typedef HandleType<struct ActionPointTag,  long,  -1> ActionPoint;
+typedef HandleType<struct ActionPointTag,  s32,   -1> ActionPoint;
 typedef HandleType<struct ObjSelectionTag, long,  -1> ObjSelection;
 typedef HandleType<struct ObjVertGroupTag, short, -1> ObjVertGroup;
 typedef HandleType<struct ObjVertHandleTag, s32,  -1> ObjVertHandle;
 
 struct EERIE_TRI {
+	
 	Vec3f v[3];
+	
+	EERIE_TRI() {
+		v[0] = v[1] = v[2] = Vec3f(0.f);
+	}
+	
 };
 
 enum PolyTypeFlag {
-	POLY_NO_SHADOW    = (1<<0),
-	POLY_DOUBLESIDED  = (1<<1),
-	POLY_TRANS        = (1<<2),
-	POLY_WATER        = (1<<3),
-	POLY_GLOW         = (1<<4),
-	POLY_IGNORE       = (1<<5),
-	POLY_QUAD         = (1<<6),
-	POLY_TILED        = (1<<7),
-	POLY_METAL        = (1<<8),
-	POLY_HIDE         = (1<<9),
-	POLY_STONE        = (1<<10),
-	POLY_WOOD         = (1<<11),
-	POLY_GRAVEL       = (1<<12),
-	POLY_EARTH        = (1<<13),
-	POLY_NOCOL        = (1<<14),
-	POLY_LAVA         = (1<<15),
-	POLY_CLIMB        = (1<<16),
-	POLY_FALL         = (1<<17),
-	POLY_NOPATH       = (1<<18),
-	POLY_NODRAW       = (1<<19),
-	POLY_PRECISE_PATH = (1<<20),
-	POLY_NO_CLIMB     = (1<<21),
-	POLY_ANGULAR      = (1<<22),
-	POLY_ANGULAR_IDX0 = (1<<23),
-	POLY_ANGULAR_IDX1 = (1<<24),
-	POLY_ANGULAR_IDX2 = (1<<25),
-	POLY_ANGULAR_IDX3 = (1<<26),
-	POLY_LATE_MIP     = (1<<27)
+	POLY_NO_SHADOW    = 1 << 0,
+	POLY_DOUBLESIDED  = 1 << 1,
+	POLY_TRANS        = 1 << 2,
+	POLY_WATER        = 1 << 3,
+	POLY_GLOW         = 1 << 4,
+	POLY_IGNORE       = 1 << 5,
+	POLY_QUAD         = 1 << 6,
+	POLY_TILED        = 1 << 7,
+	POLY_METAL        = 1 << 8,
+	POLY_HIDE         = 1 << 9,
+	POLY_STONE        = 1 << 10,
+	POLY_WOOD         = 1 << 11,
+	POLY_GRAVEL       = 1 << 12,
+	POLY_EARTH        = 1 << 13,
+	POLY_NOCOL        = 1 << 14,
+	POLY_LAVA         = 1 << 15,
+	POLY_CLIMB        = 1 << 16,
+	POLY_FALL         = 1 << 17,
+	POLY_NOPATH       = 1 << 18,
+	POLY_NODRAW       = 1 << 19,
+	POLY_PRECISE_PATH = 1 << 20,
+	POLY_NO_CLIMB     = 1 << 21,
+	POLY_ANGULAR      = 1 << 22,
+	POLY_ANGULAR_IDX0 = 1 << 23,
+	POLY_ANGULAR_IDX1 = 1 << 24,
+	POLY_ANGULAR_IDX2 = 1 << 25,
+	POLY_ANGULAR_IDX3 = 1 << 26,
+	POLY_LATE_MIP     = 1 << 27
 };
 DECLARE_FLAGS(PolyTypeFlag, PolyType)
 DECLARE_FLAGS_OPERATORS(PolyType)
 
 struct EERIEPOLY {
+	
 	PolyType type;
-	Vec3f		min;
-	Vec3f		max;
-	Vec3f		norm;
-	Vec3f		norm2;
-	TexturedVertex		v[4];
+	Vec3f min;
+	Vec3f max;
+	Vec3f norm;
+	Vec3f norm2;
+	TexturedVertex v[4];
 	ColorRGBA color[4];
-	Vec3f		nrml[4];
+	Vec3f nrml[4];
 	TextureContainer * tex;
-	Vec3f		center;
-	float			transval;
-	float			area;
-	short			room;
-	short			misc;
-	unsigned short	uslInd[4];
+	Vec3f center;
+	float transval;
+	float area;
+	short room;
+	short misc;
+	unsigned short uslInd[4];
 	
 	EERIEPOLY()
 		: type(0)
+		, min(0.f)
+		, max(0.f)
+		, norm(0.f)
+		, norm2(0.f)
 		, tex(NULL)
+		, center(0.f)
 		, transval(0)
 		, area(0)
 		, room(0)
 		, misc(0)
-	{ }
+	{
+		nrml[0] = nrml[1] = nrml[2] = nrml[3] = Vec3f(0.f);
+		uslInd[0] = uslInd[1] = uslInd[2] = uslInd[3] = 0;
+	}
+	
 };
 
 #define IOPOLYVERT 3
@@ -158,31 +174,31 @@ struct EERIE_FACE {
 };
 
 struct EERIE_ACTIONLIST {
+	
 	std::string name;
-	ActionPoint idx; //index vertex;
-	long act; //action
-	long sfx; //sfx
+	ActionPoint idx;
+	long act;
+	long sfx;
 	
 	EERIE_ACTIONLIST()
-		: name()
-		, idx(0)
+		: idx(0)
 		, act(0)
 		, sfx(0)
-	{}
+	{ }
+	
 };
 
-struct CUB3D
-{
-	float	xmin;
-	float	xmax;
-	float	ymin;
-	float	ymax;
-	float	zmin;
-	float	zmax;
+struct CUB3D {
+	float xmin;
+	float xmax;
+	float ymin;
+	float ymax;
+	float zmin;
+	float zmax;
 };
 
 struct EERIE_LINKED {
-	ObjVertGroup lgroup; //linked to group n° if lgroup=-1 NOLINK
+	ObjVertGroup lgroup;
 	ActionPoint lidx;
 	ActionPoint lidx2;
 	EERIE_3DOBJ * obj;
@@ -194,21 +210,7 @@ struct EERIE_SELECTIONS {
 	std::vector<size_t> selected;
 };
 
-struct EERIE_FASTACCESS
-{
-	EERIE_FASTACCESS()
-		: view_attach()
-		, primary_attach()
-		, left_attach()
-		, weapon_attach()
-		, secondary_attach()
-		, head_group_origin()
-		, head_group()
-		, fire()
-		, sel_head()
-		, sel_chest()
-		, sel_leggings()
-	{}
+struct EERIE_FASTACCESS {
 	
 	ActionPoint view_attach;
 	ActionPoint primary_attach;
@@ -221,24 +223,21 @@ struct EERIE_FASTACCESS
 	ObjSelection sel_head;
 	ObjSelection sel_chest;
 	ObjSelection sel_leggings;
+	
 };
 
-/////////////////////////////////////////////////////////////////////////////////
-
-struct EERIE_3DOBJ
-{
+struct EERIE_3DOBJ {
+	
 	EERIE_3DOBJ()
+		: pos(0.f)
+		, point0(0.f)
+		, origin(0)
+		, quat(quat_identity())
+		, pbox(NULL)
+		, sdata(false)
+		, m_skeleton(NULL)
+		
 	{
-		point0 = pos = Vec3f_ZERO;
-		angle = Anglef::ZERO;
-
-		origin = 0;
-		grouplist.clear();
-
-		vertexlocal = NULL;
-
-		originaltextures = NULL;
-
 		// TODO Make default constructor possible
 		cub.xmin = 0;
 		cub.xmax = 0;
@@ -246,16 +245,6 @@ struct EERIE_3DOBJ
 		cub.ymax = 0;
 		cub.zmin = 0;
 		cub.zmax = 0;
-		
-		quat = glm::quat();
-		linked.clear();
-
-		pbox = NULL;
-		sdata = false;
-		
-		fastaccess = EERIE_FASTACCESS();
-		
-		m_skeleton = NULL;
 	}
 	
 	void clear();
@@ -268,7 +257,7 @@ struct EERIE_3DOBJ
 	Vec3f point0;
 	Anglef angle;
 	size_t origin;
-	Vec3f * vertexlocal;
+	std::vector<Vec3f> vertexlocal;
 	std::vector<EERIE_VERTEX> vertexlist;
 	std::vector<EERIE_VERTEX> vertexWorldPositions;
 	std::vector<Vec4f> vertexClipPositions;
@@ -278,9 +267,9 @@ struct EERIE_3DOBJ
 	std::vector<VertexGroup> grouplist;
 	std::vector<EERIE_ACTIONLIST> actionlist;
 	std::vector<EERIE_SELECTIONS> selections;
-	std::vector<TextureContainer*> texturecontainer;
+	std::vector<TextureContainer *> texturecontainer;
 
-	char * originaltextures;
+	std::vector<res::path> originaltextures;
 	CUB3D cub;
 	glm::quat quat;
 	std::vector<EERIE_LINKED> linked;
@@ -292,57 +281,62 @@ struct EERIE_3DOBJ
 	
 };
 
-//-------------------------------------------------------------------------
-//Portal Data;
-
 struct PortalPoly {
-	Vec3f		min;
-	Vec3f		max;
-	Vec3f		norm;
+	
+	Vec3f min;
+	Vec3f max;
+	Vec3f norm;
 	Vec3f p[4];
 	float rhw;
-	Vec3f		center;
+	Vec3f center;
 	
 	PortalPoly()
-	{ }
+		: min(0.f)
+		, max(0.f)
+		, norm(0.f)
+		, rhw(1.f)
+		, center(0.f)
+	{
+		p[0] = p[1] = p[2] = p[3] = Vec3f(0.f);
+	}
+	
 };
 
-struct EERIE_PORTALS
-{
-	PortalPoly	poly;
-	size_t		room_1; // facing normal
-	size_t		room_2;
-	short		useportal;
-	short		paddy;
+struct EERIE_PORTALS {
+	PortalPoly poly;
+	size_t room_1; // facing normal
+	size_t room_2;
+	short useportal;
+	short paddy;
 };
 
 struct EP_DATA {
+	
 	Vec2s tile;
 	short idx;
-	short padd;
+	
+	EP_DATA()
+		: tile(0)
+		, idx(0)
+	{ }
+	
 };
 
 struct EERIE_ROOM_DATA {
-	long nb_portals;
-	long * portals;
-	long nb_polys;
-	EP_DATA * epdata;
-	unsigned short * indexBuffer;
+	
+	std::vector<long> portals;
+	std::vector<EP_DATA> epdata;
+	std::vector<unsigned short> indexBuffer;
 	VertexBuffer<SMY_VERTEX> * pVertexBuffer;
 	std::vector<TextureContainer *> ppTextureContainer;
 
 	EERIE_ROOM_DATA()
-		: nb_portals()
-		, portals()
-		, nb_polys()
-		, epdata()
-		, indexBuffer()
-		, pVertexBuffer()
-	{}
+		: pVertexBuffer(NULL)
+	{ }
+	
 };
 
-struct EERIE_PORTAL_DATA
-{
+struct EERIE_PORTAL_DATA {
 	std::vector<EERIE_ROOM_DATA> rooms;
 	std::vector<EERIE_PORTALS> portals;
 };

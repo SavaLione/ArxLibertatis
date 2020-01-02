@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2016 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -51,7 +51,7 @@ public:
 	explicit TextureStage(unsigned int stage);
 	virtual ~TextureStage() { }
 	
-	virtual Texture* getTexture() const = 0;
+	virtual Texture * getTexture() const = 0;
 	virtual void setTexture(Texture * pTexture) = 0;
 	virtual void resetTexture() = 0;
 	
@@ -59,11 +59,14 @@ public:
 	
 	virtual void setAlphaOp(TextureOp textureOp) = 0;
 	
-	virtual WrapMode getWrapMode() const = 0;
-	virtual void setWrapMode(WrapMode wrapMode) = 0;
+	WrapMode getWrapMode() const { return m_wrapMode; }
+	void setWrapMode(WrapMode wrapMode) { m_wrapMode = wrapMode; }
 	
-	virtual void setMinFilter(FilterMode filterMode) = 0;
-	virtual void setMagFilter(FilterMode filterMode) = 0;
+	FilterMode getMinFilter() const { return m_minFilter; }
+	void setMinFilter(FilterMode filterMode) { m_minFilter = filterMode; }
+	
+	FilterMode getMagFilter() const { return m_magFilter; }
+	void setMagFilter(FilterMode filterMode) { m_magFilter = filterMode; }
 	
 	//! Level of detail bias for mipmaps. Can be used to make textures appear more chunky or more blurred.
 	/* Each unit bias (+/-1.0) biases the selection by exactly one MIP map level. 
@@ -76,6 +79,10 @@ public:
 protected:
 	
 	unsigned int mStage;
+	
+	WrapMode m_wrapMode;
+	FilterMode m_minFilter;
+	FilterMode m_magFilter;
 	
 };
 

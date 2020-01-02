@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2017 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -31,12 +31,10 @@
 
 EYEBALL_DEF eyeball;
 
-float MagicSightFader=0.f;
+float MagicSightFader = 0.f;
 
 static TextureContainer * Flying_Eye = NULL;
-static EERIE_3DOBJ * eyeballobj = NULL;			// EyeBall 3D Object	// NEEDTO: Load dynamically
-
-extern float PULSATE;
+static EERIE_3DOBJ * eyeballobj = NULL; // EyeBall 3D Object
 
 void FlyingEye_Init() {
 	Flying_Eye = TextureContainer::LoadUI("graph/particles/flying_eye_fx");
@@ -66,12 +64,12 @@ void DrawMagicSightInterface() {
 		col = 1.f - eyeball.size.x;
 	}
 
-	EERIEDrawBitmap(Rectf(g_size), 0.0001f, Flying_Eye, Color3f::gray(col).to<u8>());
+	EERIEDrawBitmap(Rectf(g_size), 0.0001f, Flying_Eye, Color::gray(col));
 
 	if(MagicSightFader > 0.f) {
 		col = MagicSightFader;
 
-		EERIEDrawBitmap(Rectf(g_size), 0.0001f, NULL, Color3f::gray(col).to<u8>());
+		EERIEDrawBitmap(Rectf(g_size), 0.0001f, NULL, Color::gray(col));
 
 		MagicSightFader -= g_platformTime.lastFrameDuration() / PlatformDurationMs(400);
 

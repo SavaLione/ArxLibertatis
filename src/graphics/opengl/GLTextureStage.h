@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2016 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -24,29 +24,24 @@
 
 #include "graphics/opengl/OpenGLUtil.h"
 #include "graphics/texture/TextureStage.h"
+#include "platform/Platform.h"
 
 class OpenGLRenderer;
 class GLTexture;
 
-class GLTextureStage : public TextureStage {
+class GLTextureStage arx_final : public TextureStage {
 	
 public:
 	
 	GLTextureStage(OpenGLRenderer * renderer, unsigned textureStage);
 	~GLTextureStage();
 	
-	Texture* getTexture() const;
+	Texture * getTexture() const;
 	void setTexture(Texture * pTexture);
 	void resetTexture();
 	
 	void setColorOp(TextureOp textureOp);
 	void setAlphaOp(TextureOp textureOp);
-	
-	WrapMode getWrapMode() const;
-	void setWrapMode(WrapMode wrapMode);
-	
-	void setMinFilter(FilterMode filterMode);
-	void setMagFilter(FilterMode filterMode);
 	
 	void setMipMapLODBias(float bias);
 	
@@ -54,13 +49,13 @@ public:
 	
 private:
 	
-	bool isEnabled() { return ((ops[Color] != OpDisable) || (ops[Alpha] != OpDisable)); }
+	bool isEnabled() { return ((ops[ColorOp] != OpDisable) || (ops[AlphaOp] != OpDisable)); }
 	
 	OpenGLRenderer * renderer;
 	
 	enum OpType {
-		Color,
-		Alpha
+		ColorOp,
+		AlphaOp
 	};
 	
 	TextureOp ops[2];
@@ -74,10 +69,6 @@ private:
 
 	GLTexture * tex;
 	GLTexture * current;
-	
-	WrapMode wrapMode;
-	FilterMode minFilter;
-	FilterMode magFilter;
 
 	typedef std::map<GLenum, GLint> IntegerStateCache;
 	IntegerStateCache m_stateCacheIntegers;

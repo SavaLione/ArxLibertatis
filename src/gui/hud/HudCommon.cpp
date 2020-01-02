@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2015-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -26,12 +26,11 @@
 
 
 HudIconBase::HudIconBase()
-	: HudItem()
-	, m_tex(NULL)
+	: m_tex(NULL)
 	, m_isSelected(false)
 	, m_haloActive(false)
 	, m_haloColor(Color3f::white)
-{}
+{ }
 
 void HudIconBase::draw() {
 	arx_assert(m_tex);

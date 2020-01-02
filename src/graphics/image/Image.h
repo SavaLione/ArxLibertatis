@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2016 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -48,10 +48,10 @@ public:
 	Image(const Image & other);
 	virtual ~Image();
 	
-	const Image & operator=(const Image & other);
+	Image & operator=(const Image & other);
 	
 	bool load(const res::path & filename);
-	bool load(void * data, size_t size, const char * file = NULL);
+	bool load(const char * data, size_t size, const char * file = NULL);
 	
 	void create(size_t width, size_t height, Format format);
 	

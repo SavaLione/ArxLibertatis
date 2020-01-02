@@ -1,5 +1,5 @@
 /*
- * Copyright 2013-2017 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2013-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -17,7 +17,7 @@
  * along with Arx Libertatis.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "gui/DebugHud.h"
+#include "gui/debug/DebugHud.h"
 
 #include <algorithm>
 #include <cstdio>
@@ -30,6 +30,7 @@
 #include <boost/format.hpp>
 
 #include "core/Core.h"
+#include "core/FpsCounter.h"
 #include "core/Application.h"
 #include "core/Version.h"
 #include "core/GameTime.h"
@@ -41,9 +42,9 @@
 #include "graphics/particle/ParticleEffects.h"
 #include "graphics/font/Font.h"
 
-#include "gui/DebugUtils.h"
 #include "gui/Text.h"
 #include "gui/Interface.h"
+#include "gui/debug/DebugPanel.h"
 
 #include "ai/PathFinderManager.h"
 #include "script/ScriptEvent.h"
@@ -174,8 +175,8 @@ static std::string prettyUs(s64 us) {
 void ShowInfoText() {
 	
 	DebugBox frameInfo = DebugBox(Vec2i(10, 10), "FrameInfo");
-	frameInfo.add("PlatformTime", prettyUs(toUs(g_platformTime.frameStart())));
-	frameInfo.add("ArxTime", prettyUs(toUs(g_gameTime.now())));
+	frameInfo.add("Platform time", prettyUs(toUs(g_platformTime.frameStart())));
+	frameInfo.add("Game time", prettyUs(toUs(g_gameTime.now())));
 	frameInfo.add("Prims", EERIEDrawnPolys);
 	frameInfo.add("Particles", getParticleCount());
 	frameInfo.add("Sparks", ParticleSparkCount());
@@ -183,14 +184,13 @@ void ShowInfoText() {
 	frameInfo.print();
 	
 	DebugBox camBox = DebugBox(Vec2i(10, frameInfo.size().y + 5), "Camera");
-	camBox.add("Position", ACTIVECAM->orgTrans.pos);
-	camBox.add("Rotation", ACTIVECAM->angle);
-	camBox.add("Focal", ACTIVECAM->focal);
+	camBox.add("Position", g_camera->m_pos);
+	camBox.add("Rotation", g_camera->angle);
+	camBox.add("Focal", g_camera->focal);
 	camBox.print();
 	
 	DebugBox playerBox = DebugBox(Vec2i(10, camBox.size().y + 5), "Player");
 	playerBox.add("Position", player.pos);
-	playerBox.add("AnchorPos", player.pos - Mscenepos);
 	playerBox.add("Rotation", player.angle);
 	playerBox.add("Velocity", player.physics.velocity);
 	
@@ -228,8 +228,8 @@ void ShowInfoText() {
 	
 	DebugBox miscBox = DebugBox(Vec2i(10, playerBox.size().y + 5), "Misc");
 	miscBox.add(arx_name + " version", arx_version);
-	miscBox.add("Level", LastLoadedScene.string().c_str());
-	miscBox.add("Spell failed seq", LAST_FAILED_SEQUENCE.c_str());
+	miscBox.add("Level", LastLoadedScene.string());
+	miscBox.add("Spell failed seq", LAST_FAILED_SEQUENCE);
 	miscBox.add("Cinema", cinematicBorder.CINEMA_DECAL);
 	miscBox.add("Mouse", Vec2i(DANAEMouse));
 	miscBox.add("Pathfind queue", EERIE_PATHFINDER_Get_Queued_Number());
@@ -348,42 +348,8 @@ void ShowInfoText() {
 
 void ShowFPS() {
 	std::ostringstream oss;
-	oss << std::fixed << std::setprecision(2) << FPS << " FPS";
+	oss << std::fixed << std::setprecision(2) << g_fpsCounter.FPS << " FPS";
 	hFontDebug->draw(Vec2i(10, 10), oss.str(), Color::white);
-}
-
-void ShowDebugToggles() {
-	
-	const int lineHeight = hFontDebug->getLineHeight();
-	int line = 0;
-	
-	hFontDebug->draw(0.f, line * lineHeight, "Key Toggle Trigger", Color::white);
-	line++;
-	
-	for(size_t i = 0; i < ARRAY_SIZE(g_debugToggles); i++) {
-		std::stringstream textStream;
-		textStream << i << "   ";
-		textStream << (g_debugToggles[i] ? "on " : "off") << "    ";
-		
-		if(g_platformTime.frameStart() - g_debugTriggersTime[i] <= g_debugTriggersDecayDuration)
-			textStream << "fired";
-		
-		hFontDebug->draw(0.f, line * lineHeight, textStream.str(), Color::white);
-		line++;
-	}
-	
-	line++;
-	
-	hFontDebug->draw(0.f, line * lineHeight, "Values", Color::white);
-	line++;
-	
-	for(size_t i = 0; i < ARRAY_SIZE(g_debugValues); i++) {
-		std::stringstream textStream;
-		textStream << i << "   ";
-		textStream << g_debugValues[i];
-		hFontDebug->draw(0.f, line * lineHeight, textStream.str(), Color::white);
-		line++;
-	}
 }
 
 
@@ -415,7 +381,7 @@ void ShowFrameDurationPlot() {
 	for(size_t i = 0; i < frameDurationPlotValues.size(); ++i)
 	{
 		float time = frameDurationPlotValues[i];
-		frameDurationPlotVertices[i].color = Color(255, 255, 255, 255).toRGBA();
+		frameDurationPlotVertices[i].color = Color::white.toRGB();
 		frameDurationPlotVertices[i].p.x = i;
 		frameDurationPlotVertices[i].p.y = OFFSET_Y + (time * SCALE_Y);
 		frameDurationPlotVertices[i].p.z = 1.0f;

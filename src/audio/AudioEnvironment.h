@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2012 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -53,7 +53,7 @@ class Environment {
 	
 public:
 	
-	explicit Environment(const res::path & name);
+	explicit Environment(const res::path & _name);
 	
 	// File input/output
 	aalError load();

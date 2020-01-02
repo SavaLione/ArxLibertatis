@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2016 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -60,10 +60,10 @@ struct PlatformCrashHandlers {
 LONG WINAPI SEHHandler(PEXCEPTION_POINTERS pExceptionPtrs);
 void PureCallHandler();
 int NewHandler(size_t);
-void InvalidParameterHandler(const wchar_t* expression, const wchar_t* function, const wchar_t* file, unsigned int line, uintptr_t pReserved);
+void InvalidParameterHandler(const wchar_t * expression, const wchar_t * function, const wchar_t * file, unsigned int line, uintptr_t pReserved);
 void SignalHandler(int signalCode);
 
-CrashHandlerWindows* CrashHandlerWindows::m_sInstance = 0;
+CrashHandlerWindows * CrashHandlerWindows::m_sInstance = 0;
 
 CrashHandlerWindows::CrashHandlerWindows() {
 	m_sInstance = this;
@@ -74,25 +74,6 @@ CrashHandlerWindows::~CrashHandlerWindows() {
 }
 
 bool CrashHandlerWindows::initialize() {
-	
-	#if ARX_ARCH == ARX_ARCH_X86_64
-	HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
-	if(ntdll && GetProcAddress(ntdll, "wine_get_version")) {
-		/*
-		 * TODO boost::interprocess currently does not work with Wine:
-		 *  https://bugs.winehq.org/show_bug.cgi?id=37338
-		 *
-		 * Further, the exception it throws cannot be handled by Wine in 64-builds, leading
-		 * to a crash on startup:
-		 *  https://bugs.winehq.org/show_bug.cgi?id=35092
-		 *
-		 * Avoid the crash by not trying to create the shared memory object.
-		 * Note that other C++ exception may still crash the game on 64-bit wine, so this
-		 * is not perfect!
-		 */
-		return false;
-	}
-	#endif
 	
 	if(!CrashHandlerImpl::initialize()) {
 		return false;
@@ -107,7 +88,7 @@ bool CrashHandlerWindows::initialize() {
 	return true;
 }
 
-CrashHandlerWindows& CrashHandlerWindows::getInstance() {
+CrashHandlerWindows & CrashHandlerWindows::getInstance() {
 	arx_assert(m_sInstance != 0);
 	return *m_sInstance;
 }
@@ -127,7 +108,7 @@ bool CrashHandlerWindows::registerCrashHandlers() {
 	// Because there is one _purecall_handler for the whole process,
 	// calling this function immediately impacts all threads. The last
 	// caller on any thread sets the handler.
-	// http://msdn.microsoft.com/en-us/library/t296ys27.aspx
+	// https://docs.microsoft.com/en-us/cpp/c-runtime-library/reference/get-purecall-handler-set-purecall-handler
 	m_pPreviousCrashHandlers->m_pureCallHandler = _set_purecall_handler(PureCallHandler);
 	
 	// Catch new operator memory allocation exceptions.
@@ -189,21 +170,21 @@ bool CrashHandlerWindows::registerThreadCrashHandlers() {
 		return false;
 	}
 	
-	ThreadExceptionHandlers& threadHandlers
+	ThreadExceptionHandlers & threadHandlers
 		= m_pPreviousCrashHandlers->m_threadExceptionHandlers[dwThreadId];
 	
 	// Catch terminate() calls.
 	// In a multithreaded environment, terminate functions are maintained
 	// separately for each thread. Each new thread needs to install its own
 	// terminate function. Thus, each thread is in charge of its own termination handling.
-	// http://msdn.microsoft.com/en-us/library/t6fk7h29.aspx
+	// https://docs.microsoft.com/en-us/cpp/c-runtime-library/reference/set-terminate-crt
 	threadHandlers.m_terminateHandler = set_terminate(TerminateHandler);
 	
 	// Catch unexpected() calls.
 	// In a multithreaded environment, unexpected functions are maintained
 	// separately for each thread. Each new thread needs to install its own
 	// unexpected function. Thus, each thread is in charge of its own unexpected handling.
-	// http://msdn.microsoft.com/en-us/library/h46t5b69.aspx
+	// https://docs.microsoft.com/en-us/cpp/c-runtime-library/reference/set-unexpected-crt
 	threadHandlers.m_unexpectedHandler = set_unexpected(UnexpectedHandler);
 	
 	// Catch a floating point error
@@ -231,7 +212,7 @@ void CrashHandlerWindows::unregisterThreadCrashHandlers() {
 		return;
 	}
 	
-	ThreadExceptionHandlers& threadHandlers = it->second;
+	ThreadExceptionHandlers & threadHandlers = it->second;
 	
 	set_terminate(threadHandlers.m_terminateHandler);
 	set_unexpected(threadHandlers.m_unexpectedHandler);
@@ -245,11 +226,12 @@ void CrashHandlerWindows::unregisterThreadCrashHandlers() {
 
 void CrashHandlerWindows::writeCrashDump(PEXCEPTION_POINTERS pointers) {
 	
-	GetTempPath(boost::size(m_pCrashInfo->miniDumpTmpFile), m_pCrashInfo->miniDumpTmpFile);
 	WCHAR tick[24];
-	_ultow(GetTickCount(), tick, 10);
-	wcscat(m_pCrashInfo->miniDumpTmpFile, tick);
-	wcscat(m_pCrashInfo->miniDumpTmpFile, L"-arx-crash.dmp");
+	if(!GetTempPath(boost::size(m_pCrashInfo->miniDumpTmpFile), m_pCrashInfo->miniDumpTmpFile)
+		 || _ultow_s(GetTickCount(), tick, 10) || wcscat_s(m_pCrashInfo->miniDumpTmpFile, tick)
+		 || wcscat_s(m_pCrashInfo->miniDumpTmpFile, L"-arx-crash.dmp")) {
+		return;
+	}
 	
 	HANDLE file = CreateFileW(m_pCrashInfo->miniDumpTmpFile, GENERIC_READ | GENERIC_WRITE,
 	                          0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
@@ -273,7 +255,7 @@ void CrashHandlerWindows::writeCrashDump(PEXCEPTION_POINTERS pointers) {
 	
 }
 
-void CrashHandlerWindows::handleCrash(int crashType, void * crashExtraInfo, int fpeCode) {
+arx_noreturn void CrashHandlerWindows::handleCrash(int crashType, void * crashExtraInfo, int fpeCode) {
 	
 	Autolock autoLock(&m_Lock);
 	
@@ -357,7 +339,6 @@ void CrashHandlerWindows::handleCrash(int crashType, void * crashExtraInfo, int 
 
 LONG WINAPI SEHHandler(PEXCEPTION_POINTERS pExceptionPtrs) {
 	CrashHandlerWindows::getInstance().handleCrash(SEH_EXCEPTION, pExceptionPtrs);
-	return EXCEPTION_EXECUTE_HANDLER;
 }
 
 void TerminateHandler() {
@@ -380,7 +361,6 @@ void InvalidParameterHandler(const wchar_t * /*expression*/, const wchar_t * /*f
 
 int NewHandler(size_t) {
 	CrashHandlerWindows::getInstance().handleCrash(NEW_OPERATOR_ERROR);
-	return 0;
 }
 
 void SignalHandler(int signalCode) {

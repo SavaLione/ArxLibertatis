@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2017 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -20,6 +20,9 @@
 #include "graphics/DrawDebug.h"
 
 #include <sstream>
+
+#include <boost/foreach.hpp>
+#include <boost/range/size.hpp>
 
 #include "ai/Anchors.h"
 #include "ai/Paths.h"
@@ -132,7 +135,7 @@ static void drawDebugLights() {
 		Vec2f center = Vec2f(p) / p.w;
 		const Rect mouseTestRect(s32(center.x) - 20, s32(center.y) - 20, s32(center.x) + 20, s32(center.y) + 20);
 		if(mouseTestRect.contains(Vec2i(DANAEMouse))) {
-			UseRenderState state(RenderState().depthTest(true));
+			UseRenderState depthTestState(RenderState().depthTest(true));
 			Sphere fallstart;
 			fallstart.origin = light->pos;
 			fallstart.radius = light->fallstart;
@@ -154,7 +157,7 @@ static void drawDebugLights() {
 			continue;
 		}
 		
-		EERIEDrawSprite(light->pos, 11.f, g_lightSourceTexture, light->rgb.to<u8>(), 0.5f);
+		EERIEDrawSprite(light->pos, 11.f, g_lightSourceTexture, Color(light->rgb), 0.5f);
 	}
 	
 }
@@ -183,25 +186,24 @@ static void drawDebugPortals() {
 
 static void drawDebugPaths() {
 	
-	for(long i = 0; i < nbARXpaths; i++) {
+	BOOST_FOREACH(const ARX_PATH * path, g_paths) {
 		
-		ARX_PATH * path = ARXpaths[i];
 		if(!path) {
 			continue;
 		}
 		
-		Vec3f center = Vec3f_ZERO;
+		Vec3f center(0.f);
 		int n = 0;
 		
 		std::vector<Vec3f> points;
-		for(long i = 0; i < path->nb_pathways; i++) {
+		for(size_t i = 0; i < path->pathways.size(); i++) {
 			const ARX_PATHWAY & node = path->pathways[i];
 			Vec3f pos = path->pos + node.rpos;
 			points.push_back(pos);
 			center += pos, n++;
 			if(node.flag == PATHWAY_BEZIER) {
 				// Interpolate bezier curve by creating linear segments
-				if(i + 2 >= path->nb_pathways) {
+				if(i + 2 >= path->pathways.size()) {
 					break;
 				}
 				const size_t nsegments = 20;
@@ -219,7 +221,7 @@ static void drawDebugPaths() {
 			}
 		}
 		
-		if(path->height != 0 || ((path->flags & PATH_LOOP) && points.size() > 0)) {
+		if(path->height != 0 || ((path->flags & PATH_LOOP) && !points.empty())) {
 			points.push_back(points[0]);
 		}
 		
@@ -249,12 +251,24 @@ static void drawDebugPaths() {
 				center = path->pos;
 			}
 			if(closerThan(center, player.pos, DebugTextMaxDistance)) {
-				std::string controlledby;
-				if(!path->controled.empty()) {
-					controlledby = "Controlled by: " + path->controled;
+				drawTextAt(hFontDebug, center, path->name, color * 0.5f + Color::gray(0.5f));
+				float offset = 0;
+				if(path->flags & PATH_AMBIANCE) {
+					offset += float(hFontDebug->getLineHeight()) + 2.f;
+					drawTextAt(hFontDebug, center, "On enter play ambiance: " + path->ambiance.string(),
+					           Color::yellow, offset);
 				}
-				Color textcolor = color * 0.5f + Color::gray(0.5f);
-				drawTextAt(hFontDebug, center, path->name, textcolor, controlledby);
+				if(path->flags & PATH_RGB) {
+					std::ostringstream oss;
+					oss << "On enter change fog color to: rgb(" << path->rgb.r << ", " << path->rgb.g
+					    << ", " << path->rgb.b << ")";
+					offset += float(hFontDebug->getLineHeight()) + 2.f;
+					drawTextAt(hFontDebug, center, oss.str(), Color::cyan, offset);
+				}
+				if(!path->controled.empty()) {
+					offset += float(hFontDebug->getLineHeight()) + 2.f;
+					drawTextAt(hFontDebug, center, "Controlled by: " + path->controled, Color::white, offset);
+				}
 			}
 		}
 		
@@ -266,22 +280,21 @@ static void drawDebugPathFinding() {
 	
 	UseRenderState state(RenderState().depthTest(true));
 	
-	if(!ACTIVEBKG || !ACTIVEBKG->anchors) {
+	if(!ACTIVEBKG) {
 		return;
 	}
 	
 	const float zbias = 0.00001f;
 	
-	for(long i = 0; i < ACTIVEBKG->nbanchors; i++) {
+	for(size_t i = 0; i < ACTIVEBKG->m_anchors.size(); i++) {
 		
-		const ANCHOR_DATA & node = ACTIVEBKG->anchors[i];
+		const ANCHOR_DATA & node = ACTIVEBKG->m_anchors[i];
 		
-		Color color1 = (node.flags & ANCHOR_FLAG_BLOCKED) ? Color::blue : Color::green;
-		for(long j = 0; j < node.nblinked; j++) {
-			long k = node.linked[j];
-			if(k >= 0 && k < ACTIVEBKG->nbanchors && i < k) {
-				const ANCHOR_DATA & other = ACTIVEBKG->anchors[k];
-				Color color2 = (other.flags & ANCHOR_FLAG_BLOCKED) ? Color::blue : Color::green;
+		Color color1 = node.blocked ? Color::blue : Color::green;
+		BOOST_FOREACH(long k, node.linked) {
+			if(k >= 0 && size_t(k) < ACTIVEBKG->m_anchors.size() && i < size_t(k)) {
+				const ANCHOR_DATA & other = ACTIVEBKG->m_anchors[k];
+				Color color2 = other.blocked ? Color::blue : Color::green;
 				drawLine(node.pos, other.pos, color1, color2, zbias);
 			}
 		}
@@ -308,9 +321,11 @@ static void drawDebugPathFinding() {
 		
 		// Draw visited nodes yellow and target nodes as red
 		for(long j = 1; j < pathfind.listnb; j++) {
-			short k0 = pathfind.list[j - 1], k1 = pathfind.list[j];
-			if(k0 >= 0 && k0 < ACTIVEBKG->nbanchors && k1 >= 0 && k1 < ACTIVEBKG->nbanchors) {
-				const ANCHOR_DATA & n0 = ACTIVEBKG->anchors[k0], & n1 = ACTIVEBKG->anchors[k1];
+			long k0 = pathfind.list[j - 1];
+			long k1 = pathfind.list[j];
+			if(k0 >= 0 && size_t(k0) < ACTIVEBKG->m_anchors.size()
+			   && k1 >= 0 && size_t(k1) < ACTIVEBKG->m_anchors.size()) {
+				const ANCHOR_DATA & n0 = ACTIVEBKG->m_anchors[k0], & n1 = ACTIVEBKG->m_anchors[k1];
 				Color color0 = (j     <= pathfind.listpos) ? Color::yellow : Color::red;
 				Color color1 = (j + 1 <= pathfind.listpos) ? Color::yellow : Color::red;
 				drawLine(n0.pos, n1.pos, color0, color1, 2.f * zbias);
@@ -319,22 +334,22 @@ static void drawDebugPathFinding() {
 		
 		// Highlight end nodes
 		short k0 = pathfind.list[pathfind.listnb - 1];
-		if(k0 >= 0 && k0 < ACTIVEBKG->nbanchors) {
+		if(k0 >= 0 && size_t(k0) < ACTIVEBKG->m_anchors.size()) {
 			Anglef angle(0.f, 0.f, 0.f);
 			Vec3f scale(0.5f);
 			RenderMaterial mat;
 			mat.setBlendType(RenderMaterial::Opaque);
 			mat.setDepthTest(true);
 			
-			Draw3DObject(g_nodeObject, angle, ACTIVEBKG->anchors[k0].pos, scale, Color3f::white, mat);
+			Draw3DObject(g_nodeObject, angle, ACTIVEBKG->m_anchors[k0].pos, scale, Color3f::white, mat);
 		}
 		
 		// Show entity ID at the active node
 		if(pathfind.listpos < pathfind.listnb) {
 			short k1 = pathfind.list[pathfind.listpos];
-			if(k1 >= 0 && k1 < ACTIVEBKG->nbanchors) {
-				if(closerThan(ACTIVEBKG->anchors[k1].pos, player.pos, DebugTextMaxDistance)) {
-					drawTextAt(hFontDebug, ACTIVEBKG->anchors[k1].pos, entity->idString());
+			if(k1 >= 0 && size_t(k1) < ACTIVEBKG->m_anchors.size()) {
+				if(closerThan(ACTIVEBKG->m_anchors[k1].pos, player.pos, DebugTextMaxDistance)) {
+					drawTextAt(hFontDebug, ACTIVEBKG->m_anchors[k1].pos, entity->idString());
 				}
 			}
 		}
@@ -370,31 +385,31 @@ static void drawDebugFogs() {
 
 // TODO remove too similar colors
 static const Color distinctDebugColors[] = {
-	Color(230,  25,  75), // Red
-	Color( 60, 180,  75), // Green
-	Color(255, 225,  25), // Yellow
-	Color(  0, 130, 200), // Blue
-	Color(245, 130,  48), // Orange
-	Color(145,  30, 180), // Purple
-	Color( 70, 240, 240), // Cyan
-	Color(240,  50, 230), // Magenta
-	Color(250, 190, 190), // Pink
-	Color(  0, 128, 128), // Teal
-	Color(230, 190, 255), // Lavender
-	Color(170, 110,  40), // Brown
-	Color(255, 250, 200), // Beige
-	Color(128,   0,   0), // Maroon
-	Color(170, 255, 195), // Mint
-	Color(128, 128,   0), // Olive
-	Color(255, 215, 180), // Coral
-	Color(  0,   0, 128)  // Navy
+	Color::rgb(0.9f,  0.1f,  0.3f), // Red
+	Color::rgb(0.25f, 0.7f,  0.3f), // Green
+	Color::rgb(1.f, 0.88f,  0.1f), // Yellow
+	Color::rgb(0.f, 0.51f, 0.78f), // Blue
+	Color::rgb(0.95f, 0.51f, 0.19f), // Orange
+	Color::rgb(0.57f, 0.12f, 0.71f), // Purple
+	Color::rgb(0.27f, 0.94f, 0.94f), // Cyan
+	Color::rgb(0.94f, 0.2f, 0.9f), // Magenta
+	Color::rgb(0.98f, 0.75f, 0.75f), // Pink
+	Color::rgb(0.f, 0.5f, 0.5f), // Teal
+	Color::rgb(0.9f, 0.75f, 1.f), // Lavender
+	Color::rgb(0.67f, 0.43f, 0.16f), // Brown
+	Color::rgb(1.f, 0.98f, 0.78f), // Beige
+	Color::rgb(0.5f, 0.f, 0.f), // Maroon
+	Color::rgb(0.67f, 1.f, 0.76f), // Mint
+	Color::rgb(0.5f, 0.5f, 0.f), // Olive
+	Color::rgb(1.f, 0.84f, 0.71f), // Coral
+	Color::rgb(0.f, 0.f, 0.5f) // Navy
 };
 
 #include <boost/lexical_cast.hpp>
 
 static void drawColorChart() {
 	Vec2f p = Vec2f(50, 50);
-	for(size_t i = 0; i < ARRAY_SIZE(distinctDebugColors); i++) {
+	for(size_t i = 0; i < size_t(boost::size(distinctDebugColors)); i++) {
 		drawLine(p, p + Vec2f(40, 0), 1.f, distinctDebugColors[i]);
 		
 		drawTextCentered(hFontDebug, p + Vec2f(-5, 0), boost::lexical_cast<std::string>(i), Color::white);
@@ -430,26 +445,27 @@ static void drawDebugCollisionShape(EERIE_3DOBJ * obj) {
 	// Vert indices copied from
 	// IsObjectVertexCollidingTriangle
 	
-	//TOP
+	// TOP
 	drawLineTriangle(v[1].pos, v[2].pos, v[3].pos, c[0]);
-	//BOTTOM
+	// BOTTOM
 	drawLineTriangle(v[10].pos, v[9].pos, v[11].pos, c[1]);
-	//UP/FRONT
+	// UP/FRONT
 	drawLineTriangle(v[1].pos, v[4].pos, v[5].pos, c[2]);
-	//DOWN/FRONT
+	// DOWN/FRONT
 	drawLineTriangle(v[5].pos, v[8].pos, v[9].pos, c[3]);
-	//UP/BACK
+	// UP/BACK
 	drawLineTriangle(v[3].pos, v[2].pos, v[7].pos, c[4]);
-	//DOWN/BACK
+	// DOWN/BACK
 	drawLineTriangle(v[7].pos, v[6].pos, v[11].pos, c[5]);
-	//UP/LEFT
+	// UP/LEFT
 	drawLineTriangle(v[6].pos, v[2].pos, v[1].pos, c[6]);
-	//DOWN/LEFT
+	// DOWN/LEFT
 	drawLineTriangle(v[10].pos, v[6].pos, v[5].pos, c[7]);
-	//UP/RIGHT
+	// UP/RIGHT
 	drawLineTriangle(v[4].pos, v[3].pos, v[7].pos, c[8]);
-	//DOWN/RIGHT
+	// DOWN/RIGHT
 	drawLineTriangle(v[8].pos, v[7].pos, v[11].pos, c[9]);
+	
 }
 
 static void drawDebugEntityPhysicsCylinder(Entity * io) {
@@ -519,9 +535,6 @@ static void drawDebugEntities() {
 		}
 		if((entity->ioflags & IO_CAMERA) || (entity->ioflags & IO_MARKER)) {
 			color = Color::gray(0.7f), visible = false;
-		}
-		if(DRAGINTER == entity) {
-			color = Color::white, visible = true;
 		}
 		
 		if(visible) {
@@ -609,15 +622,15 @@ static void drawDebugMaterialTexture(Vec2f & textpos, const std::string & type,
 		pos.x = g_size.right - 5 - (type_s + name_s + format_s);
 	}
 	
-	hFontDebug->draw(pos + Vec2i_ONE, type, Color::black);
+	hFontDebug->draw(pos + Vec2i(1), type, Color::black);
 	hFontDebug->draw(pos, type, color);
 	pos.x += type_s;
 	
-	hFontDebug->draw(pos + Vec2i_ONE, name, Color::black);
+	hFontDebug->draw(pos + Vec2i(1), name, Color::black);
 	hFontDebug->draw(pos, name, Color::white);
 	pos.x += name_s;
 	
-	hFontDebug->draw(pos + Vec2i_ONE, format, Color::black);
+	hFontDebug->draw(pos + Vec2i(1), format, Color::black);
 	hFontDebug->draw(pos, format, Color::gray(0.7f));
 	
 	textpos.y += hFontDebug->getLineHeight();
@@ -729,22 +742,17 @@ static void drawDebugMaterials() {
 		}
 	}
 	
-	for(short z = 0; z < ACTIVEBKG->m_size.y; z++)
+	for(short y = 0; y < ACTIVEBKG->m_size.y; y++)
 	for(short x = 0; x < ACTIVEBKG->m_size.x; x++) {
-		const BackgroundTileData & feg = ACTIVEBKG->m_tileData[x][z];
+		const BackgroundTileData & feg = ACTIVEBKG->m_tileData[x][y];
 		
-		if(!feg.treat) {
+		if(!ACTIVEBKG->isTileActive(Vec2s(x, y))) {
 			continue;
 		}
 		
-		for(long l = 0; l < feg.nbpolyin; l++) {
-			EERIEPOLY * ep = feg.polyin[l];
+		BOOST_FOREACH(EERIEPOLY * ep, feg.polyin) {
 			
-			if(!ep) {
-				continue;
-			}
-			
-			if(ep->type & skip) {
+			if(!ep || (ep->type & skip)) {
 				continue;
 			}
 			
@@ -841,8 +849,6 @@ static void drawDebugMaterials() {
 			drawDebugMaterialTexture(textpos, oss.str(), *enviro->m_pTexture, Color::yellow);
 		}
 		
-		(void)textpos;
-		
 		for(size_t i = 0; i < count; i++) {
 			
 			oss.str(std::string());
@@ -851,16 +857,16 @@ static void drawDebugMaterials() {
 			oss << '(' << puv[i].x << ',' << puv[i].y << ')';
 			std::string text = oss.str();
 			
-			Vec2i textpos = Vec2i(pp[i]);
+			Vec2i coordpos = Vec2i(pp[i]);
 			if(pp[i].y < c.y) {
-				textpos.y -= hFontDebug->getLineHeight();
+				coordpos.y -= hFontDebug->getLineHeight();
 			}
 			
 			if(pp[i].x < c.x) {
-				textpos.x -= hFontDebug->getTextSize(text).width();
+				coordpos.x -= hFontDebug->getTextSize(text).width();
 			}
 			
-			hFontDebug->draw(textpos.x, textpos.y, text, Color::gray(0.7f));
+			hFontDebug->draw(coordpos.x, coordpos.y, text, Color::gray(0.7f));
 		}
 		
 	}
@@ -869,17 +875,19 @@ static void drawDebugMaterials() {
 
 
 struct DebugRay {
+	
 	Vec3f start;
 	Vec3f dir;
 	Color color;
 	PlatformInstant expiration;
 	
-	DebugRay(Vec3f start, Vec3f dir, Color color, PlatformInstant expiration)
-		: start(start)
-		, dir(dir)
-		, color(color)
-		, expiration(expiration)
-	{}
+	DebugRay(Vec3f start_, Vec3f dir_, Color color_, PlatformInstant expiration_)
+		: start(start_)
+		, dir(dir_)
+		, color(color_)
+		, expiration(expiration_)
+	{ }
+	
 };
 
 static std::vector<DebugRay> debugRays;

@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2016 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -21,9 +21,9 @@
 
 #include <sstream>
 
-#include "src/math/GtxFunctions.h"
-
+#include "game/Camera.h"
 #include "graphics/Math.h"
+#include "math/GtxFunctions.h"
 
 #include "AssertionTraits.h"
 #include "LegacyMath.h"
@@ -35,10 +35,10 @@ struct TestRotation {
 	Anglef angle;
 	glm::mat3 mat;
 	
-	TestRotation(glm::quat quat, Anglef angle, glm::mat3 mat)
-		: quat(quat)
-		, angle(angle)
-		, mat(mat)
+	TestRotation(glm::quat quat_, Anglef angle_, glm::mat3 mat_)
+		: quat(quat_)
+		, angle(angle_)
+		, mat(mat_)
 	{}
 };
 
@@ -54,8 +54,8 @@ void LegacyMathTest::setUp() {
 	using glm::mat3;
 	
 	// Data from:
-	// http://www.euclideanspace.com/maths/geometry/rotations/conversions/eulerToQuaternion/steps/index.htm
-	// http://www.euclideanspace.com/maths/algebra/matrix/transforms/examples/index.htm
+	// https://euclideanspace.com/maths/geometry/rotations/conversions/eulerToQuaternion/steps/index.htm
+	// https://euclideanspace.com/maths/algebra/matrix/transforms/examples/index.htm
 	
 	// Identity (no rotation)
 	addTestData(quat(    1.f,    0.0f,    0.0f,    0.0f), Anglef(  0,  0,  0), mat3( 1, 0, 0,  0, 1, 0,  0, 0, 1));
@@ -110,7 +110,7 @@ void LegacyMathTest::quaternionTests() {
 	std::vector<TestRotation>::iterator it;
 	for(it = rotations.begin(); it != rotations.end(); ++it) {
 		
-		glm::quat A = it->quat;	
+		glm::quat A = it->quat;
 		glm::quat B = it->quat;
 	
 		CPPUNIT_ASSERT_EQUAL(A, B);
@@ -126,7 +126,7 @@ void LegacyMathTest::quaternionTests() {
 		
 		CPPUNIT_ASSERT_EQUAL(vecA, vecB);
 		
-		glm::mat4x4 matrixA;
+		glm::mat4x4 matrixA(1.f);
 		MatrixFromQuat(matrixA, A);
 		
 		glm::mat4x4 matrixB = glm::mat4_cast(B);
@@ -203,32 +203,10 @@ void LegacyMathTest::vecMatrixConversionTest() {
 		front = it->quat * front;
 		up = it->quat * up;
 		
-		glm::mat4 mat;
+		glm::mat4 mat(1.f);
 		MatrixSetByVectors(mat, front, up);
 		
 		CPPUNIT_ASSERT_EQUAL(glm::mat4(it->mat), mat);
-	}
-}
-
-void LegacyMathTest::angleTest()
-{
-	typedef std::vector<TestRotation>::iterator Itr;
-	
-	for(Itr it = rotations.begin(); it != rotations.end(); ++it) {
-		Vec3f testVert(1.f, 0.5f, 0.1f);
-		
-		EERIE_TRANSFORM trans;
-		trans.updateFromAngle(it->angle);
-		
-		Vec3f out, temp, temp2;
-		YRotatePoint(&testVert, &temp, trans.ycos, trans.ysin);
-		XRotatePoint(&temp, &temp2, trans.xcos, trans.xsin);
-		ZRotatePoint(&temp2, &out, trans.zcos, trans.zsin);
-		
-		Vec3f vecA = out;
-		Vec3f vecB = Vec3f(trans.worldToView * Vec4f(testVert, 1.f));
-		
-		CPPUNIT_ASSERT_EQUAL(vecA, vecB);
 	}
 }
 
@@ -245,24 +223,6 @@ void LegacyMathTest::angleConversionTest()
 	}
 }
 
-void LegacyMathTest::cameraRotationTest() {
-	
-	const Vec3f testVert(100.f, 200.f, 300.f);
-	
-	typedef std::vector<TestRotation>::iterator Itr;
-	for(Itr it = rotations.begin(); it != rotations.end(); ++it) {
-		
-		EERIE_TRANSFORM trans;
-		trans.pos = Vec3f(3.f, 6.f, 9.f);
-		trans.updateFromAngle(it->angle);
-		
-		Vec3f vecA = camEE_RT(testVert, trans);
-		Vec3f vecB = Vec3f(trans.worldToView * Vec4f(testVert, 1.f));
-		
-		CPPUNIT_ASSERT_EQUAL(vecA, vecB);
-	}
-}
-
 // TODO copy-paste
 static Vec2s inventorySizeFromTextureSize(Vec2i size) {
 	return Vec2s(glm::clamp((size + Vec2i(31, 31)) / Vec2i(32, 32), Vec2i(1, 1), Vec2i(3, 3)));
@@ -274,18 +234,16 @@ void LegacyMathTest::inventorySizeTest() {
 	for(short j = 0; j < 100; ++j) {
 		Vec2i size(i, j);
 		Vec2s expected = inventorySizeFromTextureSize(size);
+		Vec2s oldResult = inventorySizeFromTextureSize_2(i, j);
 		
-		Vec2s result1 = inventorySizeFromTextureSize_1(i, j);
-		Vec2s result2 = inventorySizeFromTextureSize_2(i, j);
-		
-		CPPUNIT_ASSERT_EQUAL_MESSAGE(CPPUNIT_NS::assertion_traits<Vec2i>::toString(Vec2i(i, j)), expected, result1);
-		CPPUNIT_ASSERT_EQUAL_MESSAGE(CPPUNIT_NS::assertion_traits<Vec2i>::toString(Vec2i(i, j)), expected, result2);
+		CPPUNIT_ASSERT_EQUAL_MESSAGE(CPPUNIT_NS::assertion_traits<Vec2i>::toString(Vec2i(i, j)), expected, oldResult);
 	}
 }
 
 void LegacyMathTest::angleToVectorXZ_Test() {
 	
-	for(float angle = -1000; angle < 1000; angle += 0.01f) {
+	for(int i = -100000; i < 100000; i++) {
+		float angle = float(i) * 0.01f;
 		Vec3f expected = angleToVectorXZ(angle);
 		Vec3f result = angleToVectorXZ_180offset(angle + 180);
 		
@@ -298,7 +256,8 @@ void LegacyMathTest::angleToVectorXZ_Test() {
 
 void LegacyMathTest::vectorRotateTest() {
 	
-	for(float angle = 0; angle < 720; angle += 10) {
+	for(size_t i = 0; i < 720; i += 10) {
+		float angle = float(i);
 		
 		Vec3f foo = Vec3f(0.f, 0.f, 1.f);
 		
@@ -310,7 +269,8 @@ void LegacyMathTest::vectorRotateTest() {
 		CPPUNIT_ASSERT_EQUAL(result, result2);
 	}
 	
-	for(float angle = 0; angle < 720; angle += 10) {
+	for(size_t i = 0; i < 720; i += 10) {
+		float angle = float(i);
 		
 		Vec3f foo = Vec3f(1.f, 0.f, 0.f);
 		
@@ -327,9 +287,11 @@ void LegacyMathTest::vectorRotateTest() {
 
 void LegacyMathTest::focalToFovTest() {
 	
-	for(float focal = 100; focal < 800; focal += 0.1f) {
+	for(size_t i = 1000; i < 8000; i++) {
+		float focal = float(i) * 0.1f;
+		
 		float expected = glm::radians(focalToFovLegacy(focal));
-		float result = focalToFov(focal);
+		float result = Camera::focalToFov(focal);
 		
 		std::ostringstream ss;
 		ss << "In: " << focal;

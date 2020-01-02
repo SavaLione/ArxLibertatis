@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2017 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -47,6 +47,8 @@ ZeniMax Media Inc., Suite 120, Rockville, Maryland 20850 USA.
 #include "physics/Physics.h"
 
 #include <stddef.h>
+
+#include <boost/foreach.hpp>
 
 #include "graphics/GraphicsTypes.h"
 #include "graphics/data/Mesh.h"
@@ -96,16 +98,18 @@ void EERIE_PHYSICS_BOX_Create(EERIE_3DOBJ * obj)
 	pbox->vert[14].pos = pbox->vert[0].pos;
 	pbox->vert[14].pos.y = cubmax.y;
 	
-	for(size_t k = 1; k < pbox->vert.size() - 2; k++)
-	{
+	for(size_t k = 1; k < pbox->vert.size() - 2; k++) {
 		pbox->vert[k].pos.x = pbox->vert[0].pos.x;
 		pbox->vert[k].pos.z = pbox->vert[0].pos.z;
-
-		if (k < 5)		pbox->vert[k].pos.y = cubmin.y;
-		else if (k < 9)	pbox->vert[k].pos.y = pbox->vert[0].pos.y;
-		else			pbox->vert[k].pos.y = cubmax.y;
+		if(k < 5) {
+			pbox->vert[k].pos.y = cubmin.y;
+		} else if(k < 9) {
+			pbox->vert[k].pos.y = pbox->vert[0].pos.y;
+		} else {
+			pbox->vert[k].pos.y = cubmax.y;
+		}
 	}
-
+	
 	float diff = cubmax.y - cubmin.y;
 	
 	if(diff < 12.f) {
@@ -113,69 +117,64 @@ void EERIE_PHYSICS_BOX_Create(EERIE_3DOBJ * obj)
 		cubmax.y += 8.f;
 		cubmin.y -= 8.f;
 		
-		for(size_t k = 1; k < pbox->vert.size() - 2; k++)
-		{
+		for(size_t k = 1; k < pbox->vert.size() - 2; k++) {
 			pbox->vert[k].pos.x = pbox->vert[0].pos.x;
 			pbox->vert[k].pos.z = pbox->vert[0].pos.z;
-
-			if (k < 5)		pbox->vert[k].pos.y = cubmin.y;
-			else if (k < 9)	pbox->vert[k].pos.y = pbox->vert[0].pos.y;
-			else			pbox->vert[k].pos.y = cubmax.y;
+			if(k < 5) {
+				pbox->vert[k].pos.y = cubmin.y;
+			} else if(k < 9) {
+				pbox->vert[k].pos.y = pbox->vert[0].pos.y;
+			} else {
+				pbox->vert[k].pos.y = cubmax.y;
+			}
 		}
-
+		
 		pbox->vert[14].pos.y = cubmax.y;
 		pbox->vert[13].pos.y = cubmin.y;
-		float RATI = diff * ( 1.0f / 8 );
-
-		for (size_t k = 0; k < obj->vertexlist.size(); k++)
-		{
-			if (k == obj->origin) continue;
-
+		float RATI = diff * (1.0f / 8);
+		
+		for(size_t k = 0; k < obj->vertexlist.size(); k++) {
+			
+			if(k == obj->origin) {
+				continue;
+			}
 			Vec3f curr = obj->vertexlist[k].v;
+			
 			size_t SEC = 1;
 			pbox->vert[SEC].pos.x = std::min(pbox->vert[SEC].pos.x, curr.x);
 			pbox->vert[SEC].pos.z = std::min(pbox->vert[SEC].pos.z, curr.z);
-
-			pbox->vert[SEC+1].pos.x = std::min(pbox->vert[SEC+1].pos.x, curr.x);
-			pbox->vert[SEC+1].pos.z = std::max(pbox->vert[SEC+1].pos.z, curr.z);
-
-			pbox->vert[SEC+2].pos.x = std::max(pbox->vert[SEC+2].pos.x, curr.x);
-			pbox->vert[SEC+2].pos.z = std::max(pbox->vert[SEC+2].pos.z, curr.z);
-
-			pbox->vert[SEC+3].pos.x = std::max(pbox->vert[SEC+3].pos.x, curr.x);
-			pbox->vert[SEC+3].pos.z = std::min(pbox->vert[SEC+3].pos.z, curr.z);
-
+			pbox->vert[SEC + 1].pos.x = std::min(pbox->vert[SEC + 1].pos.x, curr.x);
+			pbox->vert[SEC + 1].pos.z = std::max(pbox->vert[SEC + 1].pos.z, curr.z);
+			pbox->vert[SEC + 2].pos.x = std::max(pbox->vert[SEC + 2].pos.x, curr.x);
+			pbox->vert[SEC + 2].pos.z = std::max(pbox->vert[SEC + 2].pos.z, curr.z);
+			pbox->vert[SEC + 3].pos.x = std::max(pbox->vert[SEC + 3].pos.x, curr.x);
+			pbox->vert[SEC + 3].pos.z = std::min(pbox->vert[SEC + 3].pos.z, curr.z);
+			
 			SEC = 5;
 			pbox->vert[SEC].pos.x = std::min(pbox->vert[SEC].pos.x, curr.x - RATI);
 			pbox->vert[SEC].pos.z = std::min(pbox->vert[SEC].pos.z, curr.z - RATI);
-
-			pbox->vert[SEC+1].pos.x = std::min(pbox->vert[SEC+1].pos.x, curr.x - RATI);
-			pbox->vert[SEC+1].pos.z = std::max(pbox->vert[SEC+1].pos.z, curr.z + RATI);
-
-			pbox->vert[SEC+2].pos.x = std::max(pbox->vert[SEC+2].pos.x, curr.x + RATI);
-			pbox->vert[SEC+2].pos.z = std::max(pbox->vert[SEC+2].pos.z, curr.z + RATI);
-
-			pbox->vert[SEC+3].pos.x = std::max(pbox->vert[SEC+3].pos.x, curr.x + RATI);
-			pbox->vert[SEC+3].pos.z = std::min(pbox->vert[SEC+3].pos.z, curr.z - RATI);
-
-
+			pbox->vert[SEC + 1].pos.x = std::min(pbox->vert[SEC + 1].pos.x, curr.x - RATI);
+			pbox->vert[SEC + 1].pos.z = std::max(pbox->vert[SEC + 1].pos.z, curr.z + RATI);
+			pbox->vert[SEC + 2].pos.x = std::max(pbox->vert[SEC + 2].pos.x, curr.x + RATI);
+			pbox->vert[SEC + 2].pos.z = std::max(pbox->vert[SEC + 2].pos.z, curr.z + RATI);
+			pbox->vert[SEC + 3].pos.x = std::max(pbox->vert[SEC + 3].pos.x, curr.x + RATI);
+			pbox->vert[SEC + 3].pos.z = std::min(pbox->vert[SEC + 3].pos.z, curr.z - RATI);
+			
 			SEC = 9;
 			pbox->vert[SEC].pos.x = std::min(pbox->vert[SEC].pos.x, curr.x);
 			pbox->vert[SEC].pos.z = std::min(pbox->vert[SEC].pos.z, curr.z);
-
-			pbox->vert[SEC+1].pos.x = std::min(pbox->vert[SEC+1].pos.x, curr.x);
-			pbox->vert[SEC+1].pos.z = std::max(pbox->vert[SEC+1].pos.z, curr.z);
-
-			pbox->vert[SEC+2].pos.x = std::max(pbox->vert[SEC+2].pos.x, curr.x);
-			pbox->vert[SEC+2].pos.z = std::max(pbox->vert[SEC+2].pos.z, curr.z);
-
-			pbox->vert[SEC+3].pos.x = std::max(pbox->vert[SEC+3].pos.x, curr.x);
-			pbox->vert[SEC+3].pos.z = std::min(pbox->vert[SEC+3].pos.z, curr.z);
+			pbox->vert[SEC + 1].pos.x = std::min(pbox->vert[SEC + 1].pos.x, curr.x);
+			pbox->vert[SEC + 1].pos.z = std::max(pbox->vert[SEC + 1].pos.z, curr.z);
+			pbox->vert[SEC + 2].pos.x = std::max(pbox->vert[SEC + 2].pos.x, curr.x);
+			pbox->vert[SEC + 2].pos.z = std::max(pbox->vert[SEC + 2].pos.z, curr.z);
+			pbox->vert[SEC + 3].pos.x = std::max(pbox->vert[SEC + 3].pos.x, curr.x);
+			pbox->vert[SEC  + 3].pos.z = std::min(pbox->vert[SEC + 3].pos.z, curr.z);
+			
 		}
-	}
-	else
-	{
-		float cut = (cubmax.y - cubmin.y) * ( 1.0f / 3 );
+		
+	} else {
+		
+		float cut = (cubmax.y - cubmin.y) * (1.0f / 3);
 		float ysec2 = cubmin.y + cut * 2.f;
 		float ysec1 = cubmin.y + cut;
 
@@ -186,42 +185,35 @@ void EERIE_PHYSICS_BOX_Create(EERIE_3DOBJ * obj)
 			Vec3f curr = obj->vertexlist[k].v;
 			size_t SEC;
 
-			if (curr.y < ysec1)
-			{
+			if(curr.y < ysec1) {
 				SEC = 1;
-			}
-			else if (curr.y < ysec2)
-			{
+			} else if(curr.y < ysec2) {
 				SEC = 5;
-			}
-			else
-			{
+			} else {
 				SEC = 9;
 			}
-
+			
 			pbox->vert[SEC].pos.x = std::min(pbox->vert[SEC].pos.x, curr.x);
 			pbox->vert[SEC].pos.z = std::min(pbox->vert[SEC].pos.z, curr.z);
-
-			pbox->vert[SEC+1].pos.x = std::min(pbox->vert[SEC+1].pos.x, curr.x);
-			pbox->vert[SEC+1].pos.z = std::max(pbox->vert[SEC+1].pos.z, curr.z);
-
-			pbox->vert[SEC+2].pos.x = std::max(pbox->vert[SEC+2].pos.x, curr.x);
-			pbox->vert[SEC+2].pos.z = std::max(pbox->vert[SEC+2].pos.z, curr.z);
-
-			pbox->vert[SEC+3].pos.x = std::max(pbox->vert[SEC+3].pos.x, curr.x);
-			pbox->vert[SEC+3].pos.z = std::min(pbox->vert[SEC+3].pos.z, curr.z);
+			pbox->vert[SEC + 1].pos.x = std::min(pbox->vert[SEC + 1].pos.x, curr.x);
+			pbox->vert[SEC + 1].pos.z = std::max(pbox->vert[SEC + 1].pos.z, curr.z);
+			pbox->vert[SEC + 2].pos.x = std::max(pbox->vert[SEC + 2].pos.x, curr.x);
+			pbox->vert[SEC + 2].pos.z = std::max(pbox->vert[SEC + 2].pos.z, curr.z);
+			pbox->vert[SEC + 3].pos.x = std::max(pbox->vert[SEC + 3].pos.x, curr.x);
+			pbox->vert[SEC + 3].pos.z = std::min(pbox->vert[SEC + 3].pos.z, curr.z);
+			
 		}
 	}
-
-	for (size_t k = 0; k < 4; k++)
-	{
-		if (glm::abs(pbox->vert[5+k].pos.x - pbox->vert[0].pos.x) < 2.f)
-			pbox->vert[5+k].pos.x = (pbox->vert[1+k].pos.x + pbox->vert[9+k].pos.x) * .5f;
-
-		if (glm::abs(pbox->vert[5+k].pos.z - pbox->vert[0].pos.z) < 2.f)
-			pbox->vert[5+k].pos.z = (pbox->vert[1+k].pos.z + pbox->vert[9+k].pos.z) * .5f;
+	
+	for(size_t k = 0; k < 4; k++) {
+		if(glm::abs(pbox->vert[5 + k].pos.x - pbox->vert[0].pos.x) < 2.f) {
+			pbox->vert[5 + k].pos.x = (pbox->vert[1 + k].pos.x + pbox->vert[9 + k].pos.x) * 0.5f;
+		}
+		if(glm::abs(pbox->vert[5 + k].pos.z - pbox->vert[0].pos.z) < 2.f) {
+			pbox->vert[5 + k].pos.z = (pbox->vert[1 + k].pos.z + pbox->vert[9 + k].pos.z) * 0.5f;
+		}
 	}
-
+	
 	pbox->radius = 0.f;
 
 	for(size_t k = 0; k < pbox->vert.size(); k++) {
@@ -271,19 +263,20 @@ void EERIE_PHYSICS_BOX_Launch(EERIE_3DOBJ * obj, const Vec3f & pos, const Anglef
 	arx_assert(obj);
 	arx_assert(obj->pbox);
 	
-	float ratio = obj->pbox->surface * ( 1.0f / 10000 );
+	float ratio = obj->pbox->surface * (1.0f / 10000);
 	ratio = glm::clamp(ratio, 0.f, 0.8f);
-	ratio = 1.f - (ratio * ( 1.0f / 4 ));
+	ratio = 1.f - (ratio * (1.0f / 4));
 	
 	for(size_t i = 0; i < obj->pbox->vert.size(); i++) {
 		PhysicsParticle * pv = &obj->pbox->vert[i];
 		pv->pos = pv->initpos;
-		pv->pos = VRotateY(pv->pos, angle.getYaw());
-		pv->pos = VRotateX(pv->pos, angle.getPitch());
+		
+		pv->pos = VRotateY(pv->pos, MAKEANGLE(270.f - angle.getYaw()));
+		pv->pos = VRotateX(pv->pos, -angle.getPitch());
 		pv->pos = VRotateZ(pv->pos, angle.getRoll());
 		pv->pos += pos;
 
-		pv->force = Vec3f_ZERO;
+		pv->force = Vec3f(0.f);
 		pv->velocity = vect * (250.f * ratio);
 		pv->mass = 0.4f + ratio * 0.1f;
 	}
@@ -310,7 +303,7 @@ static void ComputeForces(boost::array<PhysicsParticle, N> & particles) {
 		PhysicsParticle * pv = &particles[k];
 
 		// Reset Force
-		pv->force = Vec3f_ZERO;
+		pv->force = Vec3f(0.f);
 
 		// Apply Gravity
 		if(pv->mass > 0.f) {
@@ -336,7 +329,7 @@ static void RK4Integrate(boost::array<PhysicsParticle, N> & particles, float Del
 	
 	float halfDeltaT, sixthDeltaT;
 	halfDeltaT = DeltaTime * .5f; // some time values i will need
-	sixthDeltaT = ( 1.0f / 6 );
+	sixthDeltaT = (1.0f / 6);
 	
 	boost::array<boost::array<PhysicsParticle, N>, 5> m_TempSys;
 	
@@ -395,7 +388,7 @@ static bool IsObjectInField(const PHYSICS_BOX_DATA & pbox) {
 			
 			Entity * pfrm = entities.get(sp->m_entity);
 			if(pfrm) {
-				Cylinder cyl = Cylinder(Vec3f_ZERO, 35.f, -35.f);
+				Cylinder cyl = Cylinder(Vec3f(0.f), 35.f, -35.f);
 				
 				for(size_t k = 0; k < pbox.vert.size(); k++) {
 					const PhysicsParticle * pv = &pbox.vert[k];
@@ -421,7 +414,7 @@ static bool IsObjectVertexCollidingTriangle(const PHYSICS_BOX_DATA & pbox, Vec3f
 
 	const boost::array<PhysicsParticle, 15> & vert = pbox.vert;
 
-	Vec3f center = (verts[0] + verts[1] + verts[2]) * ( 1.0f / 3 );
+	Vec3f center = (verts[0] + verts[1] + verts[2]) * (1.0f / 3);
 	float rad = fdist(center, verts[0]);
 
 	{
@@ -438,7 +431,7 @@ static bool IsObjectVertexCollidingTriangle(const PHYSICS_BOX_DATA & pbox, Vec3f
 			return false;
 	}
 	
-	//TOP
+	// top
 	t1.v[0] = vert[1].pos;
 	t1.v[1] = vert[2].pos;
 	t1.v[2] = vert[3].pos;
@@ -447,7 +440,7 @@ static bool IsObjectVertexCollidingTriangle(const PHYSICS_BOX_DATA & pbox, Vec3f
 		return true;
 	}
 	
-	//BOTTOM
+	// bottom
 	t1.v[0] = vert[10].pos;
 	t1.v[1] = vert[9].pos;
 	t1.v[2] = vert[11].pos;
@@ -456,7 +449,7 @@ static bool IsObjectVertexCollidingTriangle(const PHYSICS_BOX_DATA & pbox, Vec3f
 		return true;
 	}
 	
-	//UP/FRONT
+	// up / front
 	t1.v[0] = vert[1].pos;
 	t1.v[1] = vert[4].pos;
 	t1.v[2] = vert[5].pos;
@@ -465,7 +458,7 @@ static bool IsObjectVertexCollidingTriangle(const PHYSICS_BOX_DATA & pbox, Vec3f
 		return true;
 	}
 	
-	//DOWN/FRONT
+	// down / front
 	t1.v[0] = vert[5].pos;
 	t1.v[1] = vert[8].pos;
 	t1.v[2] = vert[9].pos;
@@ -474,7 +467,7 @@ static bool IsObjectVertexCollidingTriangle(const PHYSICS_BOX_DATA & pbox, Vec3f
 		return true;
 	}
 	
-	//UP/BACK
+	// up / back
 	t1.v[0] = vert[3].pos;
 	t1.v[1] = vert[2].pos;
 	t1.v[2] = vert[7].pos;
@@ -483,7 +476,7 @@ static bool IsObjectVertexCollidingTriangle(const PHYSICS_BOX_DATA & pbox, Vec3f
 		return true;
 	}
 	
-	//DOWN/BACK
+	// down / back
 	t1.v[0] = vert[7].pos;
 	t1.v[1] = vert[6].pos;
 	t1.v[2] = vert[11].pos;
@@ -492,7 +485,7 @@ static bool IsObjectVertexCollidingTriangle(const PHYSICS_BOX_DATA & pbox, Vec3f
 		return true;
 	}
 
-	//UP/LEFT
+	// up / left
 	t1.v[0] = vert[6].pos;
 	t1.v[1] = vert[2].pos;
 	t1.v[2] = vert[1].pos;
@@ -501,7 +494,7 @@ static bool IsObjectVertexCollidingTriangle(const PHYSICS_BOX_DATA & pbox, Vec3f
 		return true;
 	}
 
-	//DOWN/LEFT
+	// down / left
 	t1.v[0] = vert[10].pos;
 	t1.v[1] = vert[6].pos;
 	t1.v[2] = vert[5].pos;
@@ -510,7 +503,7 @@ static bool IsObjectVertexCollidingTriangle(const PHYSICS_BOX_DATA & pbox, Vec3f
 		return true;
 	}
 
-	//UP/RIGHT
+	// up / right
 	t1.v[0] = vert[4].pos;
 	t1.v[1] = vert[3].pos;
 	t1.v[2] = vert[7].pos;
@@ -519,7 +512,7 @@ static bool IsObjectVertexCollidingTriangle(const PHYSICS_BOX_DATA & pbox, Vec3f
 		return true;
 	}
 
-	//DOWN/RIGHT
+	// down / right
 	t1.v[0] = vert[8].pos;
 	t1.v[1] = vert[7].pos;
 	t1.v[2] = vert[11].pos;
@@ -532,53 +525,57 @@ static bool IsObjectVertexCollidingTriangle(const PHYSICS_BOX_DATA & pbox, Vec3f
 }
 
 static bool IsObjectVertexCollidingPoly(const PHYSICS_BOX_DATA & pbox, const EERIEPOLY & ep) {
-
+	
 	Vec3f pol[3];
 	pol[0] = ep.v[0].p;
 	pol[1] = ep.v[1].p;
 	pol[2] = ep.v[2].p;
-
+	
 	if(ep.type & POLY_QUAD) {
-
+		
 		if(IsObjectVertexCollidingTriangle(pbox, pol)) {
 			return true;
 		}
-
+		
 		pol[1] = ep.v[2].p;
 		pol[2] = ep.v[3].p;
-
-		if(IsObjectVertexCollidingTriangle(pbox, pol)) {
-			return true;
-		}
-
-		return false;
+		
+		return IsObjectVertexCollidingTriangle(pbox, pol);
 	}
-
-	if(IsObjectVertexCollidingTriangle(pbox, pol)) {
-		return true;
-	}
-
-	return false;
+	
+	return IsObjectVertexCollidingTriangle(pbox, pol);
 }
 
 static Material polyTypeToCollisionMaterial(const EERIEPOLY & ep) {
-	if (ep.type & POLY_METAL) return MATERIAL_METAL;
-	else if (ep.type & POLY_WOOD) return MATERIAL_WOOD;
-	else if (ep.type & POLY_STONE) return MATERIAL_STONE;
-	else if (ep.type & POLY_GRAVEL) return MATERIAL_GRAVEL;
-	else if (ep.type & POLY_WATER) return MATERIAL_WATER;
-	else if (ep.type & POLY_EARTH) return MATERIAL_EARTH;
-	else return MATERIAL_STONE;
+	if(ep.type & POLY_METAL) {
+		return MATERIAL_METAL;
+	}
+	if(ep.type & POLY_WOOD) {
+		return MATERIAL_WOOD;
+	}
+	if(ep.type & POLY_STONE) {
+		return MATERIAL_STONE;
+	}
+	if(ep.type & POLY_GRAVEL) {
+		return MATERIAL_GRAVEL;
+	}
+	if(ep.type & POLY_WATER) {
+		return MATERIAL_WATER;
+	}
+	if(ep.type & POLY_EARTH) {
+		return MATERIAL_EARTH;
+	}
+	return MATERIAL_STONE;
 }
 
-static bool IsFULLObjectVertexInValidPosition(const PHYSICS_BOX_DATA & pbox, EERIEPOLY *& collisionPoly) {
+static bool IsFULLObjectVertexInValidPosition(const PHYSICS_BOX_DATA & pbox, EERIEPOLY * & collisionPoly) {
 
 	float rad = pbox.radius;
 	
 	// TODO copy-paste background tiles
 	int tilex = int(pbox.vert[0].pos.x * ACTIVEBKG->m_mul.x);
 	int tilez = int(pbox.vert[0].pos.z * ACTIVEBKG->m_mul.y);
-	int radius = std::min(1, short(rad * (1.0f/100)) + 1);
+	int radius = std::min(1, short(rad * 0.01f) + 1);
 	
 	int minx = std::max(tilex - radius, 0);
 	int maxx = std::min(tilex + radius, ACTIVEBKG->m_size.x - 1);
@@ -588,9 +585,7 @@ static bool IsFULLObjectVertexInValidPosition(const PHYSICS_BOX_DATA & pbox, EER
 	for(int z = minz; z <= maxz; z++)
 	for(int x = minx; x <= maxx; x++) {
 		BackgroundTileData & eg = ACTIVEBKG->m_tileData[x][z];
-		
-		for(long k = 0; k < eg.nbpoly; k++) {
-			EERIEPOLY & ep = eg.polydata[k];
+		BOOST_FOREACH(EERIEPOLY & ep, eg.polydata) {
 			
 			if(ep.area > 190.f
 			   && !(ep.type & POLY_WATER)
@@ -640,58 +635,58 @@ static bool IsFULLObjectVertexInValidPosition(const PHYSICS_BOX_DATA & pbox, EER
 					return false;
 				}
 			}
+			
 		}
 	}
 
 	return true;
 }
 
-static bool ARX_INTERACTIVE_CheckFULLCollision(const PHYSICS_BOX_DATA & pbox, Entity * source) {
+static bool ARX_INTERACTIVE_CheckFULLCollision(const PHYSICS_BOX_DATA & pbox, Entity & source) {
 	
-	for(long i = 0; i < TREATZONE_CUR; i++) {
-
-		if(treatio[i].show != SHOW_FLAG_IN_SCENE || (treatio[i].ioflags & IO_NO_COLLISIONS))
-			continue;
-
-		Entity * io = treatio[i].io;
-
-		if(!io
-		   || io == source
-		   || !io->obj
-		   || io == entities.player()
-		   || treatio[i].io->index() == source->no_collide
-		   || (io->ioflags & (IO_CAMERA | IO_MARKER | IO_ITEM))
-		   || io->usepath
-		   || ((io->ioflags & IO_NPC) && source && (source->ioflags & IO_NO_NPC_COLLIDE))
-		   || !closerThan(io->pos, pbox.vert[0].pos, 600.f)
-		   || !In3DBBoxTolerance(pbox.vert[0].pos, io->bbox3D, pbox.radius)
-		) {
+	for(size_t i = 0; i < treatio.size(); i++) {
+		
+		if(treatio[i].show != SHOW_FLAG_IN_SCENE || (treatio[i].ioflags & IO_NO_COLLISIONS)) {
 			continue;
 		}
-
+		
+		Entity * io = treatio[i].io;
+		if(!io || io == &source || !io->obj || io == entities.player()
+		   || treatio[i].io->index() == source.no_collide
+		   || (io->ioflags & (IO_CAMERA | IO_MARKER | IO_ITEM))
+		   || io->usepath
+		   || ((io->ioflags & IO_NPC) && (source.ioflags & IO_NO_NPC_COLLIDE))
+		   || !closerThan(io->pos, pbox.vert[0].pos, 600.f)
+		   || !In3DBBoxTolerance(pbox.vert[0].pos, io->bbox3D, pbox.radius)) {
+			continue;
+		}
+		
 		if((io->ioflags & IO_NPC) && io->_npcdata->lifePool.current > 0.f) {
-			for(size_t kk = 0; kk < pbox.vert.size(); kk++)
-				if(PointInCylinder(io->physics.cyl, pbox.vert[kk].pos))
+			for(size_t kk = 0; kk < pbox.vert.size(); kk++) {
+				if(PointInCylinder(io->physics.cyl, pbox.vert[kk].pos)) {
 					return true;
+				}
+			}
 		} else if(io->ioflags & IO_FIX) {
+			
 			size_t step;
 			const size_t nbv = io->obj->vertexlist.size();
 			Sphere sp;
 			sp.radius = 28.f;
-
+			
 			if(nbv < 500) {
 				step = 1;
 				sp.radius = 36.f;
-			}
-			else if(nbv < 900)
+			} else if(nbv < 900) {
 				step = 2;
-			else if(nbv < 1500)
+			} else if(nbv < 1500) {
 				step = 4;
-			else
+			} else {
 				step = 6;
-
+			}
+			
 			std::vector<EERIE_VERTEX> & vlist = io->obj->vertexWorldPositions;
-
+			
 			if(io->gameFlags & GFLAG_PLATFORM) {
 				for(size_t kk = 0; kk < pbox.vert.size(); kk++) {
 					Sphere sphere;
@@ -712,22 +707,21 @@ static bool ARX_INTERACTIVE_CheckFULLCollision(const PHYSICS_BOX_DATA & pbox, En
 								for(size_t ii = 0; ii < io->obj->facelist.size(); ii++) {
 									float cx = 0;
 									float cz = 0;
-
+									
 									for(long idx = 0 ; idx < 3 ; idx++) {
 										ep.v[idx].p = io->obj->vertexWorldPositions[io->obj->facelist[ii].vid[idx]].v;
-
 										cx += ep.v[idx].p.x;
 										cz += ep.v[idx].p.z;
 									}
-
-									cx *= ( 1.0f / 3 );
-									cz *= ( 1.0f / 3 );
-
-									for(int kk = 0; kk < 3; kk++) {
-										ep.v[kk].p.x = (ep.v[kk].p.x - cx) * 3.5f + cx;
-										ep.v[kk].p.z = (ep.v[kk].p.z - cz) * 3.5f + cz;
+									
+									cx *= 1.0f / 3;
+									cz *= 1.0f / 3;
+									
+									for(int k = 0; k < 3; k++) {
+										ep.v[k].p.x = (ep.v[k].p.x - cx) * 3.5f + cx;
+										ep.v[k].p.z = (ep.v[k].p.z - cz) * 3.5f + cz;
 									}
-
+									
 									if(PointIn2DPolyXZ(&ep, sphere.origin.x, sphere.origin.z))
 										return true;
 								}
@@ -744,15 +738,13 @@ static bool ARX_INTERACTIVE_CheckFULLCollision(const PHYSICS_BOX_DATA & pbox, En
 
 					for(size_t kk = 0; kk < pbox.vert.size(); kk++) {
 						if(sp.contains(pbox.vert[kk].pos)) {
-							if(source && (io->gameFlags & GFLAG_DOOR)) {
+							if((io->gameFlags & GFLAG_DOOR)) {
 								GameDuration elapsed = g_gameTime.now() - io->collide_door_time;
 								if(elapsed > GameDurationMs(500)) {
-									EVENT_SENDER = source;
 									io->collide_door_time = g_gameTime.now();
-									SendIOScriptEvent(io, SM_COLLIDE_DOOR);
-									EVENT_SENDER = io;
+									SendIOScriptEvent(&source, io, SM_COLLIDE_DOOR);
 									io->collide_door_time = g_gameTime.now();
-									SendIOScriptEvent(source, SM_COLLIDE_DOOR);
+									SendIOScriptEvent(io, &source, SM_COLLIDE_DOOR);
 								}
 							}
 							return true;
@@ -767,32 +759,32 @@ static bool ARX_INTERACTIVE_CheckFULLCollision(const PHYSICS_BOX_DATA & pbox, En
 }
 
 
-static void ARX_TEMPORARY_TrySound(Entity * source, Material collisionMaterial, float volume) {
+static void ARX_TEMPORARY_TrySound(Entity & source, Material collisionMaterial, float volume) {
 	
-	if(source->ioflags & IO_BODY_CHUNK)
+	if(source.ioflags & IO_BODY_CHUNK)
 		return;
 	
 	GameInstant now = g_gameTime.now();
 	
-	if(now > source->soundtime) {
+	if(now > source.soundtime) {
 		
-		source->soundcount++;
+		source.soundcount++;
 		
-		if(source->soundcount < 5) {
+		if(source.soundcount < 5) {
 			Material material;
-			if(EEIsUnderWater(source->pos))
+			if(EEIsUnderWater(source.pos))
 				material = MATERIAL_WATER;
-			else if(source->material)
-				material = source->material;
+			else if(source.material)
+				material = source.material;
 			else
 				material = MATERIAL_STONE;
 			
 			if(volume > 1.f)
 				volume = 1.f;
 			
-			long soundLength = ARX_SOUND_PlayCollision(material, collisionMaterial, volume, 1.f, source->pos, source);
+			ARX_SOUND_PlayCollision(material, collisionMaterial, volume, 1.f, source.pos, &source);
 			
-			source->soundtime = now + GameDurationMs(soundLength >> 4) + GameDurationMs(50);
+			source.soundtime = now + GameDurationMs(100);
 		}
 	}
 }
@@ -805,7 +797,7 @@ bool EERIE_PHYSICS_BOX_IsValidPosition(const Vec3f & pos) {
 		return false;
 	}
 	
-	if(tile->nbpolyin <= 0) {
+	if(tile->polyin.empty()) {
 		// Position is in an empty tile
 		return false;
 	}
@@ -818,46 +810,45 @@ bool EERIE_PHYSICS_BOX_IsValidPosition(const Vec3f & pos) {
 	return true;
 }
 
-static void ARX_EERIE_PHYSICS_BOX_Compute(PHYSICS_BOX_DATA * pbox, float framediff, Entity * source) {
+static void ARX_EERIE_PHYSICS_BOX_Compute(PHYSICS_BOX_DATA & pbox, float framediff, Entity & source) {
 
 	Vec3f oldpos[32];
 	
-	for(size_t kk = 0; kk < pbox->vert.size(); kk++) {
-		PhysicsParticle *pv = &pbox->vert[kk];
+	for(size_t kk = 0; kk < pbox.vert.size(); kk++) {
+		PhysicsParticle * pv = &pbox.vert[kk];
 		oldpos[kk] = pv->pos;
-
 		pv->velocity.x = glm::clamp(pv->velocity.x, -VELOCITY_THRESHOLD, VELOCITY_THRESHOLD);
 		pv->velocity.y = glm::clamp(pv->velocity.y, -VELOCITY_THRESHOLD, VELOCITY_THRESHOLD);
 		pv->velocity.z = glm::clamp(pv->velocity.z, -VELOCITY_THRESHOLD, VELOCITY_THRESHOLD);
 	}
 
-	RK4Integrate(pbox->vert, framediff);
+	RK4Integrate(pbox.vert, framediff);
 	
 	EERIEPOLY * collisionPoly = NULL;
 	
 	bool invalidPosition = false;
-	for(size_t i = 0; i < pbox->vert.size(); i += 2) {
-		if(!EERIE_PHYSICS_BOX_IsValidPosition(pbox->vert[i].pos - Vec3f(0.f, 10.f, 0.f))) {
+	for(size_t i = 0; i < pbox.vert.size(); i += 2) {
+		if(!EERIE_PHYSICS_BOX_IsValidPosition(pbox.vert[i].pos - Vec3f(0.f, 10.f, 0.f))) {
 			// This indicaties that entity-world collisions are broken
-			LogWarning << "Entity " << source->idString() << " escaped the world";
+			LogWarning << "Entity " << source.idString() << " escaped the world";
 			invalidPosition = true;
 			break;
 		}
 	}
 	
-	if(   !IsFULLObjectVertexInValidPosition(*pbox, collisionPoly)
-	   || ARX_INTERACTIVE_CheckFULLCollision(*pbox, source)
+	if(   !IsFULLObjectVertexInValidPosition(pbox, collisionPoly)
+	   || ARX_INTERACTIVE_CheckFULLCollision(pbox, source)
 	   || invalidPosition
-	   || IsObjectInField(*pbox)
+	   || IsObjectInField(pbox)
 	) {
 		
-		if(!(source->ioflags & IO_BODY_CHUNK)) {
+		if(!(source.ioflags & IO_BODY_CHUNK)) {
 			Material collisionMat = MATERIAL_STONE;
 			if(collisionPoly) {
 				collisionMat = polyTypeToCollisionMaterial(*collisionPoly);
 			}
 			
-			Vec3f velocity = pbox->vert[0].velocity;
+			Vec3f velocity = pbox.vert[0].velocity;
 			
 			float power = (glm::abs(velocity.x) + glm::abs(velocity.y) + glm::abs(velocity.z)) * .01f;
 			
@@ -865,14 +856,14 @@ static void ARX_EERIE_PHYSICS_BOX_Compute(PHYSICS_BOX_DATA * pbox, float framedi
 		}
 
 		if(!collisionPoly) {
-			for(size_t k = 0; k < pbox->vert.size(); k++) {
-				PhysicsParticle * pv = &pbox->vert[k];
+			for(size_t k = 0; k < pbox.vert.size(); k++) {
+				PhysicsParticle * pv = &pbox.vert[k];
 				pv->velocity *= Vec3f(-0.3f, -0.4f, -0.3f);
 				pv->pos = oldpos[k];
 			}
 		} else {
-			for(size_t k = 0; k < pbox->vert.size(); k++) {
-				PhysicsParticle * pv = &pbox->vert[k];
+			for(size_t k = 0; k < pbox.vert.size(); k++) {
+				PhysicsParticle * pv = &pbox.vert[k];
 
 				float t = glm::dot(collisionPoly->norm, pv->velocity);
 				pv->velocity -= collisionPoly->norm * (2.f * t);
@@ -882,48 +873,48 @@ static void ARX_EERIE_PHYSICS_BOX_Compute(PHYSICS_BOX_DATA * pbox, float framedi
 			}
 		}
 		
-		pbox->stopcount += 1;
+		pbox.stopcount += 1;
 	} else {
-		pbox->stopcount -= 2;
+		pbox.stopcount -= 2;
 
-		if(pbox->stopcount < 0)
-			pbox->stopcount = 0;
+		if(pbox.stopcount < 0)
+			pbox.stopcount = 0;
 	}
 }
 
-void ARX_PHYSICS_BOX_ApplyModel(PHYSICS_BOX_DATA * pbox, float framediff, float rubber, Entity * source) {
+void ARX_PHYSICS_BOX_ApplyModel(PHYSICS_BOX_DATA & pbox, float framediff, float rubber, Entity & source) {
 	
-	if(pbox->active == 2)
+	if(pbox.active == 2) {
 		return;
-
-	if(framediff == 0.f)
-		return;
+	}
 	
-	float timing = pbox->storedtiming + framediff * rubber * 0.0055f;
+	if(framediff == 0.f) {
+		return;
+	}
+	
+	float timing = pbox.storedtiming + framediff * rubber * 0.0055f;
 	float t_threshold = 0.18f;
-
+	
 	if(timing < t_threshold) {
-		pbox->storedtiming = timing;
+		pbox.storedtiming = timing;
 		return;
-	} else {
-		while(timing >= t_threshold) {
-			ComputeForces(pbox->vert);
-
-			ARX_EERIE_PHYSICS_BOX_Compute(pbox, std::min(0.11f, timing * 10), source);
-
-			timing -= t_threshold;
-		}
-
-		pbox->storedtiming = timing;
 	}
-
-	if(pbox->stopcount < 16)
+	
+	while(timing >= t_threshold) {
+		ComputeForces(pbox.vert);
+		ARX_EERIE_PHYSICS_BOX_Compute(pbox, std::min(0.11f, timing * 10), source);
+		timing -= t_threshold;
+	}
+	
+	pbox.storedtiming = timing;
+	
+	if(pbox.stopcount < 16) {
 		return;
-
-	pbox->active = 2;
-	pbox->stopcount = 0;
-
-	source->soundcount = 0;
-	source->soundtime = g_gameTime.now() + GameDurationMs(2000);
+	}
+	
+	pbox.active = 2;
+	pbox.stopcount = 0;
+	
+	source.soundcount = 0;
+	source.soundtime = g_gameTime.now() + GameDurationMs(2000);
 }
-

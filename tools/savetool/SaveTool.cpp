@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2016 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -61,9 +61,8 @@ static int main_extract(SaveBlock & save, const std::vector<std::string> & args)
 	
 	for(std::vector<std::string>::iterator file = files.begin(); file != files.end(); ++file) {
 		
-		size_t size;
-		char * data = save.load(*file, size);
-		if(!data) {
+		std::string buffer = save.load(*file);
+		if(buffer.empty()) {
 			std::cerr << "error loading " << *file << " from save\n";
 			continue;
 		}
@@ -71,15 +70,13 @@ static int main_extract(SaveBlock & save, const std::vector<std::string> & args)
 		fs::ofstream h(*file, std::ios_base::out | std::ios_base::binary);
 		if(!h.is_open()) {
 			std::cerr << "error opening " << *file << " for writing\n";
-			free(data);
 			continue;
 		}
 		
-		if(h.write(data, size).fail()) {
+		if(h.write(buffer.data(), buffer.size()).fail()) {
 			std::cerr << "error writing to " << *file << '\n';
 		}
 		
-		free(data);
 	}
 	
 	return 0;
@@ -93,20 +90,17 @@ static int main_add(SaveBlock & save, const std::vector<std::string> & args) {
 	
 	BOOST_FOREACH(fs::path file, args) {
 		
-		size_t size;
-		char * data = fs::read_file(file, size);
-		
-		if(!data) {
+		std::string data = fs::read(file);
+		if(data.empty()) {
 			std::cerr << "error loading " << file;
 			continue;
 		}
 		
 		std::string name = file.filename();
-		if(!save.save(name, data, size)) {
+		if(!save.save(name, data.data(), data.size())) {
 			std::cerr << "error writing " << name << " to save";
 		}
 		
-		delete[] data;
 	}
 	
 	save.flush("pld");
@@ -130,7 +124,7 @@ int utf8_main(int argc, char ** argv) {
 	ExitStatus status = parseCommandLine(argc, argv);
 	
 	if(status == RunProgram) {
-		status = fs::paths.init();
+		status = fs::initSystemPaths();
 	}
 	
 	if(status == RunProgram && g_args.size() < 2) {

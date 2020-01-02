@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2017 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -48,10 +48,11 @@
 #include "platform/Alignment.h"
 #include "platform/CrashHandler.h"
 #include "platform/Platform.h"
+#include "platform/WindowsUtils.h"
 #include "platform/profiler/Profiler.h"
 
-void Thread::setThreadName(const std::string & _threadName) {
-	threadName = _threadName;
+void Thread::setThreadName(const std::string & threadName) {
+	m_threadName = threadName;
 }
 
 #if ARX_HAVE_PTHREADS
@@ -68,15 +69,16 @@ void Thread::setThreadName(const std::string & _threadName) {
 #endif
 
 Thread::Thread()
-	: thread()
-	, started(false)
+	: m_thread()
+	, m_priority()
+	, m_started(false)
 {
 	setPriority(Normal);
 }
 
 void Thread::start() {
 	
-	if(started) {
+	if(m_started) {
 		return;
 	}
 	
@@ -84,41 +86,41 @@ void Thread::start() {
 	pthread_attr_init(&attr);
 	
 	sched_param param;
-	param.sched_priority = priority;
+	param.sched_priority = m_priority;
 	pthread_attr_setschedparam(&attr, &param);
 	
-	pthread_create(&thread, NULL, entryPoint, this);
+	pthread_create(&m_thread, &attr, entryPoint, this);
 	
 	pthread_attr_destroy(&attr);
 	
-	started = true;
+	m_started = true;
 }
 
-void Thread::setPriority(Priority _priority) {
+void Thread::setPriority(Priority priority) {
 	
-#if ARX_HAVE_SCHED_GETSCHEDULER
+	#if ARX_HAVE_SCHED_GETSCHEDULER
 	int policy = sched_getscheduler(0);
-#else
+	#else
 	int policy = SCHED_RR;
-#endif
+	#endif
 	
 	int min = sched_get_priority_min(policy);
 	int max = sched_get_priority_max(policy);
 	
-	priority = min + ((_priority - Lowest) * (max - min) / (Highest - Lowest));
+	m_priority = min + ((priority - Lowest) * (max - min) / (Highest - Lowest));
 	
-	if(started && min != max) {
+	if(m_started && min != max) {
 		sched_param param;
-		param.sched_priority = priority;
-		pthread_setschedparam(thread, policy, &param);
+		param.sched_priority = m_priority;
+		pthread_setschedparam(m_thread, policy, &param);
 	}
 }
 
 Thread::~Thread() { }
 
 void Thread::waitForCompletion() {
-	if(started) {
-		pthread_join(thread, NULL);
+	if(m_started) {
+		pthread_join(m_thread, NULL);
 	}
 }
 
@@ -127,30 +129,30 @@ void * Thread::entryPoint(void * param) {
 	// Denormals must be disabled for each thread separately
 	disableFloatDenormals();
 	
-	Thread & thread = *((Thread *)param);
+	Thread & thread = *static_cast<Thread *>(param);
 	
 	// Set the thread name.
-#if ARX_HAVE_PTHREAD_SETNAME_NP && ARX_PLATFORM != ARX_PLATFORM_MACOS
+	#if ARX_HAVE_PTHREAD_SETNAME_NP && ARX_PLATFORM != ARX_PLATFORM_MACOS
 	// Linux
-	pthread_setname_np(thread.thread, thread.threadName.c_str());
-#elif ARX_HAVE_PTHREAD_SETNAME_NP && ARX_PLATFORM == ARX_PLATFORM_MACOS
+	pthread_setname_np(thread.m_thread, thread.m_threadName.c_str());
+	#elif ARX_HAVE_PTHREAD_SETNAME_NP && ARX_PLATFORM == ARX_PLATFORM_MACOS
 	// macOS
-	pthread_setname_np(thread.threadName.c_str());
-#elif ARX_HAVE_PTHREAD_SET_NAME_NP
+	pthread_setname_np(thread.m_threadName.c_str());
+	#elif ARX_HAVE_PTHREAD_SET_NAME_NP
 	// FreeBSD & OpenBSD
-	pthread_set_name_np(thread.thread, thread.threadName.c_str());
-#elif ARX_HAVE_PRCTL && defined(PR_SET_NAME)
+	pthread_set_name_np(thread.m_thread, thread.m_threadName.c_str());
+	#elif ARX_HAVE_PRCTL && defined(PR_SET_NAME)
 	// Linux
-	prctl(PR_SET_NAME, reinterpret_cast<unsigned long>(thread.threadName.c_str()), 0, 0, 0);
-#else
+	prctl(PR_SET_NAME, reinterpret_cast<unsigned long>(thread.m_threadName.c_str()), 0, 0, 0);
+	#else
 	// This is non-fatal, but let's print a warning so future ports will be
 	// reminded to implement it.
 	#pragma message ( "No function available to set thread names!" )
-#endif
+	#endif
 	
 	Random::seed();
 	CrashHandler::registerThreadCrashHandlers();
-	profiler::registerThread(thread.threadName);
+	profiler::registerThread(thread.m_threadName);
 	thread.run();
 	profiler::unregisterThread();
 	CrashHandler::unregisterThreadCrashHandlers();
@@ -170,14 +172,14 @@ thread_id_type Thread::getCurrentThreadId() {
 #elif ARX_PLATFORM == ARX_PLATFORM_WIN32
 
 Thread::Thread() {
-	thread = CreateThread(NULL, 0, entryPoint, this, CREATE_SUSPENDED, NULL);
-	arx_assert(thread);
+	m_thread = CreateThread(NULL, 0, entryPoint, this, CREATE_SUSPENDED, NULL);
+	arx_assert(m_thread);
 	setPriority(Normal);
 }
 
 void Thread::start() {
-	DWORD ret = ResumeThread(thread);
-	arx_assert(ret != (DWORD)-1);
+	DWORD ret = ResumeThread(m_thread);
+	arx_assert(ret != DWORD(-1));
 	ARX_UNUSED(ret);
 }
 
@@ -193,21 +195,21 @@ void Thread::setPriority(Priority priority) {
 	
 	arx_assert(priority >= Lowest && priority <= Highest);
 	
-	BOOL ret = SetThreadPriority(thread, windowsThreadPriorities[priority - Lowest]);
+	BOOL ret = SetThreadPriority(m_thread, windowsThreadPriorities[priority - Lowest]);
 	arx_assert(ret);
 	ARX_UNUSED(ret);
 }
 
 Thread::~Thread() {
-	CloseHandle(thread);
+	CloseHandle(m_thread);
 }
 
 namespace {
 
-void SetCurrentThreadName(const std::string & threadName) {
 #if ARX_COMPILER_MSVC
+void setCurrentThreadName(const std::string & threadName) {
 	
-	if(threadName.empty() || !IsDebuggerPresent()) {
+	if(!IsDebuggerPresent()) {
 		return;
 	}
 	
@@ -226,18 +228,13 @@ void SetCurrentThreadName(const std::string & threadName) {
 	
 	const DWORD MS_VC_EXCEPTION = 0x406D1388;
 	
-	__try
-	{
-			RaiseException(MS_VC_EXCEPTION, 0, sizeof(info)/sizeof(DWORD), (ULONG_PTR *)&info);
+	__try {
+		RaiseException(MS_VC_EXCEPTION, 0, sizeof(info) / sizeof(DWORD), reinterpret_cast<ULONG_PTR *>(&info));
 	}
-	__except(EXCEPTION_CONTINUE_EXECUTION)
-	{
-	}
+	__except(EXCEPTION_EXECUTE_HANDLER) { }
 	
-#else
-	ARX_UNUSED(threadName);
-#endif
 }
+#endif
 
 } // anonymous namespace
 
@@ -246,12 +243,31 @@ DWORD WINAPI Thread::entryPoint(LPVOID param) {
 	// Denormals must be disabled for each thread separately
 	disableFloatDenormals();
 	
-	SetCurrentThreadName(((Thread*)param)->threadName);
+	if(!static_cast<Thread *>(param)->m_threadName.empty()) {
+		
+		// Requires Windows 10 and only works with MSVC 2017+ but will be stored in minidumps
+		HMODULE kernel32 = GetModuleHandleW(L"kernel32.dll");
+		if(kernel32) {
+			typedef HRESULT (WINAPI * SetThreadDescriptionPtr)(HANDLE hThread, PCWSTR lpThreadDescription);
+			SetThreadDescriptionPtr setThreadDescription;
+			setThreadDescription = platform::getProcAddress<SetThreadDescriptionPtr>(kernel32, "SetThreadDescription");
+			if(setThreadDescription) {
+				setThreadDescription(GetCurrentThread(),
+				                     platform::WideString(static_cast<Thread *>(param)->m_threadName));
+			}
+		}
+		
+		// For older MSVC versions but only works if debugger is present when this is run
+		#if ARX_COMPILER_MSVC
+		setCurrentThreadName(static_cast<Thread *>(param)->m_threadName);
+		#endif
+		
+	}
 	
 	Random::seed();
 	CrashHandler::registerThreadCrashHandlers();
-	profiler::registerThread(((Thread*)param)->threadName);
-	((Thread*)param)->run();
+	profiler::registerThread(static_cast<Thread *>(param)->m_threadName);
+	static_cast<Thread *>(param)->run();
 	profiler::unregisterThread();
 	CrashHandler::unregisterThreadCrashHandlers();
 	Random::shutdown();
@@ -264,7 +280,7 @@ void Thread::exit() {
 }
 
 void Thread::waitForCompletion() {
-	DWORD ret = WaitForSingleObject(thread, INFINITE);
+	DWORD ret = WaitForSingleObject(m_thread, INFINITE);
 	arx_assert(ret == WAIT_OBJECT_0);
 	ARX_UNUSED(ret);
 }
@@ -275,15 +291,12 @@ thread_id_type Thread::getCurrentThreadId() {
 
 #endif
 
-#ifndef _MM_DENORMALS_ZERO_MASK
-#define _MM_DENORMALS_ZERO_MASK  0x0040
+#if ARX_ARCH == ARX_ARCH_X86 || ARX_ARCH == ARX_ARCH_X86_64
+#ifdef _MM_DENORMALS_ZERO_ON
+#define ARX_SSE_DENORMALS_ZERO_ON _MM_DENORMALS_ZERO_ON
+#else
+#define ARX_SSE_DENORMALS_ZERO_ON 0x0040
 #endif
-#ifndef _MM_DENORMALS_ZERO_ON
-#define _MM_DENORMALS_ZERO_ON    0x0040
-#endif
-#ifndef _MM_SET_DENORMALS_ZERO_MODE
-#define _MM_SET_DENORMALS_ZERO_MODE(mode) \
-  _mm_setcsr((_mm_getcsr() & ~_MM_DENORMALS_ZERO_MASK) | (mode))
 #endif
 
 void Thread::disableFloatDenormals() {
@@ -335,14 +348,19 @@ void Thread::disableFloatDenormals() {
 		#endif
 		unsigned mxcsr_mask;
 		std::memcpy(&mxcsr_mask, buffer + 28, sizeof(mxcsr_mask));
-		have_daz = (mxcsr_mask & _MM_DENORMALS_ZERO_ON) != 0;
+		have_daz = (mxcsr_mask & ARX_SSE_DENORMALS_ZERO_ON) != 0;
 	}
 	#endif
 	
 	#endif // !ARX_HAVE_SSE3
 	
 	if(have_daz) {
-		_MM_SET_DENORMALS_ZERO_MODE(_MM_DENORMALS_ZERO_ON); // SSE3 (and most SSE2 CPUs)
+		// SSE3 (and most SSE2 CPUs)
+		#if defined(_MM_SET_DENORMALS_ZERO_MODE)
+		_MM_SET_DENORMALS_ZERO_MODE(ARX_SSE_DENORMALS_ZERO_ON);
+		#else
+		_mm_setcsr(_mm_getcsr() | ARX_SSE_DENORMALS_ZERO_ON);
+		#endif
 	}
 	
 	#else
@@ -357,7 +375,7 @@ void Thread::disableFloatDenormals() {
 	
 	// Denormals are always disabled for NEON, disable them for VFP instructions as well
 	// Set bit 24 (flush-to-zero) in the floating-point status and control register
-	asm volatile (
+	asm volatile(
 		"vmrs r0, FPSCR \n"
 		"orr r0, r0, #0x1000000 \n"
 		"vmsr FPSCR, r0 \n"

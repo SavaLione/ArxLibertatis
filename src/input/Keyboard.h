@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2016 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -280,6 +280,20 @@ public:
 		KeyMax,
 		KeyCount = KeyMax - KeyBase
 	};
+	
+	inline static bool isModifier(int key) {
+		switch(key) {
+			case Keyboard::Key_LeftShift:
+			case Keyboard::Key_RightShift:
+			case Keyboard::Key_LeftCtrl:
+			case Keyboard::Key_RightCtrl:
+			case Keyboard::Key_LeftAlt:
+			case Keyboard::Key_RightAlt:
+				return true;
+			default: return false;
+		}
+	}
+	
 };
 
 #endif // ARX_INPUT_KEYBOARD_H

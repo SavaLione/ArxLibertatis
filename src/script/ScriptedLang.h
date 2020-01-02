@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2012 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -28,7 +28,7 @@ class Context;
 
 void setupScriptedLang();
 
-void timerCommand(const std::string & timer, Context & context);
+void timerCommand(const std::string & name, Context & context);
 
 } // namespace script
 

@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2016 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -37,25 +37,26 @@
 #include "audio/AudioTypes.h"
 #include "audio/AudioResource.h"
 #include "math/Types.h"
+#include "platform/Platform.h"
 
 namespace audio {
 
 class OpenALSource;
 
-class OpenALBackend : public Backend {
+class OpenALBackend arx_final : public Backend {
 	
 public:
 	
 	OpenALBackend();
 	~OpenALBackend();
 	
-	aalError init(const char * device = NULL, HRTFAttribute hrtf = HRTFDefault);
+	aalError init(const char * requestedDeviceName = NULL, HRTFAttribute hrtf = HRTFDefault);
 	
 	std::vector<std::string> getDevices();
 	
-	Source * createSource(SampleId sampleId, const Channel & channel);
+	Source * createSource(SampleHandle sampleId, const Channel & channel);
 	
-	Source * getSource(SourceId sourceId);
+	Source * getSource(SourcedSample sourceId);
 	
 	aalError setReverbEnabled(bool enable);
 	bool isReverbSupported();
@@ -113,7 +114,8 @@ private:
 	
 	#endif
 	
-	ResourceList<OpenALSource> sources;
+	typedef ResourceList<OpenALSource, SourceHandle> SourceList;
+	SourceList sources;
 	
 	float rolloffFactor;
 	

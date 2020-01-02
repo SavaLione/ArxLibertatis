@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2016-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -72,6 +72,7 @@ class BasicTextInput : protected TextInputHandler {
 	size_t m_cursorPos;
 	size_t m_editCursorPos;
 	size_t m_editCursorLength;
+	bool m_selected;
 	
 protected:
 	
@@ -85,6 +86,7 @@ public:
 		: m_cursorPos(0)
 		, m_editCursorPos(0)
 		, m_editCursorLength(0)
+		, m_selected(false)
 	{ }
 	
 	void newText(const std::string & text);
@@ -94,6 +96,7 @@ public:
 	
 	void clear();
 	void setText(const std::string & text, size_t cursorPos = size_t(-1));
+	void setCursorPos(size_t cursorPos = size_t(-1));
 	void insert(const std::string & text);
 	void moveLeft();
 	void moveRight();
@@ -111,6 +114,9 @@ public:
 	void eraseEnd();
 	virtual void paste(const std::string & text);
 	static bool isWordSeparator(char c);
+	
+	void selectAll();
+	bool selected() { return m_selected; }
 	
 	const std::string & text() const { return m_text; }
 	size_t cursorPos() const { return m_cursorPos; }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2016 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -30,7 +30,7 @@ typedef s32 EntityInstance;
 namespace res { class path; }
 
 /*!
- * An ID that can be used to identify \class Entity instances
+ * An ID that can be used to identify \ref Entity instances
  */
 struct EntityId {
 	

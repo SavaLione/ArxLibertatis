@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2012 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -25,6 +25,6 @@
 
 class SaveBlock;
 
-int main_view(SaveBlock & savefile, const std::vector<std::string> & args);
+int main_view(SaveBlock & save, const std::vector<std::string> & args);
 
 #endif // ARX_TOOLS_SAVETOOL_SAVEVIEW_H

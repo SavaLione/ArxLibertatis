@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2016 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2014-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -29,13 +29,11 @@
 #include "gui/widget/WidgetContainer.h"
 #include "math/Types.h"
 
-void MainMenuLeftCreate(MENUSTATE eMenuState);
-
 class MainMenu : private boost::noncopyable {
+	
 public:
-	bool					bReInitAll;
-	MENUSTATE				eOldMenuState;
-	MENUSTATE				eOldMenuWindowState;
+	
+	bool bReInitAll;
 	
 	MenuWindow * m_window;
 	
@@ -45,24 +43,32 @@ public:
 	void init();
 	void initWindowPages();
 	
-	void onClickedResumeGame();
-	void onClickedNewQuest();
-	void onClickedCredits();
+	void onClickedResumeGame(Widget * widget);
+	void onClickedNewQuest(Widget * widget);
+	void onClickedCredits(Widget * widget);
 	
-	void Update();
-	void Render();
+	void update();
+	void render();
 	
-	Widget * selected() {
-		return m_selected;
+	void requestPage(MENUSTATE page) {
+		m_requestedPage = page;
+	}
+	
+	MENUSTATE requestedPage() const {
+		return m_requestedPage;
 	}
 	
 private:
+	
+	MENUSTATE m_requestedPage;
+	
 	TextureContainer * m_background;
 	WidgetContainer * m_widgets;
 	
 	TextWidget * m_resumeGame;
 	
 	Widget * m_selected;
+	
 };
 
 extern MainMenu * g_mainMenu;

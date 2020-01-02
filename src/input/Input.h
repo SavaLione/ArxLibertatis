@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2016 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -105,8 +105,10 @@ public:
 	
 	void update(float time);
 	
-	static std::string getKeyName(InputKeyId key, bool localizedName = false);
+	static std::string getKeyName(InputKeyId key);
 	static InputKeyId getKeyId(const std::string & keyName);
+	
+	std::string getKeyDisplayName(InputKeyId key);
 	
 	// Action
 	
@@ -126,7 +128,7 @@ public:
 	void setRawMouseInput(bool enabled);
 	
 	void setMouseSensitivity(int sensitivity);
-	void setMouseAcceleration(int acceletation);
+	void setMouseAcceleration(int acceleration);
 	void setInvertMouseY(bool invert);
 	
 	bool getMouseButton(int buttonId) const;
@@ -145,7 +147,6 @@ public:
 	bool isKeyPressed(int keyId) const;
 	bool isKeyPressedNowPressed(int keyId) const;
 	bool isKeyPressedNowUnPressed(int keyId) const;
-	bool getKeyAsText(int keyId, char & result) const;
 	
 	/*!
 	 * Enter text input mode and send all text to the given handler

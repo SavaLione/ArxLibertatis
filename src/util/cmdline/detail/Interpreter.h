@@ -1,5 +1,5 @@
 /*
- * Copyright 2013-2014 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2013-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -50,16 +50,16 @@ public:
 	typedef TypeCast                        type_cast_t;
 	
 	template <typename Handler>
-	void add(const Handler &, const op_name_t &);
+	void add(const Handler & handler, const op_name_t & key);
 	
 	template <typename HndlSign, typename Handler>
-	void add(const Handler &, const op_name_t &);
+	void add(const Handler & handler, const op_name_t & key);
 	
 	void erase(const string_type & option_name);
 	
 	template <typename It>
 	void invoke(const string_type & option_name, It & args_begin, It args_optend, It args_end,
-	            type_cast_t &) const;
+	            type_cast_t & type_cast) const;
 	
 	template <typename It>
 	void invoke(const string_type & option_name, It & args_begin, It args_end,
@@ -186,11 +186,11 @@ void interpreter<StringType, TypeCast>::do_add(const function_type & handler,
 
 template <typename StringType, typename TypeCast>
 template <typename It>
-void interpreter<StringType, TypeCast>::invoke(const string_type & key,
+void interpreter<StringType, TypeCast>::invoke(const string_type & option_name,
                                               It & args_begin, It args_optend, It args_end,
                                               type_cast_t & type_cast) const {
 	
-	typename alt_name_t::const_iterator primary_key = alt_name.find(key);
+	typename alt_name_t::const_iterator primary_key = alt_name.find(option_name);
 	
 	if(alt_name.end() == primary_key) {
 		throw error(error::cmd_not_found);

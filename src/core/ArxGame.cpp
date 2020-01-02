@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2017 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -51,13 +51,13 @@ ZeniMax Media Inc., Suite 120, Rockville, Maryland 20850 USA.
 
 #include <boost/algorithm/string/case_conv.hpp>
 #include <boost/foreach.hpp>
+#include <boost/range/size.hpp>
 
 #include "ai/PathFinderManager.h"
 #include "ai/Paths.h"
 
 #include "animation/Animation.h"
 #include "animation/AnimationRender.h"
-#include "animation/Intro.h"
 
 #include "cinematic/Cinematic.h"
 #include "cinematic/CinematicController.h"
@@ -65,12 +65,14 @@ ZeniMax Media Inc., Suite 120, Rockville, Maryland 20850 USA.
 #include "core/Benchmark.h"
 #include "core/Config.h"
 #include "core/Core.h"
+#include "core/FpsCounter.h"
 #include "core/GameTime.h"
 #include "core/Localisation.h"
 #include "core/SaveGame.h"
 #include "core/URLConstants.h"
 #include "core/Version.h"
 
+#include "game/Camera.h"
 #include "game/Damage.h"
 #include "game/EntityManager.h"
 #include "game/Equipment.h"
@@ -110,17 +112,20 @@ ZeniMax Media Inc., Suite 120, Rockville, Maryland 20850 USA.
 
 #include "gui/Console.h"
 #include "gui/Cursor.h"
-#include "gui/DebugHud.h"
 #include "gui/Hud.h"
 #include "gui/Interface.h"
 #include "gui/LoadLevelScreen.h"
+#include "gui/Logo.h"
 #include "gui/Menu.h"
 #include "gui/MenuPublic.h"
 #include "gui/MenuWidgets.h"
 #include "gui/MiniMap.h"
+#include "gui/Notification.h"
 #include "gui/Speech.h"
 #include "gui/Text.h"
 #include "gui/TextManager.h"
+#include "gui/debug/DebugHud.h"
+#include "gui/debug/DebugHudAudio.h"
 
 #include "input/Input.h"
 #include "input/Keyboard.h"
@@ -173,17 +178,12 @@ InfoPanels g_debugInfo = InfoPanelNone;
 
 extern bool START_NEW_QUEST;
 SavegameHandle LOADQUEST_SLOT = SavegameHandle(); // OH NO, ANOTHER GLOBAL! - TEMP PATCH TO CLEAN CODE FLOW
-
-static const float CURRENT_BASE_FOCAL = 310.f;
-static const float defaultCameraFocal = 350.f;
+static fs::path g_saveToLoad;
 
 static const PlatformDuration runeDrawPointInterval = PlatformDurationMs(16); // ~60fps
 
 extern EERIE_3DOBJ * arrowobj;
 
-extern Entity * FlyingOverIO;
-extern EERIE_CAMERA conversationcamera;
-extern ParticleManager * pParticleManager;
 extern CircularVertexBuffer<TexturedVertex> * pDynamicVertexBuffer_TLVERTEX; // VB using TLVERTEX format.
 extern CircularVertexBuffer<SMY_VERTEX3> * pDynamicVertexBuffer;
 
@@ -192,6 +192,8 @@ bool SHOW_INGAME_MINIMAP = true;
 
 bool ARX_FLARES_Block = true;
 
+Vec3f PUSH_PLAYER_FORCE;
+
 Vec3f LASTCAMPOS;
 Anglef LASTCAMANGLE;
 
@@ -199,7 +201,9 @@ Anglef LASTCAMANGLE;
 ArxGame::ArxGame()
 	: m_wasResized(false)
 	, m_gameInitialized(false)
-{}
+	, m_frameStart(0)
+	, m_frameDelta(0)
+{ }
 
 ArxGame::~ArxGame() {
 }
@@ -287,16 +291,16 @@ static bool migrateFilenames(const fs::path & configFile) {
 	 "save", "editor", "game", "graph", "localisation", "misc", "sfx", "speech" };
 	
 	std::set<std::string> fileset;
-	for(size_t i = 0; i < ARRAY_SIZE(files); i++) {
+	for(size_t i = 0; i < size_t(boost::size(files)); i++) {
 		fileset.insert(files[i]);
 	}
 	
 	bool migrated = true;
 	
-	for(fs::directory_iterator it(fs::paths.user); !it.end(); ++it) {
+	for(fs::directory_iterator it(fs::getUserDir()); !it.end(); ++it) {
 		std::string file = it.name();
 		if(fileset.find(boost::to_lower_copy(file)) != fileset.end()) {
-			migrated &= migrateFilenames(fs::paths.user / file, it.is_directory());
+			migrated &= migrateFilenames(fs::getUserDir() / file, it.is_directory());
 		}
 	}
 	
@@ -310,7 +314,7 @@ static bool migrateFilenames(const fs::path & configFile) {
 bool ArxGame::initConfig() {
 	
 	// Initialize config first, before anything else.
-	fs::path configFile = fs::paths.config / "cfg.ini";
+	fs::path configFile = fs::getConfigDir() / "cfg.ini";
 	
 	config.setOutputFile(configFile);
 	
@@ -322,7 +326,7 @@ bool ArxGame::initConfig() {
 			return false;
 		}
 		
-		fs::path oldConfigFile = fs::paths.user / "cfg.ini";
+		fs::path oldConfigFile = fs::getUserDir() / "cfg.ini";
 		if(fs::exists(oldConfigFile)) {
 			if(!fs::rename(oldConfigFile, configFile)) {
 				LogWarning << "Could not move " << oldConfigFile << " to "
@@ -336,7 +340,7 @@ bool ArxGame::initConfig() {
 	LogInfo << "Using config file " << configFile;
 	if(!config.init(configFile)) {
 		
-		fs::path file = fs::paths.find("cfg_default.ini");
+		fs::path file = fs::findDataFile("cfg_default.ini");
 		if(!config.init(file)) {
 			LogWarning << "Could not read config files cfg.ini and cfg_default.ini,"
 			           << " using defaults";
@@ -358,7 +362,7 @@ bool ArxGame::initConfig() {
 		config.misc.migration = Config::CaseSensitiveFilenames;
 	}
 	
-	if(!fs::create_directories(fs::paths.user / "save")) {
+	if(!fs::create_directories(fs::getUserDir() / "save")) {
 		LogWarning << "Failed to create save directory";
 	}
 	
@@ -370,18 +374,16 @@ void ArxGame::setWindowSize(bool fullscreen) {
 	if(fullscreen) {
 		
 		// Clamp to a sane resolution!
-		if(config.video.resolution != Vec2i_ZERO) {
-			config.video.resolution.x = std::max(config.video.resolution.x, s32(640));
-			config.video.resolution.y = std::max(config.video.resolution.y, s32(480));
+		if(config.video.mode.resolution != Vec2i(0)) {
+			config.video.mode.resolution = glm::max(config.video.mode.resolution, Vec2i(640, 480));
 		}
 		
-		getWindow()->setFullscreenMode(config.video.resolution);
+		getWindow()->setFullscreenMode(config.video.mode);
 		
 	} else {
 		
 		// Clamp to a sane window size!
-		config.window.size.x = std::max(config.window.size.x, s32(640));
-		config.window.size.y = std::max(config.window.size.y, s32(480));
+		config.window.size = glm::max(config.window.size, Vec2i(640, 480));
 		
 		getWindow()->setWindowSize(config.window.size);
 		
@@ -404,9 +406,9 @@ bool ArxGame::initWindow(RenderWindow * window) {
 	m_MainWindow->getRenderer()->addListener(this);
 	
 	// Find the next best available fullscreen mode.
-	if(config.video.resolution != Vec2i_ZERO) {
+	if(config.video.mode.resolution != Vec2i(0)) {
 		const RenderWindow::DisplayModes & modes = window->getDisplayModes();
-		DisplayMode mode = config.video.resolution;
+		DisplayMode mode = config.video.mode;
 		RenderWindow::DisplayModes::const_iterator i;
 		i = std::lower_bound(modes.begin(), modes.end(), mode);
 		if(i == modes.end()) {
@@ -414,12 +416,9 @@ bool ArxGame::initWindow(RenderWindow * window) {
 		} else {
 			mode = *i;
 		}
-		if(config.video.resolution != mode.resolution) {
-			LogWarning << "Fullscreen mode " << config.video.resolution.x << 'x'
-			           << config.video.resolution.y
-			           << " not supported, using " << mode.resolution.x << 'x'
-			           << mode.resolution.y << " instead";
-			config.video.resolution = mode.resolution;
+		if(config.video.mode != mode) {
+			LogWarning << "Fullscreen mode " << config.video.mode << " not supported, using " << mode << " instead";
+			config.video.mode = mode;
 		}
 	}
 	
@@ -511,8 +510,6 @@ bool ArxGame::initGameData() {
 }
 
 TextureContainer * enviro = NULL;
-TextureContainer * inventory_font = NULL;
-TextureContainer * tflare = NULL;
 TextureContainer * ombrignon = NULL;
 TextureContainer * TC_fire = NULL;
 TextureContainer * TC_fire2 = NULL;
@@ -527,20 +524,20 @@ static void LoadSysTextures() {
 
 	spellDataInit();
 
-	enviro=				TextureContainer::LoadUI("graph/particles/enviro");
-	inventory_font=		TextureContainer::LoadUI("graph/interface/font/font10x10_inventory");
-	tflare=				TextureContainer::LoadUI("graph/particles/flare");
-	ombrignon=			TextureContainer::LoadUI("graph/particles/ombrignon");
-	TC_fire=			TextureContainer::LoadUI("graph/particles/fire");
-	TC_fire2=			TextureContainer::LoadUI("graph/particles/fire2");
-	TC_smoke=			TextureContainer::LoadUI("graph/particles/smoke");
-	Boom=				TextureContainer::LoadUI("graph/particles/boom");
-	arx_logo_tc=		TextureContainer::LoadUI("graph/interface/icons/arx_logo_32");
+	enviro = TextureContainer::LoadUI("graph/particles/enviro");
+	
+	ARX_INTERFACE_DrawNumberInit();
+	initLightFlares();
+	ombrignon = TextureContainer::LoadUI("graph/particles/ombrignon");
+	TC_fire = TextureContainer::LoadUI("graph/particles/fire");
+	TC_fire2 = TextureContainer::LoadUI("graph/particles/fire2");
+	TC_smoke = TextureContainer::LoadUI("graph/particles/smoke");
+	Boom = TextureContainer::LoadUI("graph/particles/boom");
+	arx_logo_tc = TextureContainer::LoadUI("graph/interface/icons/arx_logo_32");
 	
 	TextureContainer::LoadUI("graph/particles/fire_hit");
 	TextureContainer::LoadUI("graph/particles/light");
 	
-	//INTERFACE LOADING
 	g_hudRoot.init();
 	
 	// Load book textures and text
@@ -620,12 +617,17 @@ static void loadLevel(u32 lvl) {
 }
 ARX_PROGRAM_OPTION_ARG("loadlevel", "", "Load a specific level", &loadLevel, "LEVELID")
 
-extern SavegameHandle LOADQUEST_SLOT;
 static void loadSlot(u32 saveSlot) {
 	LOADQUEST_SLOT = SavegameHandle(saveSlot);
 	GameFlow::setTransition(GameFlow::InGame);
 }
 ARX_PROGRAM_OPTION_ARG("loadslot", "", "Load a specific savegame slot", &loadSlot, "SAVESLOT")
+
+static void loadSave(const std::string & saveFile) {
+	g_saveToLoad = saveFile;
+	GameFlow::setTransition(GameFlow::InGame);
+}
+ARX_PROGRAM_OPTION_ARG("loadsave", "", "Load a specific savegame file", &loadSave, "SAVEFILE")
 
 static void skipLogo() {
 	loadLevel(LEVEL10);
@@ -648,8 +650,9 @@ static bool HandleGameFlowTransitions() {
 	}
 		
 	if(GameFlow::getTransition() == GameFlow::FirstLogo) {
+		
 		benchmark::begin(benchmark::Splash);
-		//firsttime
+		
 		if(TRANSITION_START == 0) {
 			if(!ARX_INTERFACE_InitFISHTANK()) {
 				GameFlow::setTransition(GameFlow::SecondLogo);
@@ -672,8 +675,9 @@ static bool HandleGameFlowTransitions() {
 	}
 	
 	if(GameFlow::getTransition() == GameFlow::SecondLogo) {
+		
 		benchmark::begin(benchmark::Splash);
-		//firsttime
+		
 		if(TRANSITION_START == 0) {
 			if(!ARX_INTERFACE_InitARKANE()) {
 				GameFlow::setTransition(GameFlow::LoadingScreen);
@@ -681,7 +685,7 @@ static bool HandleGameFlowTransitions() {
 			}
 			
 			TRANSITION_START = g_platformTime.frameStart();
-			ARX_SOUND_PlayInterface(SND_PLAYER_HEART_BEAT);
+			ARX_SOUND_PlayInterface(g_snd.PLAYER_HEART_BEAT);
 		}
 
 		ARX_INTERFACE_ShowARKANE();
@@ -699,32 +703,25 @@ static bool HandleGameFlowTransitions() {
 	if(GameFlow::getTransition() == GameFlow::LoadingScreen) {
 		ARX_INTERFACE_KillFISHTANK();
 		ARX_INTERFACE_KillARKANE();
-		char loadfrom[256];
 		
 		benchmark::begin(benchmark::LoadLevel);
 		
 		ARX_CHANGELEVEL_StartNew();
 		
-		sprintf(loadfrom, "graph/levels/level%d/level%d.dlf", LEVEL_TO_LOAD, LEVEL_TO_LOAD);
+		std::ostringstream oss;
+		oss << "graph/levels/level" << int(LEVEL_TO_LOAD) << "/level" << int(LEVEL_TO_LOAD) << ".dlf";
+		
 		progressBarReset();
 		progressBarSetTotal(108);
 		LoadLevelScreen(LEVEL_TO_LOAD);
 
-		DanaeLoadLevel(loadfrom);
+		DanaeLoadLevel(oss.str());
 		GameFlow::setTransition(GameFlow::InGame);
 		return false;
 	}
 
 	return false;
 }
-
-
-Vec3f PUSH_PLAYER_FORCE;
-static BackgroundData DefaultBkg;
-
-EERIE_CAMERA subj;
-EERIE_CAMERA bookcam;
-EERIE_CAMERA conversationcamera;
 
 bool ArxGame::initGame()
 {
@@ -736,7 +733,7 @@ bool ArxGame::initGame()
 	
 	ScriptEvent::init();
 	
-	CalcFPS(true);
+	g_fpsCounter.CalcFPS(true);
 	
 	g_miniMap.mapMarkerInit();
 	
@@ -746,7 +743,7 @@ bool ArxGame::initGame()
 	
 	LogDebug("Project Init");
 	
-	PUSH_PLAYER_FORCE = Vec3f_ZERO;
+	PUSH_PLAYER_FORCE = Vec3f(0.f);
 	ARX_SPECIAL_ATTRACTORS_Reset();
 	LogDebug("Attractors Init");
 	ARX_SPELLS_Precast_Reset();
@@ -768,7 +765,7 @@ bool ArxGame::initGame()
 	ARX_EQUIPMENT_Init();
 	LogDebug("AEQ Init");
 	
-	ARX_SCRIPT_Timer_FirstInit(512);
+	ARX_SCRIPT_Timer_ClearAll();
 	LogDebug("Timer Init");
 	ARX_FOGS_Clear();
 	LogDebug("Fogs Init");
@@ -778,9 +775,6 @@ bool ArxGame::initGame()
 	
 	LogDebug("Svars Init");
 	
-	// Script Test
-	lastteleport = player.baseOffset();
-	
 	entities.init();
 	
 	player = ARXCHARACTER();
@@ -789,8 +783,8 @@ bool ArxGame::initGame()
 	CleanInventory();
 	
 	ARX_SPEECH_FirstInit();
-	ARX_SPEECH_Init();
-	ARX_SPEECH_ClearAll();
+	notification_init();
+	notification_ClearAll();
 	RemoveQuakeFX();
 	
 	LogDebug("Launching DANAE");
@@ -830,30 +824,17 @@ bool ArxGame::initGame()
 	
 	LastLoadedScene.clear();
 	
-	DefaultBkg = BackgroundData();
-	ACTIVEBKG = &DefaultBkg;
-	InitBkg(ACTIVEBKG, MAX_BKGX, MAX_BKGZ, Vec2s(BKG_SIZX, BKG_SIZZ));
+	ACTIVEBKG = new BackgroundData();
+	InitBkg(ACTIVEBKG);
 	
-	player.size.y = -player.baseHeight();
-	player.size.x = player.baseRadius();
-	player.size.z = player.baseRadius();
-	player.desiredangle = player.angle = subj.angle = Anglef(3.f, 268.f, 0.f);
-
-	subj.orgTrans.pos = Vec3f(900.f, player.baseHeight(), 4340.f);
-	subj.clip = Rect(0, 0, 640, 480);
-	subj.center = subj.clip.center();
-	subj.focal = defaultCameraFocal;
-	subj.cdepth = 2100.f;
+	player.size = Vec3f(player.baseRadius(), -player.baseHeight(), player.baseRadius());
+	player.desiredangle = player.angle = Anglef(3.f, 268.f, 0.f);
 	
-	SetActiveCamera(&subj);
-
-	bookcam = subj;
-	conversationcamera = subj;
-	
-	bookcam.angle = Anglef::ZERO;
-	bookcam.orgTrans.pos = Vec3f_ZERO;
-	bookcam.focal = defaultCameraFocal;
-	bookcam.cdepth = 2200.f;
+	g_playerCamera.angle = player.angle;
+	g_playerCamera.m_pos = Vec3f(900.f, player.baseHeight(), 4340.f);
+	g_playerCamera.setFov(glm::radians(config.video.fov));
+	g_playerCamera.cdepth = 2100.f;
+	SetActiveCamera(&g_playerCamera);
 	
 	LoadSysTextures();
 	cursorTexturesInit();
@@ -952,11 +933,11 @@ bool ArxGame::addPaks() {
 	
 	// Load required pak files
 	bool missing = false;
-	for(size_t i = 0; i < ARRAY_SIZE(default_paks); i++) {
-		if(g_resources->addArchive(fs::paths.find(default_paks[i][0]))) {
+	for(size_t i = 0; i < size_t(boost::size(default_paks)); i++) {
+		if(g_resources->addArchive(fs::findDataFile(default_paks[i][0]))) {
 			continue;
 		}
-		if(default_paks[i][1] && g_resources->addArchive(fs::paths.find(default_paks[i][1]))) {
+		if(default_paks[i][1] && g_resources->addArchive(fs::findDataFile(default_paks[i][1]))) {
 			continue;
 		}
 		std::ostringstream oss;
@@ -973,7 +954,7 @@ bool ArxGame::addPaks() {
 		// Print the search path to the log
 		std::ostringstream oss;
 		oss << "Searched in these locations:\n";
-		std::vector<fs::path> search = fs::paths.getSearchPaths();
+		std::vector<fs::path> search = fs::getDataSearchPaths();
 		BOOST_FOREACH(const fs::path & dir, search) {
 			oss << " * " << dir.string() << fs::path::dir_sep << "\n";
 		}
@@ -996,7 +977,7 @@ bool ArxGame::addPaks() {
 	}
 	
 	// Load optional patch files
-	BOOST_REVERSE_FOREACH(const fs::path & base, fs::paths.data) {
+	BOOST_REVERSE_FOREACH(const fs::path & base, fs::getDataDirs()) {
 		g_resources->addFiles(base / "editor", "editor");
 		g_resources->addFiles(base / "game", "game");
 		g_resources->addFiles(base / "graph", "graph");
@@ -1007,18 +988,6 @@ bool ArxGame::addPaks() {
 	}
 	
 	return true;
-}
-
-static void ClearSysTextures() {
-	for(size_t i = 0; i < SPELL_TYPES_COUNT; i++) {
-		if(!spellicons[i].name.empty())
-			//free(spellicons[i].name);
-			spellicons[i].name.clear();
-
-		if(!spellicons[i].description.empty())
-			//free(spellicons[i].description);
-			spellicons[i].description.clear();
-	}
 }
 
 static void ReleaseSystemObjects() {
@@ -1072,54 +1041,41 @@ void ArxGame::shutdownGame() {
 	config.save();
 	
 	RoomDrawRelease();
-	EXITING=1;
+	EXITING = 1;
 	TREATZONE_Release();
 	ClearTileLights();
 	
-	// texts and textures
-	ClearSysTextures();
+	spellDataRelease();
 	
-	delete pParticleManager, pParticleManager = NULL;
+	g_particleManager.Clear();
 	
-	//sound
 	ARX_SOUND_Release();
-	MCache_ClearAll();
 	
-	//pathfinding
 	ARX_PATH_ReleaseAllPath();
+	
 	ReleaseSystemObjects();
 	
-	//background
 	ClearBackground(ACTIVEBKG);
 	
-	//animations
 	EERIE_ANIMMANAGER_ClearAll();
 
-	//sprites
 	g_renderBatcher.reset();
 	
-	//Scripts
 	svar.clear();
-	
 	
 	ARX_SCRIPT_Timer_ClearAll();
 	
-	delete[] scr_timer, scr_timer = NULL;
-	
-	//Speech
-	ARX_SPEECH_ClearAll();
+	notification_ClearAll();
 	ARX_Text_Close();
 	
-	//object loaders from beforerun
 	gui::ReleaseNecklace();
 	
 	delete g_resources;
 	
-	// Current game
 	ARX_Changelevel_CurGame_Clear();
 	
-	//Halo
 	FreeSnapShot();
+	
 	ARX_INPUT_Release();
 	
 	if(getWindow()) {
@@ -1132,7 +1088,7 @@ void ArxGame::shutdownGame() {
 	
 }
 
-void ArxGame::onWindowGotFocus(const Window &) {
+void ArxGame::onWindowGotFocus(const Window & /* window */) {
 	
 	if(GInput) {
 		GInput->reset();
@@ -1144,7 +1100,7 @@ void ArxGame::onWindowGotFocus(const Window &) {
 	
 }
 
-void ArxGame::onWindowLostFocus(const Window &) {
+void ArxGame::onWindowLostFocus(const Window & /* window */) {
 	
 	// TODO(option-control) add a config option for this
 	ARX_INTERFACE_setCombatMode(COMBAT_MODE_OFF);
@@ -1161,32 +1117,37 @@ void ArxGame::onWindowLostFocus(const Window &) {
 
 void ArxGame::onResizeWindow(const Window & window) {
 	
-	arx_assert(window.getSize() != Vec2i_ZERO);
+	arx_assert(window.getSize() != Vec2i(0));
 	
 	// A new window size will require a new backbuffer
 	// size, so the 3D structures must be changed accordingly.
 	m_wasResized = true;
 	
 	if(window.isFullScreen()) {
-		if(config.video.resolution == Vec2i_ZERO) {
-			LogInfo << "Auto-selected fullscreen resolution " << window.getDisplayMode();
+		if(config.video.mode.resolution == Vec2i(0)) {
+			LogInfo << "Using fullscreen desktop mode " << window.getDisplayMode();
 		} else {
-			LogInfo << "Changed fullscreen resolution to " << window.getDisplayMode();
-			config.video.resolution = window.getSize();
+			LogInfo << "Changed fullscreen mode to " << window.getDisplayMode();
+			config.video.mode = window.getDisplayMode();
 		}
 	} else {
 		LogInfo << "Changed window size to " << window.getDisplayMode();
 		config.window.size = window.getSize();
 	}
+	
 }
 
-void ArxGame::onDestroyWindow(const Window &) {
+void ArxGame::onDestroyWindow(const Window & /* window */) {
 	LogInfo << "Application window is being destroyed";
 	quit();
 }
 
 void ArxGame::onToggleFullscreen(const Window & window) {
 	config.video.fullscreen = window.isFullScreen();
+}
+
+void ArxGame::onDroppedFile(const Window & /* window */, const fs::path & path) {
+	g_saveToLoad = path;
 }
 
 /*!
@@ -1221,15 +1182,29 @@ void ArxGame::doFrame() {
 	
 	if(config.video.fpsLimit && !benchmark::isEnabled()) {
 		
-		PlatformDuration renderDuration = platform::getTime() - g_platformTime.frameStart();
+		PlatformInstant now = platform::getTime();
+		
+		PlatformDuration lastDuration = now - m_frameStart;
+		m_frameStart = now;
 		
 		int targetFps = config.video.fpsLimit;
-		if(config.video.vsync) {
-			targetFps = std::max(targetFps, 480);
+		if(targetFps <= 0) {
+			targetFps = m_MainWindow->getDisplayMode().refresh;
+			if(targetFps <= 0) {
+				targetFps = 60;
+			}
+			if(config.video.vsync) {
+				// Give Vsync some headroom in case the refresh rate was rounded down
+				targetFps += 1;
+			}
 		}
-		PlatformDuration targetDuration = PlatformDurationUs(1000000 / (targetFps + targetFps / 20 + 1) - 100);
-		if(renderDuration < targetDuration) {
-			Thread::sleep(targetDuration - renderDuration);
+		PlatformDuration targetDuration = PlatformDurationUs(1000000 / targetFps);
+		
+		PlatformDuration min = PlatformDuration::ofRaw(-targetDuration.t);
+		m_frameDelta = arx::clamp(m_frameDelta + targetDuration - lastDuration, min, targetDuration);
+		
+		if(m_frameDelta > 0) {
+			Thread::sleep(m_frameDelta);
 		}
 		
 	}
@@ -1245,7 +1220,6 @@ void ArxGame::doFrame() {
 		m_wasResized = false;
 		MenuReInitAll();
 		AdjustUI();
-		LoadScreen();
 		g_hudRoot.recalcScale();
 	}
 
@@ -1271,25 +1245,43 @@ void ArxGame::doFrame() {
 		benchmark::begin(benchmark::LoadLevel);
 		LogDebug("teleport to " << TELEPORT_TO_LEVEL << " " << TELEPORT_TO_POSITION << " " << TELEPORT_TO_ANGLE);
 		CHANGE_LEVEL_ICON = NoChangeLevel;
-		ARX_CHANGELEVEL_Change(TELEPORT_TO_LEVEL, TELEPORT_TO_POSITION, TELEPORT_TO_ANGLE);
+		ARX_CHANGELEVEL_Change(TELEPORT_TO_LEVEL, TELEPORT_TO_POSITION, float(TELEPORT_TO_ANGLE));
 		TELEPORT_TO_LEVEL.clear();
 		TELEPORT_TO_POSITION.clear();
 	}
 
-	if(LOADQUEST_SLOT != SavegameHandle()) {
-		ARX_SlotLoad(LOADQUEST_SLOT);
+	if(LOADQUEST_SLOT != SavegameHandle() && LOADQUEST_SLOT.handleData() < long(savegames.size())) {
+		ARX_LoadGame(savegames[LOADQUEST_SLOT]);
 		LOADQUEST_SLOT = SavegameHandle();
 	}
-
+	
+	if(!g_saveToLoad.empty()) {
+		if(fs::is_directory(g_saveToLoad)) {
+			g_saveToLoad /= SAVEGAME_NAME;
+		}
+		std::string name;
+		float version;
+		long level;
+		if(ARX_CHANGELEVEL_GetInfo(g_saveToLoad, name, version, level) == -1) {
+			LogError << "Unable to get save file info for " << g_saveToLoad;
+		} else {
+			SaveGame save;
+			save.name = name;
+			save.level = level;
+			save.savefile = g_saveToLoad;
+			ARX_LoadGame(save);
+		}
+		g_saveToLoad.clear();
+	}
+	
+	if(GInput->actionNowPressed(CONTROLS_CUST_QUICKLOAD)) {
+		ARX_QuickLoad();
+	}
+	
 	if(cinematicIsStopped()
 	   && !cinematicBorder.isActive()
 	   && !BLOCK_PLAYER_CONTROLS
 	) {
-		
-		if(GInput->actionNowPressed(CONTROLS_CUST_QUICKLOAD) && savegames.size() > 0) {
-			ARXmenu.requestMode(Mode_InGame);
-			ARX_QuickLoad();
-		}
 		
 		if(GInput->actionNowPressed(CONTROLS_CUST_QUICKSAVE) && ARXmenu.mode() == Mode_InGame) {
 			g_hudRoot.quickSaveIconGui.show();
@@ -1319,289 +1311,257 @@ void ArxGame::updateFirstPersonCamera() {
 	ANIM_HANDLE ** alist = io->anims;
 
 	if(player.m_bowAimRatio != 0.f
-		&& (layer1.cur_anim!=alist[ANIM_MISSILE_STRIKE_PART_1])
-		&& (layer1.cur_anim!=alist[ANIM_MISSILE_STRIKE_PART_2])
-		&& (layer1.cur_anim!=alist[ANIM_MISSILE_STRIKE_CYCLE]))
-	{
+	   && layer1.cur_anim != alist[ANIM_MISSILE_STRIKE_PART_1]
+	   && layer1.cur_anim != alist[ANIM_MISSILE_STRIKE_PART_2]
+	   && layer1.cur_anim != alist[ANIM_MISSILE_STRIKE_CYCLE]) {
 		player.m_bowAimRatio -= bowZoomFromDuration(toMs(g_platformTime.lastFrameDuration()));
-
-		if(player.m_bowAimRatio < 0)
+		if(player.m_bowAimRatio < 0) {
 			player.m_bowAimRatio = 0;
+		}
 	}
-
+	
+	Vec3f targetPos = g_playerCamera.m_pos;
+	Anglef targetAngle = g_playerCamera.angle;
+	
 	if(eyeball.exist == 2) {
-		subj.d_pos = eyeball.pos;
-		subj.d_angle = eyeball.angle;
+		
+		targetPos = eyeball.pos;
+		targetAngle = eyeball.angle;
 		EXTERNALVIEW = true;
+		
 	} else if(EXTERNALVIEW) {
-		for(long l=0; l < 250; l += 10) {
+		
+		for(long l = 0; l < 250; l += 10) {
 			Vec3f tt = player.pos;
 			tt += angleToVectorXZ_180offset(player.angle.getYaw()) * float(l);
 			tt += Vec3f(0.f, -50.f, 0.f);
-			
-			EERIEPOLY * ep = CheckInPoly(tt);
-			if(ep) {
-				subj.d_pos = tt;
+			if(l == 0 || CheckInPoly(tt)) {
+				targetPos = tt;
+			} else {
+				break;
 			}
-			else break;
 		}
-
-		subj.d_angle = player.angle;
-		subj.d_angle.setPitch(subj.d_angle.getPitch() + 30.f);
+		
+		targetAngle = player.angle;
+		targetAngle.setPitch(targetAngle.getPitch() + 30.f);
+		
 	} else {
-		subj.angle = player.angle;
+		
+		g_playerCamera.angle = player.angle;
 		
 		ActionPoint id = entities.player()->obj->fastaccess.view_attach;
-		
 		if(id != ActionPoint()) {
-			subj.orgTrans.pos = actionPointPosition(entities.player()->obj, id);
-			Vec3f vect;
-			vect.x = subj.orgTrans.pos.x - player.pos.x;
-			vect.y = 0;
-			vect.z = subj.orgTrans.pos.z - player.pos.z;
-			float len = ffsqrt(arx::length2(vect));
 			
+			g_playerCamera.m_pos = actionPointPosition(entities.player()->obj, id);
+			
+			Vec3f vect(g_playerCamera.m_pos.x - player.pos.x, 0.f, g_playerCamera.m_pos.z - player.pos.z);
+			float len = ffsqrt(arx::length2(vect));
 			if(len > 46.f) {
-				float div = 46.f / len;
-				vect.x *= div;
-				vect.z *= div;
-				subj.orgTrans.pos.x = player.pos.x + vect.x;
-				subj.orgTrans.pos.z = player.pos.z + vect.z;
+				vect *= 46.f / len;
+				g_playerCamera.m_pos.x = player.pos.x + vect.x;
+				g_playerCamera.m_pos.z = player.pos.z + vect.z;
 			}
+			
 		} else {
-			subj.orgTrans.pos = player.basePosition();
+			g_playerCamera.m_pos = player.basePosition();
 		}
+		
 	}
-
+	
 	if(EXTERNALVIEW) {
-		subj.orgTrans.pos = (subj.orgTrans.pos + subj.d_pos) * 0.5f;
-		subj.angle = interpolate(subj.angle, subj.d_angle, 0.1f);
+		g_playerCamera.m_pos = (g_playerCamera.m_pos + targetPos) * 0.5f;
+		g_playerCamera.angle = interpolate(g_playerCamera.angle, targetAngle, 0.1f);
 	}
+	
 }
 
 void ArxGame::speechControlledCinematic() {
-
-	/////////////////////////////////////////////
-	// Now checks for speech controlled cinematic
-
-	long valid=-1;
-
+	
+	long valid = -1;
+	
 	for(size_t i = 0; i < MAX_ASPEECH; i++) {
-		if(aspeech[i].exist && aspeech[i].cine.type > 0) {
+		if(g_aspeech[i].exist && g_aspeech[i].cine.type > 0) {
 			valid = i;
 			break;
 		}
 	}
 
 	if(valid >= 0) {
-		const CinematicSpeech & acs = aspeech[valid].cine;
-		const Entity * io = aspeech[valid].io;
+		const CinematicSpeech & acs = g_aspeech[valid].cine;
+		const Entity * io = g_aspeech[valid].io;
 		
-		const GameDuration elapsed = g_gameTime.now() - aspeech[valid].time_creation;
-		float rtime = elapsed / aspeech[valid].duration;
+		const GameDuration elapsed = g_gameTime.now() - g_aspeech[valid].time_creation;
+		float rtime = elapsed / g_aspeech[valid].duration;
 
 		rtime = glm::clamp(rtime, 0.f, 1.f);
-
-		float itime=1.f-rtime;
-
+		
+		float itime = 1.f - rtime;
+		
 		if(rtime >= 0.f && rtime <= 1.f && io) {
 			switch(acs.type) {
-			case ARX_CINE_SPEECH_KEEP: {
-				arx_assert(isallfinite(acs.pos1));
 				
-				subj.orgTrans.pos = acs.pos1;
-				subj.angle.setPitch(acs.pos2.x);
-				subj.angle.setYaw(acs.pos2.y);
-				subj.angle.setRoll(acs.pos2.z);
-				EXTERNALVIEW = true;
-				break;
-									   }
-			case ARX_CINE_SPEECH_ZOOM: {
-				arx_assert(isallfinite(acs.pos1));
-				
-				//need to compute current values
-				float alpha = acs.startangle.getPitch() * itime + acs.endangle.getPitch() * rtime;
-				float beta = acs.startangle.getYaw() * itime + acs.endangle.getYaw() * rtime;
-				float distance = acs.startpos * itime + acs.endpos * rtime;
-				Vec3f targetpos = acs.pos1;
-				
-				conversationcamera.orgTrans.pos = angleToVectorXZ(io->angle.getYaw() + beta) * distance;
-				conversationcamera.orgTrans.pos.y = std::sin(glm::radians(MAKEANGLE(io->angle.getPitch() + alpha))) * distance;
-				conversationcamera.orgTrans.pos += targetpos;
-
-				conversationcamera.setTargetCamera(targetpos);
-				subj.orgTrans.pos = conversationcamera.orgTrans.pos;
-				subj.angle.setPitch(MAKEANGLE(-conversationcamera.angle.getPitch()));
-				subj.angle.setYaw(MAKEANGLE(conversationcamera.angle.getYaw()-180.f));
-				subj.angle.setRoll(0.f);
-				EXTERNALVIEW = true;
-				break;
-									   }
-			case ARX_CINE_SPEECH_SIDE_LEFT:
-			case ARX_CINE_SPEECH_SIDE: {
-				if(ValidIONum(acs.ionum)) {
+				case ARX_CINE_SPEECH_KEEP: {
 					arx_assert(isallfinite(acs.pos1));
-					arx_assert(isallfinite(acs.pos2));
-					
-					const Vec3f & from = acs.pos1;
-					const Vec3f & to = acs.pos2;
-
-					Vec3f vect = glm::normalize(to - from);
-
-					Vec3f vect2;
-					if(acs.type==ARX_CINE_SPEECH_SIDE_LEFT) {
-						vect2 = VRotateY(vect, -90.f);
-					} else {
-						vect2 = VRotateY(vect, 90.f);
-					}
-
-					float distance=acs.m_startdist*itime+acs.m_enddist*rtime;
-					vect2 *= distance;
-					float _dist = glm::distance(from, to);
-					Vec3f tfrom = from + vect * acs.startpos * (1.0f / 100) * _dist;
-					Vec3f tto = from + vect * acs.endpos * (1.0f / 100) * _dist;
-					
-					Vec3f targetpos = tfrom * itime + tto * rtime + Vec3f(0.f, acs.m_heightModifier, 0.f);
-
-					conversationcamera.orgTrans.pos = targetpos + vect2 + Vec3f(0.f, acs.m_heightModifier, 0.f);
-					conversationcamera.setTargetCamera(targetpos);
-					subj.orgTrans.pos = conversationcamera.orgTrans.pos;
-					subj.angle.setPitch(MAKEANGLE(-conversationcamera.angle.getPitch()));
-					subj.angle.setYaw(MAKEANGLE(conversationcamera.angle.getYaw()-180.f));
-					subj.angle.setRoll(0.f);
+					g_playerCamera.m_pos = acs.pos1;
+					g_playerCamera.angle.setPitch(acs.pos2.x);
+					g_playerCamera.angle.setYaw(acs.pos2.y);
+					g_playerCamera.angle.setRoll(acs.pos2.z);
 					EXTERNALVIEW = true;
+					break;
 				}
-
-				break;
-									   }
-			case ARX_CINE_SPEECH_CCCLISTENER_R:
-			case ARX_CINE_SPEECH_CCCLISTENER_L:
-			case ARX_CINE_SPEECH_CCCTALKER_R:
-			case ARX_CINE_SPEECH_CCCTALKER_L: {
-				//need to compute current values
-				if(ValidIONum(acs.ionum)) {
+				
+				case ARX_CINE_SPEECH_ZOOM: {
+					
 					arx_assert(isallfinite(acs.pos1));
-					arx_assert(isallfinite(acs.pos2));
 					
-					Vec3f targetpos;
-					if(acs.type == ARX_CINE_SPEECH_CCCLISTENER_L
-						 || acs.type == ARX_CINE_SPEECH_CCCLISTENER_R) {
-						conversationcamera.orgTrans.pos = acs.pos2;
-						targetpos = acs.pos1;
-					} else {
-						conversationcamera.orgTrans.pos = acs.pos1;
-						targetpos = acs.pos2;
-					}
-
-					float distance = (acs.startpos * itime + acs.endpos * rtime) * (1.0f/100);
-
-					Vec3f vect = conversationcamera.orgTrans.pos - targetpos;
-					Vec3f vect2 = VRotateY(vect, 90.f);;
+					// Need to compute current values
+					float alpha = acs.startangle.getPitch() * itime + acs.endangle.getPitch() * rtime;
+					float beta = acs.startangle.getYaw() * itime + acs.endangle.getYaw() * rtime;
+					float distance = acs.startpos * itime + acs.endpos * rtime;
+					Vec3f targetpos = acs.pos1;
 					
-					vect2 = glm::normalize(vect2);
-					Vec3f vect3 = glm::normalize(vect);
-
-					vect = vect * distance + vect3 * 80.f;
-					vect2 *= 45.f;
-
-					if ((acs.type==ARX_CINE_SPEECH_CCCLISTENER_R)
-						|| (acs.type==ARX_CINE_SPEECH_CCCTALKER_R))
-					{
-						vect2 = -vect2;
-					}
-
-					conversationcamera.orgTrans.pos = vect + targetpos + vect2;
-					conversationcamera.setTargetCamera(targetpos);
-					subj.orgTrans.pos = conversationcamera.orgTrans.pos;
-					subj.angle.setPitch(MAKEANGLE(-conversationcamera.angle.getPitch()));
-					subj.angle.setYaw(MAKEANGLE(conversationcamera.angle.getYaw()-180.f));
-					subj.angle.setRoll(0.f);
+					g_playerCamera.m_pos = angleToVectorXZ(io->angle.getYaw() + beta) * distance;
+					g_playerCamera.m_pos.y = std::sin(glm::radians(MAKEANGLE(io->angle.getPitch() + alpha))) * distance;
+					g_playerCamera.m_pos += targetpos;
+					
+					g_playerCamera.lookAt(targetpos);
+					
 					EXTERNALVIEW = true;
+					
+					break;
 				}
-
-				break;
-											  }
-			case ARX_CINE_SPEECH_NONE: break;
+				
+				case ARX_CINE_SPEECH_SIDE_LEFT:
+				case ARX_CINE_SPEECH_SIDE: {
+					
+					if(ValidIONum(acs.ionum)) {
+						
+						arx_assert(isallfinite(acs.pos1));
+						arx_assert(isallfinite(acs.pos2));
+						
+						const Vec3f & from = acs.pos1;
+						const Vec3f & to = acs.pos2;
+						
+						Vec3f vect = glm::normalize(to - from);
+						Vec3f vect2 = VRotateY(vect, (acs.type == ARX_CINE_SPEECH_SIDE_LEFT) ? -90.f : 90.f);
+						
+						float distance = acs.m_startdist * itime + acs.m_enddist * rtime;
+						vect2 *= distance;
+						float _dist = glm::distance(from, to);
+						Vec3f tfrom = from + vect * acs.startpos * (1.0f / 100) * _dist;
+						Vec3f tto = from + vect * acs.endpos * (1.0f / 100) * _dist;
+						Vec3f targetpos = tfrom * itime + tto * rtime + Vec3f(0.f, acs.m_heightModifier, 0.f);
+						
+						g_playerCamera.m_pos = targetpos + vect2 + Vec3f(0.f, acs.m_heightModifier, 0.f);
+						
+						g_playerCamera.lookAt(targetpos);
+						
+						EXTERNALVIEW = true;
+						
+					}
+					
+					break;
+				}
+				
+				case ARX_CINE_SPEECH_CCCLISTENER_R:
+				case ARX_CINE_SPEECH_CCCLISTENER_L:
+				case ARX_CINE_SPEECH_CCCTALKER_R:
+				case ARX_CINE_SPEECH_CCCTALKER_L: {
+					
+					// Need to compute current values
+					if(ValidIONum(acs.ionum)) {
+						
+						arx_assert(isallfinite(acs.pos1));
+						arx_assert(isallfinite(acs.pos2));
+						
+						Vec3f sourcepos = acs.pos1;
+						Vec3f targetpos = acs.pos2;
+						if(acs.type == ARX_CINE_SPEECH_CCCLISTENER_L || acs.type == ARX_CINE_SPEECH_CCCLISTENER_R) {
+							std::swap(sourcepos, targetpos);
+						}
+						
+						float distance = (acs.startpos * itime + acs.endpos * rtime) * 0.01f;
+						Vec3f vect = sourcepos - targetpos;
+						Vec3f vect2 = VRotateY(vect, 90.f);
+						vect2 = glm::normalize(vect2);
+						Vec3f vect3 = glm::normalize(vect);
+						vect = vect * distance + vect3 * 80.f;
+						vect2 *= 45.f;
+						if(acs.type == ARX_CINE_SPEECH_CCCLISTENER_R || acs.type == ARX_CINE_SPEECH_CCCTALKER_R) {
+							vect2 = -vect2;
+						}
+						
+						g_playerCamera.m_pos = vect + targetpos + vect2;
+						
+						g_playerCamera.lookAt(targetpos);
+						
+						EXTERNALVIEW = true;
+						
+					}
+					
+					break;
+				}
+				
+				case ARX_CINE_SPEECH_NONE: break;
+				
 			}
-
-			LASTCAMPOS = subj.orgTrans.pos;
-			LASTCAMANGLE = subj.angle;
+			
+			LASTCAMPOS = g_playerCamera.m_pos;
+			LASTCAMANGLE = g_playerCamera.angle;
 		}
 	}
 }
 
-extern GameDuration DeadTime;
-
 void ArxGame::handlePlayerDeath() {
+	
 	if(player.lifePool.current <= 0) {
-		DeadTime += g_gameTime.lastFrameDuration();
-		float mdist = glm::abs(player.physics.cyl.height)-60;
-
+		
+		player.DeadTime += g_gameTime.lastFrameDuration();
+		float mdist = glm::abs(player.physics.cyl.height) - 60;
+		
 		float startDistance = 40.f;
 
 		GameDuration startTime = GameDurationMs(2000);
 		GameDuration endTime = GameDurationMs(7000);
 
-		float DeadCameraDistance = startDistance + (mdist - startDistance) * ((DeadTime - startTime) / (endTime - startTime));
-
-		Vec3f targetpos = player.pos;
-
+		float DeadCameraDistance = startDistance + (mdist - startDistance) * ((player.DeadTime - startTime) / (endTime - startTime));
+		
 		ActionPoint id  = entities.player()->obj->fastaccess.view_attach;
+		Vec3f targetpos = (id != ActionPoint()) ? actionPointPosition(entities.player()->obj, id) : player.pos;
+		
 		ActionPoint id2 = GetActionPointIdx(entities.player()->obj, "chest2leggings");
-
-		if(id != ActionPoint()) {
-			targetpos = actionPointPosition(entities.player()->obj, id);
-		}
-
-		conversationcamera.orgTrans.pos = targetpos;
-
-		if(id2 != ActionPoint()) {
-			conversationcamera.orgTrans.pos = actionPointPosition(entities.player()->obj, id2);
-		}
-
-		conversationcamera.orgTrans.pos.y -= DeadCameraDistance;
-
-		conversationcamera.setTargetCamera(targetpos);
-		subj.orgTrans.pos=conversationcamera.orgTrans.pos;
-		subj.angle.setPitch(MAKEANGLE(-conversationcamera.angle.getPitch()));
-		subj.angle.setYaw(MAKEANGLE(conversationcamera.angle.getYaw()-180.f));
-		subj.angle.setRoll(0);
+		Vec3f chest = (id2 != ActionPoint()) ? actionPointPosition(entities.player()->obj, id2) : targetpos;
+		
+		g_playerCamera.m_pos = chest - Vec3f(0.f, DeadCameraDistance, 0.f);
+		
+		g_playerCamera.lookAt(targetpos);
+		
 		EXTERNALVIEW = true;
 		BLOCK_PLAYER_CONTROLS = true;
+		
 	}
+	
 }
 
 void ArxGame::updateActiveCamera() {
-
+	
 	ARX_PROFILE_FUNC();
 	
-	EERIE_CAMERA * cam = NULL;
-
-	if(MasterCamera.exist) {
-		if(MasterCamera.exist & 2) {
-			MasterCamera.exist &= ~2;
-			MasterCamera.exist |= 1;
-			MasterCamera.io=MasterCamera.want_io;
-		}
-
-		cam = &MasterCamera.io->_camdata->cam;
-
-		if(cam->focal < 100.f)
+	Camera * cam = NULL;
+	if(g_cameraEntity) {
+		cam = &g_cameraEntity->_camdata->cam;
+		if(cam->focal < 100.f) {
 			cam->focal = 350.f;
-
+		}
 		EXTERNALVIEW = true;
 	} else {
-		cam = &subj;
+		cam = &g_playerCamera;
 	}
-
+	
 	ManageQuakeFX(cam);
-
-	SetActiveCamera(cam);
+	
 	PrepareCamera(cam, g_size);
-
-	// Recenter Viewport depending on Resolution
-	ACTIVECAM->center = Vec2i(g_size.center().x, g_size.center().y);
-	ACTIVECAM->orgTrans.mod = Vec2f(ACTIVECAM->center);
+	
 }
 
 void ArxGame::updateTime() {
@@ -1690,32 +1650,7 @@ void ArxGame::updateInput() {
 		if(g_debugInfo == InfoPanelEnumSize)
 			g_debugInfo = InfoPanelNone;
 	}
-
-	if(g_debugInfo == InfoPanelDebugToggles) {
-		
-		for(size_t i = 0; i < ARRAY_SIZE(g_debugToggles); i++) {
-			g_debugTriggers[i] = false;
-			
-			if(GInput->isKeyPressed(Keyboard::Key_NumPadEnter)) {
-				if(   GInput->isKeyPressed(Keyboard::Key_NumPad0 + i)
-				   && g_platformTime.frameStart() - g_debugTriggersTime[i] > g_debugTriggersDecayDuration
-				) {
-					g_debugTriggersTime[i] = g_platformTime.frameStart();
-					g_debugTriggers[i] = true;
-				}
-			} else {
-				if(GInput->isKeyPressedNowPressed(Keyboard::Key_NumPad0 + i)) {
-					g_debugToggles[i] = !g_debugToggles[i];
-				}
-				if(GInput->isKeyPressed(Keyboard::Key_LeftShift)
-				   && GInput->isKeyPressed(Keyboard::Key_LeftAlt)
-				   && GInput->isKeyPressedNowPressed(Keyboard::Key_0 + i)) {
-					g_debugToggles[i] = !g_debugToggles[i];
-				}
-			}
-		}
-	}
-
+	
 	if(GInput->isKeyPressedNowPressed(Keyboard::Key_F10)) {
 		GetSnapShot();
 	}
@@ -1727,6 +1662,8 @@ void ArxGame::updateInput() {
 	g_console.update();
 	
 #ifdef ARX_DEBUG
+	debug_keysUpdate();
+	
 	if(GInput->isKeyPressedNowPressed(Keyboard::Key_Pause)) {
 		if(g_gameTime.isPaused() & GameTime::PauseUser) {
 			g_gameTime.resume(GameTime::PauseUser);
@@ -1735,6 +1672,9 @@ void ArxGame::updateInput() {
 		}
 	}
 #endif
+	
+	m_MainWindow->allowScreensaver(!m_MainWindow->isFullScreen() && ARXmenu.mode() == Mode_MainMenu);
+	
 }
 
 extern int iHighLight;
@@ -1759,22 +1699,23 @@ void ArxGame::updateLevel() {
 	
 	for(size_t i = 0; i < entities.size(); i++) {
 		const EntityHandle handle = EntityHandle(i);
-		Entity *entity = entities[handle];
-
-		if(!entity)
+		
+		Entity * entity = entities[handle];
+		if(!entity) {
 			continue;
-
+		}
+		
 		if(entity->ignition > 0.f || (entity->ioflags & IO_FIERY))
-			ManageIgnition(entity);
-
-		//Highlight entity
+			ManageIgnition(*entity);
+		
+		// Highlight entity
 		if(entity == FlyingOverIO && !(entity->ioflags & IO_NPC)) {
 			entity->highlightColor = Color3f::gray(float(iHighLight));
 		} else {
 			entity->highlightColor = Color3f::black;
 		}
-
-		Cedric_ApplyLightingFirstPartRefactor(entity);
+		
+		Cedric_ApplyLightingFirstPartRefactor(*entity);
 
 		float speedModifier = 0.f;
 
@@ -1848,14 +1789,13 @@ void ArxGame::updateLevel() {
 	updateActiveCamera();
 
 	ARX_GLOBALMODS_Apply();
-
+	
 	// Set Listener Position
 	{
-		std::pair<Vec3f, Vec3f> frontUp = angleToFrontUpVec(ACTIVECAM->angle);
-		
-		ARX_SOUND_SetListener(ACTIVECAM->orgTrans.pos, frontUp.first, frontUp.second);
+		std::pair<Vec3f, Vec3f> frontUp = angleToFrontUpVec(g_camera->angle);
+		ARX_SOUND_SetListener(g_camera->m_pos, frontUp.first, frontUp.second);
 	}
-
+	
 	// Check For Hiding/unHiding Player Gore
 	if(EXTERNALVIEW || player.lifePool.current <= 0) {
 		ARX_INTERACTIVE_Show_Hide_1st(entities.player(), 0);
@@ -1867,13 +1807,12 @@ void ArxGame::updateLevel() {
 
 	PrepareIOTreatZone();
 	ARX_PHYSICS_Apply();
-
-	PrecalcIOLighting(ACTIVECAM->orgTrans.pos, ACTIVECAM->cdepth * 0.6f);
-
+	
+	PrecalcIOLighting(g_camera->m_pos, g_camera->cdepth * 0.6f);
+	
 	ARX_SCENE_Update();
 
-	arx_assert(pParticleManager);
-	pParticleManager->Update(g_gameTime.lastFrameDuration());
+	g_particleManager.Update(g_gameTime.lastFrameDuration());
 
 	ARX_FOGS_Render();
 
@@ -1914,29 +1853,21 @@ void ArxGame::updateLevel() {
 	ARX_SPELLS_UpdateSymbolDraw();
 
 	ManageTorch();
-
+	
 	{
-		float magicSightZoom = 0.f;
+		
+		g_playerCamera.setFov(glm::radians(config.video.fov));
 		
 		SpellBase * spell = spells.getSpellByCaster(EntityHandle_Player, SPELL_MAGIC_SIGHT);
 		if(spell) {
 			GameDuration duration = g_gameTime.now() - spell->m_timcreation;
-			magicSightZoom = glm::clamp(duration / GameDurationMs(500), 0.f, 1.f);
+			g_playerCamera.focal -= 30.f * glm::clamp(duration / GameDurationMs(500), 0.f, 1.f);
 		}
 		
-		float BASE_FOCAL = CURRENT_BASE_FOCAL
-		                 + (magicSightZoom * -30.f)
-		                 + (player.m_bowAimRatio * 177.5f);
+		g_playerCamera.focal += 177.5f * player.m_bowAimRatio;
 		
-		if(subj.focal < BASE_FOCAL) {
-			static const float INC_FOCAL = 75.0f;
-			subj.focal += INC_FOCAL;
-		}
-
-		if(subj.focal > BASE_FOCAL)
-			subj.focal = BASE_FOCAL;
 	}
-
+	
 	ARX_INTERACTIVE_DestroyIOdelayedExecute();
 }
 
@@ -1951,18 +1882,17 @@ void ArxGame::renderLevel() {
 	
 	GRenderer->SetAntialiasing(true);
 	
-	GRenderer->SetFogParams(fZFogStart * ACTIVECAM->cdepth, fZFogEnd * ACTIVECAM->cdepth);
+	GRenderer->SetFogParams(fZFogStart * g_camera->cdepth, fZFogEnd * g_camera->cdepth);
 	GRenderer->SetFogColor(g_fogColor);
-
+	
 	ARX_SCENE_Render();
 	
 	drawDebugRender();
 
 	// Begin Particles
-	arx_assert(pParticleManager);
-	pParticleManager->Render();
+	g_particleManager.Render();
 	
-	ARX_PARTICLES_Update(&subj);
+	ARX_PARTICLES_Update();
 	ParticleSparkUpdate();
 	
 	// End Particles
@@ -1984,7 +1914,7 @@ void ArxGame::renderLevel() {
 
 	if(player.m_paralysed) {
 		UseRenderState state(render2D().blendAdditive());
-		EERIEDrawBitmap(Rectf(g_size), 0.0001f, NULL, Color(71, 71, 255));
+		EERIEDrawBitmap(Rectf(g_size), 0.0001f, NULL, Color::rgb(0.28f, 0.28f, 1.f));
 	}
 
 	// Red screen fade for damages.
@@ -1998,6 +1928,9 @@ void ArxGame::renderLevel() {
 	GRenderer->SetFogColor(g_fogColor);
 	
 	GRenderer->SetAntialiasing(false);
+
+	updateLightFlares();
+	renderLightFlares();
 	
 	// Manage Death visual & Launch menu...
 	ARX_PLAYER_Manage_Death();
@@ -2008,7 +1941,7 @@ void ArxGame::renderLevel() {
 	// Draw game interface if needed
 	if(ARXmenu.mode() == Mode_InGame && !cinematicBorder.isActive()) {
 	
-		GRenderer->GetTextureStage(0)->setWrapMode(TextureStage::WrapClamp);
+		UseTextureState textureState(TextureStage::FilterLinear, TextureStage::WrapClamp);
 		
 		ARX_INTERFACE_NoteManage();
 		g_hudRoot.draw();
@@ -2018,19 +1951,12 @@ void ArxGame::renderLevel() {
 			g_renderBatcher.render();
 		}
 		
-		GRenderer->GetTextureStage(0)->setWrapMode(TextureStage::WrapRepeat);
-		
 	}
-
-	update2DFX();
-	goFor2DFX();
 
 	GRenderer->Clear(Renderer::DepthBuffer);
 
 	// Speech Management
-	ARX_SPEECH_Check();
-
-	GRenderer->GetTextureStage(0)->setWrapMode(TextureStage::WrapRepeat);
+	notification_check();
 
 	if(pTextManage && !pTextManage->Empty()) {
 		pTextManage->Update(g_platformTime.lastFrameDuration());
@@ -2043,7 +1969,7 @@ void ArxGame::renderLevel() {
 		&& !BLOCK_PLAYER_CONTROLS
 		&& !(player.Interface & INTER_PLAYERBOOK))
 	{
-		long SHOWLEVEL = ARX_LEVELS_GetRealNum(CURRENTLEVEL);
+		int SHOWLEVEL = ARX_LEVELS_GetRealNum(CURRENTLEVEL);
 
 		if(SHOWLEVEL >= 0 && SHOWLEVEL < 32)
 			g_miniMap.showPlayerMiniMap(SHOWLEVEL);
@@ -2052,11 +1978,11 @@ void ArxGame::renderLevel() {
 	// CURSOR Rendering
 
 	if(DRAGINTER) {
-		ARX_INTERFACE_RenderCursor();
+		ARX_INTERFACE_RenderCursor(false);
 		PopAllTriangleListOpaque();
 		PopAllTriangleListTransparency();
 	} else {
-		ARX_INTERFACE_RenderCursor();
+		ARX_INTERFACE_RenderCursor(false);
 	}
 
 	CheatDrawText();
@@ -2072,82 +1998,83 @@ void ArxGame::renderLevel() {
 
 void ArxGame::render() {
 	
-	ACTIVECAM = &subj;
-
+	ARX_PROFILE_FUNC();
+	
+	SetActiveCamera(&g_playerCamera);
+	
 	// Update Various Player Infos for this frame.
 	ARX_PLAYER_Frame_Update();
 		
-	subj.center = Vec2i(g_size.center().x, g_size.center().y);
-	subj.orgTrans.mod = Vec2f(subj.center);
-	
 	PULSATE = timeWaveSin(g_gameTime.now(), GameDurationMsf(5026.548245f));
 	EERIEDrawnPolys = 0;
-
+	
 	// Checks for Keyboard & Moulinex
 	{
-	g_cursorOverBook = false;
-	
-	if(ARXmenu.mode() == Mode_InGame) { // Playing Game
-		// Checks Clicks in Book Interface
-		if(ARX_INTERFACE_MouseInBook()) {
-			g_cursorOverBook = true;
-		}
-	}
-	
-	if((player.Interface & INTER_COMBATMODE) || PLAYER_MOUSELOOK_ON) {
-		FlyingOverIO = NULL; // Avoid to check with those modes
-	} else {
-		if(!DRAGINTER) {
-			if(!BLOCK_PLAYER_CONTROLS
-			   && !TRUE_PLAYER_MOUSELOOK_ON
-			   && !g_cursorOverBook
-			   && eMouseState != MOUSE_IN_NOTE
-			) {
-				FlyingOverIO = FlyingOverObject(DANAEMouse);
-			} else {
-				FlyingOverIO = NULL;
+		g_cursorOverBook = false;
+		
+		if(ARXmenu.mode() == Mode_InGame) { // Playing Game
+			// Checks Clicks in Book Interface
+			if(ARX_INTERFACE_MouseInBook()) {
+				g_cursorOverBook = true;
 			}
 		}
+		
+		if((player.Interface & INTER_COMBATMODE) || PLAYER_MOUSELOOK_ON) {
+			FlyingOverIO = NULL; // Avoid to check with those modes
+		} else {
+			if(!DRAGINTER) {
+				if(!BLOCK_PLAYER_CONTROLS
+					&& !TRUE_PLAYER_MOUSELOOK_ON
+					&& !g_cursorOverBook
+					&& eMouseState != MOUSE_IN_NOTE
+				) {
+					FlyingOverIO = FlyingOverObject(DANAEMouse);
+				} else {
+					FlyingOverIO = NULL;
+				}
+			}
+		}
+		
+		if(!player.m_paralysed || ARXmenu.mode() != Mode_InGame) {
+			manageKeyMouse();
+		}
 	}
 	
-	if(!player.m_paralysed || ARXmenu.mode() != Mode_InGame) {
-			manageKeyMouse();
-	}
-	}
-
 	if(CheckInPoly(player.pos)) {
 		LastValidPlayerPos = player.pos;
 	}
-
+	
 	// Updates Externalview
 	EXTERNALVIEW = false;
-
+	
 	if(g_debugTriggers[1])
 		g_hudRoot.bookIconGui.requestFX();
+	
+	if(ARXmenu.mode() != Mode_MainMenu) {
+		Menu2_Close();
+	}
 	
 	if(ARXmenu.mode() != Mode_InGame) {
 		benchmark::begin(benchmark::Menu);
 		ARX_Menu_Render();
-		GRenderer->GetTextureStage(0)->setWrapMode(TextureStage::WrapRepeat); // << NEEDED?
 	} else if(isInCinematic()) {
 		benchmark::begin(benchmark::Cinematic);
 		cinematicRender();
 	} else {
 		benchmark::begin(cinematicBorder.CINEMA_DECAL != 0.f ? benchmark::Cutscene : benchmark::Scene);
 		updateLevel();
-		
 		renderLevel();
-
-#ifdef ARX_DEBUG
-		if(g_debugToggles[9])
+		#ifdef ARX_DEBUG
+		if(g_debugToggles[9]) {
 			renderLevel();
-#endif
+		}
+		#endif
 	}
 	
 	if(g_debugInfo != InfoPanelNone) {
 		switch(g_debugInfo) {
 		case InfoPanelFramerate: {
-			CalcFPS();
+			g_fpsCounter.CalcFPS();
 			ShowFPS();
 			break;
 		}
@@ -2159,13 +2086,17 @@ void ArxGame::render() {
 			ShowInfoText();
 			break;
 		}
-		case InfoPanelDebugToggles: {
-			ShowDebugToggles();
+		case InfoPanelAudio: {
+			debugHud_Audio();
 			break;
 		}
 		default: break;
 		}
 	}
+	
+#ifdef ARX_DEBUG
+	ShowDebugToggles();
+#endif
 	
 	g_console.draw();
 	
@@ -2200,9 +2131,6 @@ void ArxGame::onRendererInit(Renderer & renderer) {
 	renderer.RestoreAllTextures();
 
 	ARX_PLAYER_Restore_Skin();
-	
-	// Setup Texture Border RenderState
-	renderer.GetTextureStage(0)->setWrapMode(TextureStage::WrapRepeat);
 	
 	// Fog
 	float fogEnd = 0.48f;

@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2017 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -31,6 +31,7 @@
 
 #include "gui/Console.h"
 #include "gui/MiniMap.h"
+#include "gui/Notification.h"
 #include "gui/Speech.h"
 
 #include "scene/Interactive.h"
@@ -44,23 +45,23 @@
 
 
 long passwall = 0;
-long cur_mx=0;
+long cur_mx = 0;
 static long cur_pnux = 0;
-long cur_pom=0;
-long cur_rf=0;
-long cur_mr=0;
+long cur_pom = 0;
+long cur_rf = 0;
+long cur_mr = 0;
 static long cur_sm = 0;
 static long cur_bh = 0;
 
-long sp_arm=0;
+long sp_arm = 0;
 static long cur_arm = 0;
 static long cur_sos = 0;
 static long cur_console = 0;
 
-long cur_mega=0;
+long cur_mega = 0;
 static PlatformInstant sp_max_start = 0;
-long sp_wep=0;
-short uw_mode=0;
+long sp_wep = 0;
+short uw_mode = 0;
 
 static short uw_mode_pos = 0;
 
@@ -79,11 +80,12 @@ void CheatDrawText() {
 	PlatformDuration elapsed = g_platformTime.frameStart() - sp_max_start;
 	
 	if(elapsed < PlatformDurationMs(20000)) {
-		float modi = (PlatformDurationMs(20000) - elapsed) / PlatformDurationMs(2000) * ( 1.0f / 10 );
+		
+		float modi = (PlatformDurationMs(20000) - elapsed) / PlatformDurationMs(2000) * 0.1f;
 		float sizX = 16;
 		
 		Vec2f p = Vec2f(g_size.center());
-		p.x -= sp_max_ch.length() * ( 1.0f / 2 ) * sizX;
+		p.x -= sp_max_ch.length() * 0.5f * sizX;
 		
 		for(size_t i = 0; i < sp_max_ch.length(); i++) {
 			Vec2f d = p + Vec2f(sizX * i, sp_max_y[i]);
@@ -91,11 +93,13 @@ void CheatDrawText() {
 			sp_max_y[i] = std::sin(d.x + elapsed / PlatformDurationMs(100)) * 30.f * modi;
 			std::string tex(1, sp_max_ch[i]);
 			
-			UNICODE_ARXDrawTextCenter(hFontInBook, d + Vec2f(-1, -1), tex, Color::none);
-			UNICODE_ARXDrawTextCenter(hFontInBook, d + Vec2f(1, 1), tex, Color::none);
-			UNICODE_ARXDrawTextCenter(hFontInBook, d, tex, sp_max_col[i]);
+			UNICODE_ARXDrawTextCenter(hFontInGame, d + Vec2f(-1, -1), tex, Color::none);
+			UNICODE_ARXDrawTextCenter(hFontInGame, d + Vec2f(1, 1), tex, Color::none);
+			UNICODE_ARXDrawTextCenter(hFontInGame, d, tex, sp_max_col[i]);
 		}
+		
 	}
+	
 }
 
 static void DisplayCheatText(const char * text) {
@@ -111,13 +115,12 @@ static void MakeSpCol() {
 		sp_max_y[i] = 0;
 	}
 	
-	sp_max_col[0] = Color::fromRGBA(ColorRGBA(0x00FF0000));
-	sp_max_col[1] = Color::fromRGBA(ColorRGBA(0x0000FF00));
-	sp_max_col[2] = Color::fromRGBA(ColorRGBA(0x000000FF));
-	
-	sp_max_col[3] = Color::fromRGBA(ColorRGBA(0x00FFFF00));
-	sp_max_col[4] = Color::fromRGBA(ColorRGBA(0x00FF00FF));
-	sp_max_col[5] = Color::fromRGBA(ColorRGBA(0x0000FFFF));
+	sp_max_col[0] = Color::blue;
+	sp_max_col[1] = Color::green;
+	sp_max_col[2] = Color::red;
+	sp_max_col[3] = Color::cyan;
+	sp_max_col[4] = Color::magenta;
+	sp_max_col[5] = Color::yellow;
 	
 	for(size_t i = 6; i < 24; i++) {
 		sp_max_col[i] = sp_max_col[i - 6];
@@ -150,9 +153,10 @@ void CheatReset() {
 }
 
 void CheatDetectionReset() {
-	cur_arm=0;
-	cur_mega=0;
-	passwall=0;
+	
+	cur_arm = 0;
+	cur_mega = 0;
+	passwall = 0;
 	
 	if(cur_mr != 3) {
 		cur_mr = 0;
@@ -178,19 +182,19 @@ void CheatDetectionReset() {
 		cur_sm = 0;
 	}
 	
-	cur_bh=0;
-	cur_sos=0;
+	cur_bh = 0;
+	cur_sos = 0;
 	cur_console = 0;
+	
 }
 
 
 long BH_MODE = 0;
-static void EERIE_OBJECT_SetBHMode()
-{
+static void EERIE_OBJECT_SetBHMode() {
 	if(BH_MODE) {
-		BH_MODE=0;
+		BH_MODE = 0;
 	} else {
-		BH_MODE=1;
+		BH_MODE = 1;
 		MakeCoolFx(player.pos);
 		MakeSpCol();
 		DisplayCheatText("!!!_Super-Deformed_!!!");
@@ -294,20 +298,15 @@ static void ApplyCurPNux() {
 	
 	player.m_cheatPnuxActive = (player.m_cheatPnuxActive + 1) % 3;
 	
-	// TODO-RENDERING: Create a post-processing effect for that cheat... see original source...
+	// TODO Create a post-processing effect for that cheat... see original source...
 	
-	cur_pnux=0;
+	cur_pnux = 0;
 }
 
 static void ApplyPasswall() {
 	MakeSpCol();
 	DisplayCheatText("!!! PassWall !!!");
-	
-	if(USE_PLAYERCOLLISIONS) {
-		USE_PLAYERCOLLISIONS = false;
-	} else {
-		USE_PLAYERCOLLISIONS = true;
-	}
+	USE_PLAYERCOLLISIONS = !USE_PLAYERCOLLISIONS;
 }
 
 static void ApplySPRf() {
@@ -325,8 +324,8 @@ static void ApplyCurMr() {
 }
 
 static void ApplySPuw() {
-	uw_mode_pos=0;
-	uw_mode=~uw_mode;
+	uw_mode_pos = 0;
+	uw_mode = ~uw_mode;
 	ARX_SOUND_PlayCinematic("menestrel_uw2", true);
 	MakeCoolFx(player.pos);
 	if(uw_mode) {
@@ -338,34 +337,31 @@ static void ApplySPuw() {
 static void ApplySPMax() {
 	
 	MakeCoolFx(player.pos);
-	sp_max=~sp_max;
+	sp_max = ~sp_max;
 	
 	if (sp_max) {
 		MakeSpCol();
 		DisplayCheatText("!!!_FaNt0mAc1e_!!!");
 		
-		player.skin=4;
+		player.skin = 4;
 		
 		ARX_EQUIPMENT_RecreatePlayerMesh();
 		
 		ARX_PLAYER_Rune_Add_All();
 		std::string text = "!!!!!!! FanTomAciE !!!!!!!";
-		ARX_SPEECH_Add(text);
-		player.Attribute_Redistribute+=10;
-		player.Skill_Redistribute+=50;
+		notification_add(text);
+		player.Attribute_Redistribute += 10;
+		player.Skill_Redistribute += 50;
 		player.level = std::max(player.level, short(10));
-		player.xp=GetXPforLevel(10);
+		player.xp = GetXPforLevel(10);
 	} else {
 		TextureContainer * tcm;
 		tcm = TextureContainer::Load("graph/obj3d/textures/npc_human_cm_hero_head");
 		if(tcm) {
 			delete tcm;
-			player.heads[0]
-				= TextureContainer::Load("graph/obj3d/textures/npc_human_base_hero_head");
-			player.heads[1]
-				= TextureContainer::Load("graph/obj3d/textures/npc_human_base_hero2_head");
-			player.heads[2]
-				= TextureContainer::Load("graph/obj3d/textures/npc_human_base_hero3_head");
+			player.heads[0] = TextureContainer::Load("graph/obj3d/textures/npc_human_base_hero_head");
+			player.heads[1] = TextureContainer::Load("graph/obj3d/textures/npc_human_base_hero2_head");
+			player.heads[2] = TextureContainer::Load("graph/obj3d/textures/npc_human_base_hero3_head");
 			ARX_EQUIPMENT_RecreatePlayerMesh();
 		}
 	}
@@ -377,28 +373,22 @@ static void ApplyConsole() {
 	g_console.open();
 }
 
-extern float PULSATE;
 static TextureContainer * Mr_tc = NULL;
 
 void CheckMr() {
 	
 	if(cur_mr == 3) {
 		if(GRenderer && Mr_tc) {
-			Vec2f pos = Vec2f(g_size.topRight());
-			pos += Vec2f(-128.f * g_sizeRatio.x, 0.f);
-			
-			Vec2f size = Vec2f(128.f, 128.f);
-			size *= g_sizeRatio;
-			
+			Vec2f pos = Vec2f(g_size.topRight()) + Vec2f(-128.f * g_sizeRatio.x, 0.f);
+			Vec2f size = Vec2f(128.f, 128.f) * g_sizeRatio;
 			Rectf rect = Rectf(pos, size.x, size.y);
-			Color3f color = Color3f::gray(0.5f + PULSATE * (1.0f/10));
-			
 			UseRenderState state(render2D().blendAdditive());
-			EERIEDrawBitmap(rect, 0.0001f, Mr_tc, color.to<u8>());
+			EERIEDrawBitmap(rect, 0.0001f, Mr_tc, Color::gray(0.5f + PULSATE * 0.1f));
 		} else {
 			Mr_tc = TextureContainer::LoadUI("graph/particles/(fx)_mr");
 		}
 	}
+	
 }
 
 
@@ -421,16 +411,14 @@ void handleCheatRuneDetection(CheatRune rune) {
 			break;
 		}
 		case CheatRune_KAOM: {
-			if(cur_arm >= 0 && (cur_arm & 1)){
+			if(cur_arm >= 0 && (cur_arm & 1)) {
 				cur_arm++;
-
 				if(cur_arm > 20) {
 					ApplySPArm();
 				}
+			} else {
+				cur_arm = -1;
 			}
-			else
-				cur_arm=-1;
-			
 			break;
 		}
 		case CheatRune_MEGA: {
@@ -611,9 +599,8 @@ void handleCheatRuneDetection(CheatRune rune) {
 		}
 		case CheatRune_Passwall: {
 			passwall++;
-			
 			if(passwall == 3) {
-				passwall=0;
+				passwall = 0;
 				ApplyPasswall();
 			}
 			break;

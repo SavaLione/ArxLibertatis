@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2016 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -51,8 +51,8 @@ ZeniMax Media Inc., Suite 120, Rockville, Maryland 20850 USA.
 
 #include "core/TimeTypes.h"
 #include "graphics/Color.h"
+#include "gui/menu/MenuPage.h"
 #include "gui/widget/ButtonWidget.h"
-#include "gui/widget/TextWidget.h"
 #include "gui/widget/Widget.h"
 #include "gui/widget/WidgetContainer.h"
 #include "input/InputKey.h"
@@ -62,91 +62,51 @@ ZeniMax Media Inc., Suite 120, Rockville, Maryland 20850 USA.
 
 class TextureContainer;
 class Font;
-
-class MenuPage : private boost::noncopyable {
-	
-public:
-	MenuPage(MENUSTATE state);
-	virtual ~MenuPage();
-	
-	void add(Widget * widget);
-	void addCenter(Widget * widget, bool centerX = false);
-	void AlignElementCenter(Widget * widget);
-	void Update(Vec2f pos);
-	void Render();
-	void drawDebug();
-	
-	TextWidget *GetTouch(bool keyTouched, int keyId, InputKeyId* pInputKeyId, bool _bValidateTest);
-	void ReInitActionKey();
-	
-	Vec2f m_pos;
-	Vec2f m_oldPos;
-	int m_rowSpacing;
-	MENUSTATE eMenuState;
-	WidgetContainer m_children;
-	
-protected:
-	Rectf m_rect;
-	Vec2f m_size;
-	Widget * m_selected;
-	bool bMouseAttack;
-	
-private:
-	void updateTextRect(TextWidget * widget);
-	void UpdateText();
-	
-	bool bEdit;
-	bool m_disableShortcuts;
-	PlatformDuration m_blinkTime;
-	bool m_blink;
-};
-
-class LoadMenuPage;
-class SaveConfirmMenuPage;
+class MenuPage;
+struct SaveGame;
 
 class MenuWindow : private boost::noncopyable {
 	
 private:
+	
 	Vec2f m_pos;
 	Vec2f m_size;
 	float m_initalOffsetX;
 	float m_fadeDistance;
 	
 public:
+	
 	MenuWindow();
 	virtual ~MenuWindow();
 	
 	void add(MenuPage * page);
-	void Update();
-	void Render();
+	void update();
+	void render();
 	
-	std::vector<MenuPage *>	m_pages;
-	LoadMenuPage * m_pageLoad;
-	SaveConfirmMenuPage * m_pageSaveConfirm;
+	MENUSTATE currentPageId() const { return m_currentPage ? m_currentPage->id() : Page_None; }
 	
-	float				fAngle;
+	void setCurrentPage(MENUSTATE id);
 	
-	MENUSTATE currentPageId() {
-		return m_currentPageId;
-	}
-	void setCurrentPageId(MENUSTATE id);
+	MenuPage * getPage(MENUSTATE id) const;
 	
-	void requestPage(MENUSTATE page) {
-		m_requestedPage = page;
-	}
+	float scroll() { return fAngle; }
+	void setScroll(float scroll) { fAngle = scroll; }
 	
 private:
-	MENUSTATE m_requestedPage;
-	MENUSTATE m_currentPageId;
+	
+	std::vector<MenuPage *> m_pages;
+	
+	float fAngle;
+	
 	MenuPage * m_currentPage;
 	
 	TextureContainer * m_background;
 	TextureContainer * m_border;
+	
 };
 
 void MenuReInitAll();
 
-void Menu2_Open();
 void MainMenuDoFrame();
 void Menu2_Close();
 
@@ -154,9 +114,9 @@ void Menu2_Close();
 
 void ARX_MENU_Clicked_QUIT();
 
+void ARX_LoadGame(const SaveGame & save);
 void ARX_QuickLoad();
 void ARX_QuickSave();
-void ARX_SlotLoad(SavegameHandle slotIndex);
 
 bool MENU_NoActiveWindow();
 

@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2016 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -24,32 +24,73 @@
 #include <ctime>
 #include <string>
 
+#include "Configure.h"
+#if ARX_HAVE_POSIX_FILESYSTEM
+#include <sys/stat.h>
+#include <dirent.h>
+#if ARX_HAVE_AT_SYMLINK_NOFOLLOW
+#include <fcntl.h>
+#endif
+#elif ARX_HAVE_WIN32_FILESYSTEM
+#include <windows.h>
+#else
+#include <boost/filesystem/directory.hpp>
+#endif
+
 #include "platform/Platform.h"
 
 namespace fs {
 
 class path;
 
+enum FileType {
+	DoesNotExist,
+	Directory,
+	RegularFile,
+	SymbolicLink,
+	SpecialFile
+};
+
+/*!
+ * \brief Check if a path exists and determine the type
+ *
+ * Never returns \ref SymbolicLink.
+ */
+FileType get_type(const path & p);
+
+/*!
+ * \brief Check if a path exists and determine the link type
+ *
+ * \return the file type or \ref SymbolicLink if p is a symbolic link
+ */
+FileType get_link_type(const path & p);
+
 /*!
  * \brief Check if a file (directory or regular file) exists
  *
  * \return true if the file exists, false if it doesn't exist or there was an error
  */
-bool exists(const path & p);
+inline bool exists(const path & p) {
+	return get_type(p) != DoesNotExist;
+}
 
 /*!
  * \brief Check if a path points to a directory
  *
  * \return true if the p exists and is a directory, false otherwise
  */
-bool is_directory(const path & p);
+inline bool is_directory(const path & p) {
+	return get_type(p) == Directory;
+}
 
 /*!
  * \brief Check if a path points to a regular file
  *
  * \return true if the p exists and is a regular file, false otherwise.
  */
-bool is_regular_file(const path & p);
+inline bool is_regular_file(const path & p) {
+	return get_type(p) == RegularFile;
+}
 
 /*!
  * \brief Get the last write time of a file
@@ -66,11 +107,18 @@ std::time_t last_write_time(const path & p);
 u64 file_size(const path & p);
 
 /*!
- * \brief Remove a file or empty directory
+ * \brief Remove a file
  *
  * \return true if the file was removed or didn't exist.
  */
 bool remove(const path & p);
+
+/*!
+ * \brief Remove an empty directory
+ *
+ * \return true if the file was removed or didn't exist.
+ */
+bool remove_directory(const path & p);
 
 /*!
  * \brief Recursively remove a file or directory
@@ -120,16 +168,6 @@ bool copy_file(const path & from_p, const path & to_p, bool overwrite = false);
 bool rename(const path & old_p, const path & new_p, bool overwrite = false);
 
 /*!
- * \brief Read a file into memory
- *
- * \param p The file to load.
- * \param size Will receive the size of the loaded file.
- *
- * \return a new[]-allocated buffer containing the file data or NULL on error.
- */
-char * read_file(const path & p, size_t & size);
-
-/*!
  * \brief Read a file into an \ref std::string
  *
  * \param p The file to load.
@@ -142,6 +180,8 @@ std::string read(const path & p);
  * \brief Write a string into a file
  *
  * \param p The file to write to.
+ * \param contents The content to write
+ * \param size The size of the content to write
  *
  * \return true if the write succeeded
  */
@@ -151,6 +191,7 @@ bool write(const path & p, const char * contents, size_t size);
  * \brief Write an \ref std::string into a file
  *
  * \param p The file to write to.
+ * \param contents The content to write
  *
  * \return true if the write succeeded
  */
@@ -167,7 +208,8 @@ path current_path();
 class directory_iterator {
 	
 	//! Prevent postfix ++
-	directory_iterator operator++(int dummy);
+	
+	const directory_iterator operator++(int dummy);
 	
 	//! Prevent assignment
 	directory_iterator & operator=(const directory_iterator &);
@@ -175,8 +217,28 @@ class directory_iterator {
 	//! Prevent copy construction
 	directory_iterator(const directory_iterator &);
 	
-	void * m_handle;
-	void * m_buffer;
+	#if ARX_HAVE_POSIX_FILESYSTEM
+	
+	DIR * m_handle;
+	#if !ARX_HAVE_DIRFD || !ARX_HAVE_FSTATAT || !ARX_HAVE_AT_SYMLINK_NOFOLLOW
+	fs::path m_path;
+	#endif
+	dirent * m_entry;
+	struct stat m_info;
+	
+	void read_entry();
+	bool read_info();
+	
+	#elif ARX_HAVE_WIN32_FILESYSTEM
+	
+	HANDLE m_handle;
+	WIN32_FIND_DATAW m_data;
+	
+	#else
+	
+	boost::filesystem::directory_iterator m_it;
+	
+	#endif
 	
 public:
 	
@@ -187,7 +249,7 @@ public:
 	 * Otherwise, \ref end() will return \c true and information about the first directory entry
 	 * can be queried using \ref name(), \ref is_directory() and \ref is_regular_file().
 	 */
-	explicit directory_iterator(const path & dir);
+	explicit directory_iterator(const path & p);
 	
 	~directory_iterator();
 	
@@ -224,6 +286,20 @@ public:
 	std::string name();
 	
 	/*!
+	 * \brief Get the type of the current directory entry (file or subdirectory)
+	 *
+	 * Never returns \ref SymbolicLink.
+	 */
+	FileType type();
+	
+	/*!
+	 * \brief Get the link type of the current directory entry
+	 *
+	 * \return the file type or \ref SymbolicLink if p is a symbolic link
+	 */
+	FileType link_type();
+	
+	/*!
 	 * \brief Check if the current directory entry is a subdirectory
 	 *
 	 * The result of this function is equivalent to calling \ref fs::is_directory with the
@@ -231,7 +307,9 @@ public:
 	 *
 	 * \ref end() == \c false
 	 */
-	bool is_directory();
+	bool is_directory() {
+		return type() == Directory;
+	}
 	
 	/*!
 	 * \brief Check if the current directory entry is a plain file
@@ -241,10 +319,26 @@ public:
 	 *
 	 * \ref end() == \c false
 	 */
-	bool is_regular_file();
+	bool is_regular_file() {
+		return type() == RegularFile;
+	}
+	
+	/*!
+	 * \brief Get the last write time of the current directory entry
+	 *
+	 * \return the last write time or 0 if there was an error
+	 */
+	std::time_t last_write_time();
+	
+	/*!
+	 * \brief Get the file size of the current directory entry
+	 *
+	 * \return the filesize or (u64)-1 if there was an error
+	 */
+	u64 file_size();
 	
 };
 
-}
+} // namespace fs
 
 #endif // ARX_IO_FS_FILESYSTEM_H

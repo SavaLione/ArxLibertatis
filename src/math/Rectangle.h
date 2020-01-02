@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2017 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -32,19 +32,12 @@ public:
 	
 	typedef T Num;
 	typedef std::numeric_limits<T> Limits;
-	typedef typename vec2_traits<T>::type Vec2;
+	typedef typename vec_traits<T, 2>::type Vec2;
 	
 	T left;
 	T top;
 	T right;
 	T bottom;
-	
-	Rectangle_(const Rectangle_ & other)
-		: left(other.left)
-		, top(other.top)
-		, right(other.right)
-		, bottom(other.bottom)
-	{ }
 	
 	template <class U>
 	explicit Rectangle_(Rectangle_<U> const & other)
@@ -52,7 +45,7 @@ public:
 		, top(T(other.top))
 		, right(T(other.right))
 		, bottom(T(other.bottom))
-	{}
+	{ }
 	
 	Rectangle_() { }
 	
@@ -91,15 +84,6 @@ public:
 		    && bottom == o.bottom;
 	}
 	
-	Rectangle_ & operator=(const Rectangle_ & other) {
-		left   = other.left;
-		top    = other.top;
-		right  = other.right;
-		bottom = other.bottom;
-		
-		return *this;
-	}
-	
 	T width() const {
 		return right - left;
 	}
@@ -126,6 +110,14 @@ public:
 		top    += dy;
 		right  += dx;
 		bottom += dy;
+	}
+	
+	void move(const Vec2 & offset) {
+		move(offset.x, offset.y);
+	}
+	
+	void moveTo(const Vec2 & position) {
+		move(position - topLeft());
 	}
 	
 	bool contains(const Vec2 & point) const {
@@ -162,10 +154,10 @@ public:
 	 */
 	Rectangle_ operator&(const Rectangle_ & other) const {
 		Rectangle_ result(
-				std::max(left,   other.left),
-				std::max(top,    other.top),
-				std::min(right,  other.right),
-				std::min(bottom, other.bottom)
+			std::max(left,   other.left),
+			std::max(top,    other.top),
+			std::min(right,  other.right),
+			std::min(bottom, other.bottom)
 		);
 		if(result.left > result.right) {
 			result.left = result.right = T(0);
@@ -208,8 +200,14 @@ public:
 		return Vec2(right, top);
 	}
 	
+	Vec2 centerLeft() const {
+		return Vec2(left, top + (bottom - top) / 2);
+	}
 	Vec2 center() const {
 		return Vec2(left + (right - left) / 2, top + (bottom - top) / 2);
+	}
+	Vec2 centerRight() const {
+		return Vec2(right, top + (bottom - top) / 2);
 	}
 	
 	Vec2 bottomLeft() const {

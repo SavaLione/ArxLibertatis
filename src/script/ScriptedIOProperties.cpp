@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2017 Arx Libertatis Team (see the AUTHORS file)
+ * Copyright 2011-2019 Arx Libertatis Team (see the AUTHORS file)
  *
  * This file is part of Arx Libertatis.
  *
@@ -165,7 +165,7 @@ public:
 		if(trapvalue == "off") {
 			context.getEntity()->_fixdata->trapvalue = -1;
 		} else {
-			context.getEntity()->_fixdata->trapvalue = glm::clamp((int)context.getFloatVar(trapvalue), -1, 100);
+			context.getEntity()->_fixdata->trapvalue = glm::clamp(int(context.getFloatVar(trapvalue)), -1, 100);
 		}
 		
 		return Success;
@@ -188,7 +188,7 @@ public:
 		if(secretvalue == "off") {
 			context.getEntity()->secretvalue = -1;
 		} else {
-			context.getEntity()->secretvalue = glm::clamp((int)context.getFloatVar(secretvalue), -1, 100);
+			context.getEntity()->secretvalue = glm::clamp(int(context.getFloatVar(secretvalue)), -1, 100);
 		}
 		
 		return Success;
@@ -465,12 +465,6 @@ public:
 				io->halo_native.flags &= ~HALO_NEGATIVE;
 			}
 			
-			if(flg & flag('l')) {
-				io->halo_native.flags |= HALO_DYNLIGHT;
-			} else {
-				io->halo_native.flags &= ~HALO_DYNLIGHT;
-			}
-			
 			if(flg & flag('c')) {
 				io->halo_native.color.r = context.getFloat();
 				io->halo_native.color.g = context.getFloat();
@@ -509,7 +503,7 @@ public:
 			res::path oldskin = res::path::load(context.getWord());
 			res::path newskin = res::path::load(context.getWord());
 			
-			DebugScript(" skin " << oldskin << ' '<< newskin);
+			DebugScript(" skin " << oldskin << ' ' << newskin);
 			
 			ARX_INTERACTIVE_MEMO_TWEAK(io, TWEAK_TYPE_SKIN, oldskin, newskin);
 			EERIE_MESH_TWEAK_Skin(io->obj, oldskin, newskin);
@@ -591,7 +585,7 @@ public:
 	
 };
 
-}
+} // anonymous namespace
 
 void setupScriptedIOProperties() {
 	
